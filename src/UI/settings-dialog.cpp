@@ -16,18 +16,18 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#pragma once
+#include <QUrl>
+#include <QDesktopServices>
+#include "settings-dialog.hpp"
 
-#include <obs-module.h>
-#include <QFrame>
+SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::SettingsDialog) 
+{
+    ui->setupUi(this);
 
-class QCefWidget;
+    connect(ui->authButton, &QPushButton::clicked, this, []() { 
+       	QUrl url(QString::fromUtf8("https://www.google.co.jp/"), QUrl::StrictMode);
+    	QDesktopServices::openUrl(url);
+    });
+}
 
-class Authentication : public QFrame {
-    Q_OBJECT
-
-public:
-    Authentication(QWidget *parent = (QWidget *)nullptr);
-    ~Authentication();
-
-};
+SettingsDialog::~SettingsDialog() {}

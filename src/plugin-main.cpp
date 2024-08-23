@@ -17,19 +17,38 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <obs-module.h>
+#include <obs-frontend-api.h>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QMainWindow>
 #include <plugin-support.h>
+#include "source-link-service.hpp"
+#include "UI/settings-dialog.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
+SettingsDialog *settingsDialog = nullptr;
+
 bool obs_module_load(void)
 {
-	obs_log(LOG_INFO, "plugin loaded successfully (version %s)",
-		PLUGIN_VERSION);
-	return true;
+	// Register menu action
+    QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
+        QAction *menuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
+
+        settingsDialog = new SettingsDialog(mainWindow);
+
+        menuAction->connect(menuAction, &QAction::triggered, [] {
+            settingsDialog->setVisible(!settingsDialog->isVisible());
+        });
+    }
+
+    obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
+    return true;
 }
 
 void obs_module_unload(void)
 {
-	obs_log(LOG_INFO, "plugin unloaded");
+    obs_log(LOG_INFO, "plugin unloaded");
 }

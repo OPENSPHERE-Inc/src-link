@@ -16,12 +16,11 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include "authentication.hpp"
+#include <obs-module.h>
+#include <QString>
 
-Authentication::Authentication(QWidget *parent) : QFrame(parent)
-{
-}
 
-Authentication::~Authentication()
+inline QString QTStr(const char *lookupVal)
 {
+    return QString::fromUtf8(obs_module_text(lookupVal));
 }
