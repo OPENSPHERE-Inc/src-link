@@ -1,8 +1,8 @@
 # please use clang-format version 16 or later
 
 Standard: c++17
-AccessModifierOffset: -8
-AlignAfterOpenBracket: Align
+AccessModifierOffset: -4
+AlignAfterOpenBracket: BlockIndent
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
@@ -24,6 +24,7 @@ AlwaysBreakTemplateDeclarations: false
 BinPackArguments: true
 BinPackParameters: true
 BraceWrapping:
+  AfterCaseLabel: false
   AfterClass: false
   AfterControlStatement: false
   AfterEnum: false
@@ -44,11 +45,11 @@ BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
 BreakStringLiterals: false  # apparently unpredictable
-ColumnLimit: 80
+ColumnLimit: 120
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
-ConstructorInitializerIndentWidth: 8
-ContinuationIndentWidth: 8
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
 DerivePointerAlignment: false
 DisableFormat: false
@@ -58,16 +59,17 @@ ForEachMacros:
   - 'json_object_foreach_safe'
   - 'json_array_foreach'
   - 'HASH_ITER'
+IndentAccessModifiers: false
 IncludeBlocks: Preserve
 IndentCaseLabels: false
 IndentPPDirectives: None
-IndentWidth: 8
+IndentWidth: 4
 IndentWrappedFunctionNames: false
 KeepEmptyLinesAtTheStartOfBlocks: true
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 ObjCBinPackProtocolList: Auto
-ObjCBlockIndentWidth: 8
+ObjCBlockIndentWidth: 4
 ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: true
 
@@ -100,13 +102,13 @@ SpacesInParentheses: false
 SpacesInSquareBrackets: false
 StatementMacros:
   - 'Q_OBJECT'
-TabWidth: 8
+TabWidth: 4
 TypenameMacros:
   - 'DARRAY'
-UseTab: ForContinuationAndIndentation
+UseTab: Never
 ---
 Language: ObjC
-AccessModifierOffset: 2
+AccessModifierOffset: -4
 AlignArrayOfStructures: Right
 AlignConsecutiveAssignments: None
 AlignConsecutiveBitFields: None
@@ -125,7 +127,7 @@ BitFieldColonSpacing: Both
 #BreakBeforeBraces: Webkit
 BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterCaseLabel: false
+  AfterCaseLabel: true
   AfterClass: true
   AfterControlStatement: Never
   AfterEnum: false
