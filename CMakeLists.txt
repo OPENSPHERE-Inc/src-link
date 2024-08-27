@@ -22,8 +22,8 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
+  find_package(Qt6 COMPONENTS Widgets Core Network)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
                                   -Wno-comma>)
@@ -34,8 +34,22 @@ if(ENABLE_QT)
                AUTORCC ON)
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/source-link-service.cpp src/UI/settings-dialog.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/source-link-service.cpp src/UI/settings-dialog.cpp
+                                             src/UI/oauth2.cpp)
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/.deps/obs-studio-30.1.2)
+set(o2_SRCS
+    lib/o2/o2.cpp
+    lib/o2/o2pollserver.cpp
+    lib/o2/o2reply.cpp
+    lib/o2/o2replyserver.cpp
+    lib/o2/o2requestor.cpp
+    lib/o2/o2simplecrypt.cpp
+    lib/o2/o0jsonresponse.cpp
+    lib/o2/o0settingsstore.cpp
+    lib/o2/o0baseauth.cpp)
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

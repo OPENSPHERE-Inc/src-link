@@ -19,15 +19,30 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QUrl>
 #include <QDesktopServices>
 #include "settings-dialog.hpp"
+#include "../plugin-support.h"
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::SettingsDialog) 
+SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::SettingsDialog), auth(this)
 {
     ui->setupUi(this);
 
-    connect(ui->authButton, &QPushButton::clicked, this, []() { 
-       	QUrl url(QString::fromUtf8("https://www.google.co.jp/"), QUrl::StrictMode);
-    	QDesktopServices::openUrl(url);
+    connect(ui->authButton, &QPushButton::clicked, this, [this]() {
+        auth.login(this);
+        QObject::connect(&auth, SIGNAL(linkingSucceeded()), this, SLOT(onLinkingSucceeded()));
     });
+
+    connect(ui->revokeButton, &QPushButton::clicked, this, [this]() { auth.logout(); });
+
+    QObject::connect(&auth, SIGNAL(accountInfoReceived()), this, SLOT(onAccountInfoReceived()));
 }
 
 SettingsDialog::~SettingsDialog() {}
+
+void SettingsDialog::onLinkingSucceeded()
+{
+    auth.getAccountInfo();
+}
+
+void SettingsDialog::onAccountInfoReceived()
+{
+    obs_log(LOG_DEBUG, "Account info received");
+}

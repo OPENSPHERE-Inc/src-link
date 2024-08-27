@@ -32,14 +32,27 @@
   <widget class="QPushButton" name="authButton">
    <property name="geometry">
     <rect>
-     <x>130</x>
+     <x>30</x>
      <y>40</y>
-     <width>101</width>
+     <width>131</width>
      <height>41</height>
     </rect>
    </property>
    <property name="text">
     <string>Authenticate</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="revokeButton">
+   <property name="geometry">
+    <rect>
+     <x>190</x>
+     <y>40</y>
+     <width>131</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Revoke</string>
    </property>
   </widget>
  </widget>

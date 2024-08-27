@@ -20,16 +20,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <QDialog>
-#include <UI/auth-oauth.hpp>
 #include "ui_settings-dialog.h"
-
+#include "oauth2.hpp"
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
+private:
+    SourceLinkAuth auth;
+
 public:
     SettingsDialog(QWidget *parent = (QWidget *)nullptr);
     ~SettingsDialog();
+
+private slots:
+    void onLinkingSucceeded();
+    void onAccountInfoReceived();
 
 private:
     Ui::SettingsDialog *ui;
