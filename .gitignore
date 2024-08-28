@@ -27,3 +27,6 @@
 
 # Except additional project files
 !screenshot.jpg
+
+# Except lib files
+!/lib

@@ -1,0 +1,277 @@
+cmake_minimum_required(VERSION 3.16)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Network)
+
+# collect all sources
+
+set( o2_SRCS
+    o2.cpp
+    o2pollserver.cpp
+    o2reply.cpp
+    o2replyserver.cpp
+    o2requestor.cpp
+    o2simplecrypt.cpp
+    o0jsonresponse.cpp
+    o0settingsstore.cpp
+    o0baseauth.cpp
+)
+
+set( o2_HDRS
+    o2.h
+    o2pollserver.h
+    o2reply.h
+    o2replyserver.h
+    o2requestor.h
+    o0abstractstore.h
+    o0baseauth.h
+    o0export.h
+    o0globals.h
+    o0jsonresponse.h
+    o0requestparameter.h
+    o0settingsstore.h
+    o0simplecrypt.h
+)
+
+if(o2_WITH_OAUTH1)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o1.cpp
+        o1requestor.cpp
+        o1timedreply.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o1.h
+        o1requestor.h
+        o1timedreply.h
+        o1freshbooks.h
+    )
+endif(o2_WITH_OAUTH1)
+
+if(o2_WITH_TWITTER)
+    set( o2_SRCS
+        ${o2_SRCS}
+        oxtwitter.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o1twitter.h
+        oxtwitter.h
+    )
+endif(o2_WITH_TWITTER)
+
+if(o2_WITH_DROPBOX)
+    set( o2_HDRS
+        ${o2_HDRS}
+        o1dropbox.h
+    )
+endif(o2_WITH_DROPBOX)
+
+if(o2_WITH_GOOGLE)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2gft.cpp
+        o2google.cpp
+        o2googledevice.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2gft.h
+        o2google.h
+        o2googledevice.h
+    )
+endif(o2_WITH_GOOGLE)
+
+if(o2_WITH_VIMEO)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2vimeo.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2vimeo.h
+    )
+endif(o2_WITH_VIMEO)
+
+if(o2_WITH_FACEBOOK)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2facebook.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2facebook.h
+    )
+endif(o2_WITH_FACEBOOK)
+
+if(o2_WITH_SKYDRIVE)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2skydrive.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2skydrive.h
+    )
+endif(o2_WITH_SKYDRIVE)
+
+if(o2_WITH_FLICKR)
+    set( o2_HDRS
+        ${o2_HDRS}
+        o1flickr.h
+    )
+endif(o2_WITH_FLICKR)
+
+if(o2_WITH_HUBIC)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2hubic.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2hubic.h
+    )
+endif(o2_WITH_HUBIC)
+
+if(o2_WITH_SPOTIFY)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2spotify.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2spotify.h
+    )
+endif(o2_WITH_SPOTIFY)
+
+if(o2_WITH_SURVEYMONKEY)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2surveymonkey.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2surveymonkey.h
+    )
+endif(o2_WITH_SURVEYMONKEY)
+
+if(o2_WITH_SMUGMUG)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o1smugmug.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o1smugmug.h
+    )
+endif(o2_WITH_SMUGMUG)
+
+if(o2_WITH_MSGRAPH)
+    set( o2_SRCS
+        ${o2_SRCS}
+        o2msgraph.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o2msgraph.h
+    )
+endif(o2_WITH_MSGRAPH)
+
+if(o2_WITH_KEYCHAIN)
+
+    include(FetchContent)
+    FetchContent_Declare(
+      QtKeychain
+      GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
+      GIT_TAG        841f31c7ca177e45647fd705200d7fcbeee056e5 # master Jan 30, 2023 (Qt 6.4 compatible)
+    )
+
+    if (Qt6Core_FOUND)
+        set(BUILD_WITH_QT6 ON)
+    endif()
+
+    FetchContent_MakeAvailable(QtKeychain)
+
+    # patch include path to find QtKeychain headers without installing it
+    include_directories(${qtkeychain_SOURCE_DIR})
+
+    list(APPEND LINK_TARGETS qt${Qt_MAJOR_VERSION}keychain)
+
+    set( o2_SRCS
+        ${o2_SRCS}
+        o0keychainstore.cpp
+    )
+    set( o2_HDRS
+        ${o2_HDRS}
+        o0keychainstore.h
+    )
+endif(o2_WITH_KEYCHAIN)
+
+# compose the library
+
+add_library(o2 ${o2_SRCS} ${o2_HDRS})
+
+target_include_directories(o2 PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
+target_link_libraries(o2
+    PUBLIC
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Network
+
+    PRIVATE
+    ${LINK_TARGETS}
+)
+
+if (MSVC)
+    target_compile_options(o2 PRIVATE /W3 /Zc:__cplusplus /permissive-)
+else()
+    target_compile_options(o2 PRIVATE -Wall)
+endif()
+
+if(BUILD_SHARED_LIBS)
+    if(APPLE)
+        set_target_properties(o2 PROPERTIES
+            BUILD_WITH_INSTALL_NAME_DIR ON
+            INSTALL_NAME_DIR ${CMAKE_INSTALL_PREFIX}/lib
+        )
+    elseif(WIN32)
+        target_compile_definitions(o2
+            PRIVATE O2_DLL_EXPORT
+            PUBLIC O2_SHARED_LIB
+        )
+    endif()
+
+    set_target_properties(o2
+        PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${API_VERSION}
+    )
+else()
+    # needed for statically linked o2 in shared libs on x86_64
+    set_target_properties(o2
+        PROPERTIES POSITION_INDEPENDENT_CODE TRUE
+    )
+endif()
+
+# install target
+
+install(TARGETS o2
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib${o2_LIB_SUFFIX}
+    ARCHIVE DESTINATION lib${o2_LIB_SUFFIX}
+)
+
+install(FILES ${o2_HDRS}
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/o2
+)
+
+message(STATUS "Writing pkg-config file...")
+configure_file(${CMAKE_CURRENT_LIST_DIR}/../o2.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/o2.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/o2.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/lib${o2_LIB_SUFFIX}/pkgconfig/")
+
+configure_file(${CMAKE_CURRENT_LIST_DIR}/../o2-config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/o2-config.h @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/o2-config.h DESTINATION "${CMAKE_INSTALL_PREFIX}/include/o2")
