@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>300</height>
+    <height>232</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,9 +16,9 @@
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>250</y>
-     <width>341</width>
+     <x>20</x>
+     <y>190</y>
+     <width>361</width>
      <height>32</height>
     </rect>
    </property>
@@ -58,6 +58,29 @@
    </property>
    <property name="text">
     <string>Not logged in yet.</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="eventLabel">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>60</y>
+     <width>351</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Event</string>
+   </property>
+  </widget>
+  <widget class="QComboBox" name="activeEventComboBox">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>80</y>
+     <width>361</width>
+     <height>31</height>
+    </rect>
    </property>
   </widget>
  </widget>

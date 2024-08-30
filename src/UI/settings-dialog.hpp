@@ -21,14 +21,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <QDialog>
 #include "ui_settings-dialog.h"
-#include "oauth2.hpp"
+#include "api-client.hpp"
 #include "objects.hpp"
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
 private:
-    SourceLinkAuth auth;
+    SourceLinkApiClient auth;
 
 public:
     SettingsDialog(QWidget *parent = (QWidget *)nullptr);
@@ -39,7 +39,8 @@ private slots:
     void onRevokeButtonClicked();
     void onLinkingSucceeded();
     void onLinkingFailed();
-    void onAccountInfoReceived(AccountInfo* accountInfo);
+    void onAccountInfoReady(AccountInfo* accountInfo);
+    void onPartyEventsReady(QList<PartyEvent *> events);
 
 private:
     Ui::SettingsDialog *ui;

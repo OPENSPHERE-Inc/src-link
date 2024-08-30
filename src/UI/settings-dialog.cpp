@@ -26,7 +26,8 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::Se
     ui->setupUi(this);
 
     connect(ui->authButton, SIGNAL(clicked()), this, SLOT(onAuthButtonClicked()));
-    connect(&auth, SIGNAL(accountInfoReceived(AccountInfo *)), this, SLOT(onAccountInfoReceived(AccountInfo *)));
+    connect(&auth, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
+    connect(&auth, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>)));
 }
 
 SettingsDialog::~SettingsDialog() {}
@@ -53,6 +54,7 @@ void SettingsDialog::onRevokeButtonClicked()
 void SettingsDialog::onLinkingSucceeded()
 {
     auth.getAccountInfo();
+    auth.getPartyEvents();
 }
 
 void SettingsDialog::onLinkingFailed()
@@ -60,7 +62,7 @@ void SettingsDialog::onLinkingFailed()
     ui->authButton->setEnabled(true);
 }
 
-void SettingsDialog::onAccountInfoReceived(AccountInfo* accountInfo)
+void SettingsDialog::onAccountInfoReady(AccountInfo* accountInfo)
 {
     ui->accountName->setText(accountInfo->getDisplayName());
 
@@ -69,4 +71,21 @@ void SettingsDialog::onAccountInfoReceived(AccountInfo* accountInfo)
 
     ui->authButton->setText("Disconnect");
     ui->authButton->setEnabled(true);
+}
+
+
+void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
+{
+    ui->activeEventComboBox->clear();
+
+    foreach (const auto partyEvent, events) {
+        if (!partyEvent->getParty()) {
+            continue;
+        }
+        ui->activeEventComboBox->addItem(
+            QString("%1: %2")
+                .arg(partyEvent->getParty()->getName())
+                .arg(partyEvent->getName())
+        );
+    }
 }

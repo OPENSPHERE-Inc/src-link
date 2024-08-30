@@ -25,12 +25,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QtConcurrent>
+#include <QPromise>
 
 #include <o2requestor.h>
 #include <o0settingsstore.h>
 #include <o0globals.h>
 #include "../plugin-support.h"
-#include "oauth2.hpp"
+#include "api-client.hpp"
 #include "common.hpp"
 
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
@@ -41,12 +43,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define AUTHORIZE_URL "http://localhost:3000/oauth2/authorize"
 #define TOKEN_URL "http://localhost:3000/oauth2/token"
 #define ACCOUNT_INFO_URL "http://localhost:3000/api/v1/accounts/me"
+#define PARTY_EVENTS_URL "http://localhost:3000/api/v1/events/my"
 #define SCOPE "read write"
 #define SETTINGS_JSON_NAME "settings.json"
 
-//--- SourceLinkAuth class ---
+//--- SourceLinkApiClient class ---
 
-SourceLinkAuth::SourceLinkAuth(QObject *parent) : client(parent), settings(this)
+SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
+    : client(parent),
+      settings(this),
+      networkManager(this),
+      requestor(&networkManager, &client, this)
 {
     client.setRequestUrl(AUTHORIZE_URL);
     client.setTokenUrl(TOKEN_URL);
@@ -68,7 +75,7 @@ SourceLinkAuth::SourceLinkAuth(QObject *parent) : client(parent), settings(this)
     connect(&client, SIGNAL(closeBrowser()), this, SLOT(onCloseBrowser()));
 }
 
-void SourceLinkAuth::login(QWidget *parent)
+void SourceLinkApiClient::login(QWidget *parent)
 {
     obs_log(
         LOG_DEBUG, "Starting OAuth 2 with grant flow type %s...", GRANTFLOW_STR(client.grantFlow()).toUtf8().constData()
@@ -76,48 +83,24 @@ void SourceLinkAuth::login(QWidget *parent)
     client.link();
 }
 
-void SourceLinkAuth::logout()
+void SourceLinkApiClient::logout()
 {
     client.unlink();
 }
 
-void SourceLinkAuth::getAccountInfo()
-{
-    if (!client.linked()) {
-        obs_log(LOG_WARNING, "ERROR: Application is not linked!");
-        emit linkingFailed();
-        return;
-    }
-
-    QString accountInfoUrl = QString(ACCOUNT_INFO_URL);
-    QNetworkRequest request = QNetworkRequest(QUrl(accountInfoUrl));
-    QNetworkAccessManager *mgr = new QNetworkAccessManager(this);
-    O2Requestor *requestor = new O2Requestor(mgr, &client, this);
-    requestor->setAddAccessTokenInQuery(false);
-    requestor->setAccessTokenInAuthenticationHTTPHeaderFormat(QString::fromLatin1("Bearer %1"));
-
-    connect(
-        requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
-        SLOT(onAccountInfoReceived(int, QNetworkReply::NetworkError, QByteArray))
-    );
-
-    requestor->get(request);
-    obs_log(LOG_DEBUG, "Requesting account info... Please wait.");
-}
-
-void SourceLinkAuth::onOpenBrowser(const QUrl &url)
+void SourceLinkApiClient::onOpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
 }
 
-void SourceLinkAuth::onCloseBrowser() {}
+void SourceLinkApiClient::onCloseBrowser() {}
 
-void SourceLinkAuth::onLinkedChanged()
+void SourceLinkApiClient::onLinkedChanged()
 {
     obs_log(LOG_DEBUG, "Link changed!");
 }
 
-void SourceLinkAuth::onLinkingSucceeded()
+void SourceLinkApiClient::onLinkingSucceeded()
 {
     if (!client.linked()) {
         return;
@@ -140,27 +123,97 @@ void SourceLinkAuth::onLinkingSucceeded()
     emit linkingSucceeded();
 }
 
-void SourceLinkAuth::onAccountInfoReceived(int, QNetworkReply::NetworkError error, QByteArray replyData)
+void SourceLinkApiClient::getAccountInfo()
 {
-    if (error != QNetworkReply::NoError) {
-        obs_log(LOG_ERROR, "Reply error: %d", error);
+    if (!client.linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
         emit accountInfoFailed();
         return;
     }
 
-    QString reply(replyData);
-    obs_log(LOG_DEBUG, "Reply: %s", reply.toUtf8().constData());
+    obs_log(LOG_DEBUG, "Requesting account info.");
+    auto handler = new RequestHandler(this);
+    connect(handler, &RequestHandler::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Reply error: %d", error);
+            emit accountInfoFailed();
+            return;
+        }
 
-    auto jsonDoc = QJsonDocument::fromJson(replyData);
-    auto accountInfo = AccountInfo::fromJson(jsonDoc.object());
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        auto accountInfo = AccountInfo::fromJsonObject(jsonDoc.object(), this);
 
-    obs_log(LOG_INFO, "Account info: %s", accountInfo->getDisplayName().toUtf8().constData());
-    emit accountInfoReceived(accountInfo);
+        obs_log(LOG_INFO, "Received account: %s", accountInfo->getDisplayName().toUtf8().constData());
+        emit accountInfoReady(accountInfo);
+    });
+    handler->get(QNetworkRequest(QUrl(QString(ACCOUNT_INFO_URL))));
+}
+
+void SourceLinkApiClient::getPartyEvents()
+{
+    if (!client.linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        emit partyEventsFailed();
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "Requesting party events.");
+    auto handler = new RequestHandler(this);
+    connect(handler, &RequestHandler::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Reply error: %d", error);
+            emit partyEventsFailed();
+            return;
+        }
+
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        QList<PartyEvent *> partyEvents;
+        foreach(const QJsonValue partyEventItem, jsonDoc.array())
+        {
+            auto partyEvent = PartyEvent::fromJsonObject(partyEventItem.toObject(), this);
+            partyEvents.append(partyEvent);
+        }
+
+        obs_log(LOG_INFO, "Received %d party events", partyEvents.size());
+        emit partyEventsReady(partyEvents);
+    });
+    handler->get(QNetworkRequest(QUrl(QString(PARTY_EVENTS_URL))));
+}
+
+//--- AbstractRequestHandler class ---
+
+RequestHandler::RequestHandler(SourceLinkApiClient *apiClient)
+    : apiClient(apiClient),
+      QObject(apiClient)
+{
+    connect(
+        &apiClient->requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
+        SLOT(onFinished(int, QNetworkReply::NetworkError, QByteArray))
+    );
+}
+
+RequestHandler::~RequestHandler()
+{
+    disconnect(
+        &apiClient->requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
+        SLOT(onFinished(int, QNetworkReply::NetworkError, QByteArray))
+    );
+}
+
+void RequestHandler::onFinished(int _requestId, QNetworkReply::NetworkError error, QByteArray data)
+{
+    if (requestId != _requestId) {
+        return;
+    }
+
+    apiClient->requestQueue.removeOne(this);
+    emit finished(error, data);
+    deleteLater();
 }
 
 //--- SourceLinkSettingsStore class ---
 
-SourceLinkSettingsStore::SourceLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
+SourceLinkApiClientSettingsStore::SourceLinkApiClientSettingsStore(QObject *parent) : O0AbstractStore(parent)
 {
     auto config_dir_path = obs_module_get_config_path(obs_current_module(), "");
     os_mkdirs(config_dir_path);
@@ -174,12 +227,12 @@ SourceLinkSettingsStore::SourceLinkSettingsStore(QObject *parent) : O0AbstractSt
     bfree(path);
 }
 
-SourceLinkSettingsStore::~SourceLinkSettingsStore()
+SourceLinkApiClientSettingsStore::~SourceLinkApiClientSettingsStore()
 {
     obs_data_release(settingsData);
 }
 
-QString SourceLinkSettingsStore::value(const QString &key, const QString &defaultValue)
+QString SourceLinkApiClientSettingsStore::value(const QString &key, const QString &defaultValue)
 {
     auto value = obs_data_get_string(settingsData, key.toUtf8().constData());
     if (value) {
@@ -189,7 +242,7 @@ QString SourceLinkSettingsStore::value(const QString &key, const QString &defaul
     }
 }
 
-void SourceLinkSettingsStore::setValue(const QString &key, const QString &value)
+void SourceLinkApiClientSettingsStore::setValue(const QString &key, const QString &value)
 {
     obs_data_set_string(settingsData, key.toUtf8().constData(), value.toUtf8().constData());
     auto path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);
