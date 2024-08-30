@@ -35,7 +35,7 @@ if(ENABLE_QT)
 endif()
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/source-link-service.cpp src/UI/settings-dialog.cpp
-                                             src/UI/oauth2.cpp)
+                                             src/UI/oauth2.cpp src/UI/objects.hpp)
 
 set(o2_SRCS
     lib/o2/o2.cpp

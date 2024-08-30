@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialog>
 #include "ui_settings-dialog.h"
 #include "oauth2.hpp"
+#include "objects.hpp"
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -34,8 +35,11 @@ public:
     ~SettingsDialog();
 
 private slots:
+    void onAuthButtonClicked();
+    void onRevokeButtonClicked();
     void onLinkingSucceeded();
-    void onAccountInfoReceived();
+    void onLinkingFailed();
+    void onAccountInfoReceived(AccountInfo* accountInfo);
 
 private:
     Ui::SettingsDialog *ui;

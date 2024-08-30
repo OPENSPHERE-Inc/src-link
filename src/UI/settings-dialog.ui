@@ -32,27 +32,32 @@
   <widget class="QPushButton" name="authButton">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>40</y>
+     <x>20</x>
+     <y>20</y>
      <width>131</width>
-     <height>41</height>
+     <height>31</height>
     </rect>
    </property>
    <property name="text">
-    <string>Authenticate</string>
+    <string>Connect</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="revokeButton">
+  <widget class="QLabel" name="accountName">
    <property name="geometry">
     <rect>
-     <x>190</x>
-     <y>40</y>
-     <width>131</width>
-     <height>41</height>
+     <x>220</x>
+     <y>20</y>
+     <width>151</width>
+     <height>31</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <pointsize>13</pointsize>
+    </font>
+   </property>
    <property name="text">
-    <string>Revoke</string>
+    <string>Not logged in yet.</string>
    </property>
   </widget>
  </widget>

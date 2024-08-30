@@ -17,11 +17,15 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <util/platform.h>
+
 #include <QMessageBox>
 #include <QRandomGenerator>
 #include <QDesktopServices>
 #include <QMetaEnum>
 #include <QString>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #include <o2requestor.h>
 #include <o0settingsstore.h>
 #include <o0globals.h>
@@ -36,11 +40,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define CLIENT_SECRET "testClientSecret"
 #define AUTHORIZE_URL "http://localhost:3000/oauth2/authorize"
 #define TOKEN_URL "http://localhost:3000/oauth2/token"
-#define ACCOUNT_INFO_URL "http://localhost:3000/api/me"
+#define ACCOUNT_INFO_URL "http://localhost:3000/api/v1/accounts/me"
 #define SCOPE "read write"
 #define SETTINGS_JSON_NAME "settings.json"
 
-SourceLinkAuth::SourceLinkAuth(QObject *parent) : client(parent)
+//--- SourceLinkAuth class ---
+
+SourceLinkAuth::SourceLinkAuth(QObject *parent) : client(parent), settings(this)
 {
     client.setRequestUrl(AUTHORIZE_URL);
     client.setTokenUrl(TOKEN_URL);
@@ -53,7 +59,7 @@ SourceLinkAuth::SourceLinkAuth(QObject *parent) : client(parent)
     client.setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
 
     // Create a store object for writing the received tokens
-    client.setStore(new SourceLinkSettingsStore(this));
+    client.setStore(&settings);
 
     connect(&client, SIGNAL(linkedChanged()), this, SLOT(onLinkedChanged()));
     connect(&client, SIGNAL(linkingFailed()), this, SIGNAL(linkingFailed()));
@@ -89,11 +95,13 @@ void SourceLinkAuth::getAccountInfo()
     O2Requestor *requestor = new O2Requestor(mgr, &client, this);
     requestor->setAddAccessTokenInQuery(false);
     requestor->setAccessTokenInAuthenticationHTTPHeaderFormat(QString::fromLatin1("Bearer %1"));
-    requestId_ = requestor->get(request);
+
     connect(
         requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
-        SLOT(onFinished(int, QNetworkReply::NetworkError, QByteArray))
+        SLOT(onAccountInfoReceived(int, QNetworkReply::NetworkError, QByteArray))
     );
+
+    requestor->get(request);
     obs_log(LOG_DEBUG, "Requesting account info... Please wait.");
 }
 
@@ -132,27 +140,22 @@ void SourceLinkAuth::onLinkingSucceeded()
     emit linkingSucceeded();
 }
 
-void SourceLinkAuth::onFinished(int requestId, QNetworkReply::NetworkError error, QByteArray replyData)
+void SourceLinkAuth::onAccountInfoReceived(int, QNetworkReply::NetworkError error, QByteArray replyData)
 {
-    if (requestId != requestId_) {
-        return;
-    }
-
     if (error != QNetworkReply::NoError) {
         obs_log(LOG_ERROR, "Reply error: %d", error);
-        return;
-    }
-
-    QString reply(replyData);
-    bool errorFound = reply.contains("error");
-    if (errorFound) {
-        obs_log(LOG_ERROR, "Request failed");
         emit accountInfoFailed();
         return;
     }
 
-    obs_log(LOG_INFO, "Account info: %s", reply.toUtf8().constData());
-    emit accountInfoReceived();
+    QString reply(replyData);
+    obs_log(LOG_DEBUG, "Reply: %s", reply.toUtf8().constData());
+
+    auto jsonDoc = QJsonDocument::fromJson(replyData);
+    auto accountInfo = AccountInfo::fromJson(jsonDoc.object());
+
+    obs_log(LOG_INFO, "Account info: %s", accountInfo->getDisplayName().toUtf8().constData());
+    emit accountInfoReceived(accountInfo);
 }
 
 //--- SourceLinkSettingsStore class ---

@@ -32,7 +32,7 @@ SettingsDialog *settingsDialog = nullptr;
 
 bool obs_module_load(void)
 {
-	// Register menu action
+    // Register menu action
     QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
         QAction *menuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));

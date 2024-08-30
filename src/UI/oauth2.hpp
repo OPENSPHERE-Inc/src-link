@@ -20,21 +20,34 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <o2.h>
+#include "objects.hpp"
+
+
+class SourceLinkSettingsStore : public O0AbstractStore {
+    Q_OBJECT
+
+    obs_data_t *settingsData;
+
+public:
+    explicit SourceLinkSettingsStore(QObject *parent = nullptr);
+    ~SourceLinkSettingsStore();
+
+    QString value(const QString &key, const QString &defaultValue = QString());
+    void setValue(const QString &key, const QString &value);
+};
 
 class SourceLinkAuth : public QObject {
     Q_OBJECT
 
     O2 client;
+    SourceLinkSettingsStore settings;
 
 signals:
     void extraTokensReady(const QVariantMap &extraTokens);
     void linkingFailed();
     void linkingSucceeded();
-    void accountInfoReceived();
+    void accountInfoReceived(AccountInfo* accountInfo);
     void accountInfoFailed();
-
-private:
-    int requestId_;
 
 public:
     explicit SourceLinkAuth(QObject *parent = nullptr);
@@ -48,18 +61,5 @@ private slots:
     void onLinkingSucceeded();
     void onOpenBrowser(const QUrl &url);
     void onCloseBrowser();
-    void onFinished(int, QNetworkReply::NetworkError, QByteArray);
-};
-
-class SourceLinkSettingsStore : public O0AbstractStore {
-    Q_OBJECT
-
-    obs_data_t *settingsData;
-
-public:
-    explicit SourceLinkSettingsStore(QObject *parent = nullptr);
-    ~SourceLinkSettingsStore();
-
-    QString value(const QString &key, const QString &defaultValue = QString());
-    void setValue(const QString &key, const QString &value);
+    void onAccountInfoReceived(int, QNetworkReply::NetworkError, QByteArray);
 };
