@@ -18,74 +18,94 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QUrl>
 #include <QDesktopServices>
+
+#include "common.hpp"
 #include "settings-dialog.hpp"
 #include "../plugin-support.h"
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::SettingsDialog), auth(this)
+SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
+    : QDialog(parent),
+      ui(new Ui::SettingsDialog),
+      apiClient(_apiClient)
 {
     ui->setupUi(this);
 
-    connect(ui->authButton, SIGNAL(clicked()), this, SLOT(onAuthButtonClicked()));
-    connect(&auth, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
-    connect(&auth, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>)));
+    connect(apiClient, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
+    connect(
+        apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
+    );
+
+    setClientActive(apiClient->isLoggedIn());
+    obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
-SettingsDialog::~SettingsDialog() {}
-
-void SettingsDialog::onAuthButtonClicked()
+SettingsDialog::~SettingsDialog()
 {
-    ui->authButton->setEnabled(false);
-
-    connect(&auth, SIGNAL(linkingSucceeded()), this, SLOT(onLinkingSucceeded()));
-    connect(&auth, SIGNAL(linkingFailed()), this, SLOT(onLinkingFailed()));
-
-    auth.login(this);
+    obs_log(LOG_DEBUG, "SettingsDialog destroyed");
 }
 
-void SettingsDialog::onRevokeButtonClicked()
+void SettingsDialog::setClientActive(bool active)
 {
-    auth.logout();
+    if (!active) {
+        ui->connectButton->setText(QTStr("Connect"));
+        ui->accountName->setText(QTStr("Disconnected"));
+        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
+        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
+    } else {
+        ui->connectButton->setText(QTStr("Disconnect"));
+        ui->accountName->setText(QString("Connected: %1").arg(apiClient->getAccountDisplayName()));
+        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
+        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
+    }
+}
 
-    ui->accountName->setText("Not logged in yet");
-    ui->authButton->setText("Connect");
-    ui->authButton->setEnabled(true);
+void SettingsDialog::onConnect()
+{
+    ui->connectButton->setEnabled(false);
+
+    connect(apiClient, SIGNAL(linkingSucceeded()), this, SLOT(onLinkingSucceeded()));
+    connect(apiClient, SIGNAL(linkingFailed()), this, SLOT(onLinkingFailed()));
+
+    apiClient->login();
+}
+
+void SettingsDialog::onDisconnect()
+{
+    apiClient->logout();
+
+    ui->activeEventComboBox->clear();
+    ui->connectButton->setEnabled(true);
+
+    setClientActive(false);
 }
 
 void SettingsDialog::onLinkingSucceeded()
 {
-    auth.getAccountInfo();
-    auth.getPartyEvents();
 }
 
 void SettingsDialog::onLinkingFailed()
 {
-    ui->authButton->setEnabled(true);
+    ui->connectButton->setEnabled(true);
+
+    setClientActive(false);
 }
 
-void SettingsDialog::onAccountInfoReady(AccountInfo* accountInfo)
+void SettingsDialog::onAccountInfoReady(AccountInfo *)
 {
-    ui->accountName->setText(accountInfo->getDisplayName());
-
-    disconnect(ui->authButton, SIGNAL(clicked()), this, SLOT(onAuthButtonClicked()));
-    connect(ui->authButton, SIGNAL(clicked()), this, SLOT(onRevokeButtonClicked()));
-
-    ui->authButton->setText("Disconnect");
-    ui->authButton->setEnabled(true);
+    setClientActive(true);
 }
-
 
 void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
 {
     ui->activeEventComboBox->clear();
 
-    foreach (const auto partyEvent, events) {
+    foreach(const auto partyEvent, events)
+    {
         if (!partyEvent->getParty()) {
             continue;
         }
         ui->activeEventComboBox->addItem(
-            QString("%1: %2")
-                .arg(partyEvent->getParty()->getName())
-                .arg(partyEvent->getName())
+            QString("%1 - %2").arg(partyEvent->getParty()->getName()).arg(partyEvent->getName())
         );
     }
 }

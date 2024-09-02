@@ -47,13 +47,21 @@ class SourceLinkApiClient : public QObject {
 
     friend class RequestHandler;
 
-    SourceLinkApiClientSettingsStore settings;
+    SourceLinkApiClientSettingsStore *settings;
     O2 client;
     QNetworkAccessManager networkManager;
-
-protected:
     O2Requestor requestor;
     QList<RequestHandler *> requestQueue;
+
+    QString accountId;
+    QString accountDisplayName;
+    QString accountPictureId;
+    QList<PartyEvent *> partyEvents;
+    QList<Stage *> stages;
+
+protected:
+    inline QList<RequestHandler *> &getRequestQueue() { return requestQueue; }
+    inline O2Requestor &getRequestor() { return requestor; }
 
 signals:
     void extraTokensReady(const QVariantMap &extraTokens);
@@ -63,20 +71,40 @@ signals:
     void accountInfoFailed();
     void partyEventsReady(QList<PartyEvent *> partyEvents);
     void partyEventsFailed();
+    void stagesReady(QList<Stage *> stages);
+    void stagesFailed();
+    void connectionPutSucceeded(StageConnection *connection);
+    void connectionPutFailed();
+    void connectionDeleteSucceeded(const QString uuid);
+    void connectionDeleteFailed();
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
+    ~SourceLinkApiClient();
 
-    void login(QWidget *parent);
+    void login();
     void logout();
-    void getAccountInfo();
-    void getPartyEvents();
+    bool isLoggedIn();
+    void requestAccountInfo();
+    void requestPartyEvents();
+    void requestStages();
+    void putConnection(
+        const QString &uuid, const QString &stageId, const QString &seatName, const QString &sourceName,
+        const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
+        const int width, const int height
+    );
+    void deleteConnection(const QString &uuid);
+
+    inline QString getAccountId() const { return accountId; }
+    inline QString getAccountDisplayName() const { return accountDisplayName; }
+    inline QString getAccountPictureId() const { return accountPictureId; }
+    inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
+    inline const QList<Stage *> &getStages() const { return stages; }
 
 private slots:
     void onLinkedChanged();
     void onLinkingSucceeded();
     void onOpenBrowser(const QUrl &url);
-    void onCloseBrowser();
 };
 
 class RequestHandler : public QObject {
@@ -94,53 +122,53 @@ public:
 
     template<class Func> inline void queue(Func invoker)
     {
-        if (apiClient->requestQueue.isEmpty()) {
+        if (apiClient->getRequestQueue().isEmpty()) {
             invoker();
         } else {
             // Reserve next invocation
-            connect(apiClient->requestQueue.last(), &RequestHandler::finished, invoker);
+            connect(apiClient->getRequestQueue().last(), &RequestHandler::finished, invoker);
         }
-        apiClient->requestQueue.append(this);
+        apiClient->getRequestQueue().append(this);
     }
 
     /// Make a GET request.
     inline void get(const QNetworkRequest &req, int timeout = 60 * 1000)
     {
-        queue([this, req, timeout]() { requestId = apiClient->requestor.get(req, timeout); });
+        queue([this, req, timeout]() { requestId = apiClient->getRequestor().get(req, timeout); });
     }
 
     /// Make a POST request.
     inline void post(const QNetworkRequest &req, const QByteArray &data, int timeout = 60 * 1000)
     {
-        queue([this, req, data, timeout]() { apiClient->requestor.post(req, data, timeout); });
+        queue([this, req, data, timeout]() { apiClient->getRequestor().post(req, data, timeout); });
     }
 
     inline void post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = 60 * 1000)
     {
-        queue([this, req, data, timeout]() { requestId = apiClient->requestor.post(req, data, timeout); });
+        queue([this, req, data, timeout]() { requestId = apiClient->getRequestor().post(req, data, timeout); });
     }
 
     /// Make a PUT request.
     inline void put(const QNetworkRequest &req, const QByteArray &data, int timeout = 60 * 1000)
     {
-        queue([this, req, data, timeout]() { requestId = apiClient->requestor.put(req, data, timeout); });
+        queue([this, req, data, timeout]() { requestId = apiClient->getRequestor().put(req, data, timeout); });
     }
 
     inline void put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = 60 * 1000)
     {
-        queue([this, req, data, timeout]() { requestId = apiClient->requestor.put(req, data, timeout); });
+        queue([this, req, data, timeout]() { requestId = apiClient->getRequestor().put(req, data, timeout); });
     }
 
     /// Make a DELETE request.
     inline void deleteResource(const QNetworkRequest &req, int timeout = 60 * 1000)
     {
-        queue([this, req, timeout]() { requestId = apiClient->requestor.deleteResource(req, timeout); });
+        queue([this, req, timeout]() { requestId = apiClient->getRequestor().deleteResource(req, timeout); });
     }
 
     /// Make a HEAD request.
     inline void head(const QNetworkRequest &req, int timeout = 60 * 1000)
     {
-        queue([this, req, timeout]() { requestId = apiClient->requestor.head(req, timeout); });
+        queue([this, req, timeout]() { requestId = apiClient->getRequestor().head(req, timeout); });
     }
 
     /// Make a custom request.
@@ -148,7 +176,7 @@ public:
     customRequest(const QNetworkRequest &req, const QByteArray &verb, const QByteArray &data, int timeout = 60 * 1000)
     {
         queue([this, req, verb, data, timeout]() {
-            requestId = apiClient->requestor.customRequest(req, verb, data, timeout);
+            requestId = apiClient->getRequestor().customRequest(req, verb, data, timeout);
         });
     }
 

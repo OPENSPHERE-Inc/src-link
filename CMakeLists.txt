@@ -34,8 +34,8 @@ if(ENABLE_QT)
                AUTORCC ON)
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/source-link-service.cpp src/UI/settings-dialog.cpp
-                                             src/UI/api-client.cpp src/UI/objects.hpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/UI/settings-dialog.cpp src/api-client.cpp
+                                             src/objects.hpp src/sources/linked-source.cpp)
 
 set(o2_SRCS
     lib/o2/o2.cpp

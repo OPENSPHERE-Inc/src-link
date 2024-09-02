@@ -20,31 +20,38 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
-#include <QDialog>
+#include <QObject>
 
-#include "ui_settings-dialog.h"
 #include "../api-client.hpp"
-#include "../objects.hpp"
 
-class SettingsDialog : public QDialog {
+
+class LinkedSource : public QObject {
     Q_OBJECT
 
-    SourceLinkApiClient* apiClient;
+    QString uuid;
 
-    void setClientActive(bool active);
+    SourceLinkApiClient *apiClient;
+    obs_source_t *source;
+    obs_source_t *decoderSource;
+    obs_data_t *decoderSettings;
+    bool connected;
+
+    void applyDecoderSettings(obs_data_t *settings);
+    void applyConnection(obs_data_t *settings);
 
 public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
+    LinkedSource(obs_data_t *settings, obs_source_t* source, SourceLinkApiClient* _apiClient, QObject *parent = nullptr);
+    ~LinkedSource();
+
+    obs_properties_t* getProperties();
+    uint32_t getWidth();
+    uint32_t getHeight();
+    void update(obs_data_t *settings);
+
+    void videoRenderCallback();
 
 private slots:
-    void onConnect();
-    void onDisconnect();
-    void onLinkingSucceeded();
-    void onLinkingFailed();
-    void onAccountInfoReady(AccountInfo* accountInfo);
-    void onPartyEventsReady(QList<PartyEvent *> events);
+    void onConnectionPutSucceeded(StageConnection *connection);
+    void onConnectionPutFailed();
 
-private:
-    Ui::SettingsDialog *ui;
 };

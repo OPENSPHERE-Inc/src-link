@@ -68,16 +68,9 @@ class Stage : public QObject {
         QString description;
     };
 
-    struct StageConnection_t {
-        QString sourceName;
-        QString url;
-        QString streamId;
-    };
-
     struct StageSeat_t {
         QString name;
         QString displayName;
-        QList<StageConnection_t> connections;
     };
 
     QList<StageSource_t> sources;
@@ -121,16 +114,6 @@ public:
             const auto seatJson = seatItem.toObject();
             seat.name = seatJson["name"].toString();
             seat.displayName = seatJson["display_name"].toString();
-
-            foreach (const QJsonValue connectionItem, seatJson["connections"].toArray()) {
-                StageConnection_t connection;
-                const auto connectionJson = connectionItem.toObject();
-                connection.sourceName = connectionJson["source_name"].toString();
-                connection.url = connectionJson["url"].toString();
-                connection.streamId = connectionJson["stream_id"].toString();
-                seat.connections.append(connection);
-            }
-
             stage->seats.append(seat);
         }
 
@@ -229,3 +212,65 @@ public:
     }
 };
 
+class StageConnection : public QObject {
+    Q_OBJECT
+
+    QString id;
+    QString stageId;
+    QString seatName;
+    QString sourceName;
+    QString protocol;
+    QString server;
+    int port;
+    QString parameters;
+    int maxBitrate;
+    int minBitrate;
+    int width;
+    int height;
+
+public:
+    explicit inline StageConnection(QObject *parent = nullptr) : QObject(parent) {}
+
+    inline QString getId() const { return id; }
+    inline void setId(const QString &value) { id = value; }
+    inline QString getStageId() const { return stageId; }
+    inline void setStageId(const QString &value) { stageId = value; }
+    inline QString getSeatName() const { return seatName; }
+    inline void setSeatName(const QString &value) { seatName = value; }
+    inline QString getSourceName() const { return sourceName; }
+    inline void setSourceName(const QString &value) { sourceName = value; }
+    inline QString getProtocol() const { return protocol; }
+    inline void setProtocol(const QString &value) { protocol = value; }
+    inline QString getServer() const { return server; }
+    inline void setServer(const QString &value) { server = value; }
+    inline int getPort() const { return port; }
+    inline void setPort(int value) { port = value; }
+    inline QString getParameters() const { return parameters; }
+    inline void setParameters(const QString &value) { parameters = value; }
+    inline int getMaxBitrate() const { return maxBitrate; }
+    inline void setMaxBitrate(int value) { maxBitrate = value; }
+    inline int getMinBitrate() const { return minBitrate; }
+    inline void setMinBitrate(int value) { minBitrate = value; }
+    inline int getWidth() const { return width; }
+    inline void setWidth(int value) { width = value; }
+    inline int getHeight() const { return height; }
+    inline void setHeight(int value) { height = value; }
+
+    static inline StageConnection *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
+    {
+        StageConnection *connection = new StageConnection(parent);
+        connection->setId(json["id"].toString());
+        connection->setStageId(json["stage_id"].toString());
+        connection->setSeatName(json["seat_name"].toString());
+        connection->setSourceName(json["source_name"].toString());
+        connection->setProtocol(json["protocol"].toString());
+        connection->setServer(json["server"].toString());
+        connection->setPort(json["port"].toInt());
+        connection->setParameters(json["parameters"].toString());
+        connection->setMaxBitrate(json["max_bitrate"].toInt());
+        connection->setMinBitrate(json["min_bitrate"].toInt());
+        connection->setWidth(json["width"].toInt());
+        connection->setHeight(json["height"].toInt());
+        return connection;
+    }
+};
