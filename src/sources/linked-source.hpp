@@ -29,22 +29,30 @@ class LinkedSource : public QObject {
     Q_OBJECT
 
     QString uuid;
+    int port;
 
     SourceLinkApiClient *apiClient;
     obs_source_t *source;
     obs_source_t *decoderSource;
-    obs_data_t *decoderSettings;
     bool connected;
 
-    void applyDecoderSettings(obs_data_t *settings);
-    void applyConnection(obs_data_t *settings);
+    QString compositeParameters(obs_data_t *settings, bool client = false);
+    // Return value must be release via obs_data_release()
+    obs_data_t *createDecoderSettings(obs_data_t *settings);
+    // Unregister connection if no stage/seat/source selected.
+    void handleConnection(obs_data_t *settings);
 
+
+    
 public:
     LinkedSource(obs_data_t *settings, obs_source_t* source, SourceLinkApiClient* _apiClient, QObject *parent = nullptr);
     ~LinkedSource();
 
     obs_properties_t* getProperties();
+    void getDefault(obs_data_t *settings);
+    // Returns source's actual width
     uint32_t getWidth();
+    // Returns source's actual height
     uint32_t getHeight();
     void update(obs_data_t *settings);
 

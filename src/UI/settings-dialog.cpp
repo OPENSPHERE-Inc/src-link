@@ -30,12 +30,15 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
 {
     ui->setupUi(this);
 
+    loadSettings();
+
     connect(apiClient, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
     connect(
         apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
     );
+    connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
 
-    setClientActive(apiClient->isLoggedIn());
+    setClientActive(apiClient->isLoggedIn());    
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
@@ -63,7 +66,6 @@ void SettingsDialog::onConnect()
 {
     ui->connectButton->setEnabled(false);
 
-    connect(apiClient, SIGNAL(linkingSucceeded()), this, SLOT(onLinkingSucceeded()));
     connect(apiClient, SIGNAL(linkingFailed()), this, SLOT(onLinkingFailed()));
 
     apiClient->login();
@@ -79,19 +81,20 @@ void SettingsDialog::onDisconnect()
     setClientActive(false);
 }
 
-void SettingsDialog::onLinkingSucceeded()
+void SettingsDialog::onAccept()
 {
-}
+    saveSettings();
+} 
 
 void SettingsDialog::onLinkingFailed()
 {
     ui->connectButton->setEnabled(true);
-
     setClientActive(false);
 }
 
 void SettingsDialog::onAccountInfoReady(AccountInfo *)
 {
+    ui->connectButton->setEnabled(true);
     setClientActive(true);
 }
 
@@ -108,4 +111,18 @@ void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
             QString("%1 - %2").arg(partyEvent->getParty()->getName()).arg(partyEvent->getName())
         );
     }
+}
+
+void SettingsDialog::saveSettings()
+{
+    apiClient->setPortMin(ui->portMinSpinBox->value());
+    apiClient->setPortMax(ui->portMaxSpinBox->value());
+    apiClient->setPartyEventId(ui->activeEventComboBox->currentText());
+}
+
+void SettingsDialog::loadSettings()
+{
+    ui->portMinSpinBox->setValue(apiClient->getPortMin());
+    ui->portMaxSpinBox->setValue(apiClient->getPortMax());
+    ui->activeEventComboBox->setCurrentText(apiClient->getPartyEventId());
 }

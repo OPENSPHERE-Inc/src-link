@@ -52,10 +52,9 @@ class SourceLinkApiClient : public QObject {
     QNetworkAccessManager networkManager;
     O2Requestor requestor;
     QList<RequestHandler *> requestQueue;
+    QMap<int, bool> usedPorts;
 
-    QString accountId;
-    QString accountDisplayName;
-    QString accountPictureId;
+    // Online rsources
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
 
@@ -94,10 +93,19 @@ public:
         const int width, const int height
     );
     void deleteConnection(const QString &uuid);
+    const int getFreePort();
+    void releasePort(const int port);
 
-    inline QString getAccountId() const { return accountId; }
-    inline QString getAccountDisplayName() const { return accountDisplayName; }
-    inline QString getAccountPictureId() const { return accountPictureId; }
+    inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
+    inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
+    inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
+    inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
+    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
+    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
+
+    inline const QString getAccountId() const { return settings->value("account.id"); }
+    inline const QString getAccountDisplayName() const { return settings->value("account.displayName"); }
+    inline const QString getAccountPictureId() const { return settings->value("account.pictureId"); }
     inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
     inline const QList<Stage *> &getStages() const { return stages; }
 

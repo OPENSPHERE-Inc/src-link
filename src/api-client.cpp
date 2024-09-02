@@ -69,11 +69,6 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     client.setScope(QString::fromLatin1(SCOPE));
     client.setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
 
-    // Load stored settings
-    accountId = settings->value("account.id");
-    accountDisplayName = settings->value("account.displayName");
-    accountPictureId = settings->value("account.pictureId");
-
     // Requestor uses header as access token transport
     requestor.setAddAccessTokenInQuery(false);
     requestor.setAccessTokenInAuthenticationHTTPHeaderFormat(QString::fromLatin1("Bearer %1"));
@@ -172,14 +167,10 @@ void SourceLinkApiClient::requestAccountInfo()
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         auto accountInfo = AccountInfo::fromJsonObject(jsonDoc.object(), this);
 
-        accountId = accountInfo->getId();
-        accountDisplayName = accountInfo->getDisplayName();
-        accountPictureId = accountInfo->getPictureId();
-
         // Save account info to settings.json
-        settings->setValue("account.id", accountId);
-        settings->setValue("account.displayName", accountDisplayName);
-        settings->setValue("account.pictureId", accountPictureId);
+        settings->setValue("account.id", accountInfo->getId());
+        settings->setValue("account.displayName", accountInfo->getDisplayName());
+        settings->setValue("account.pictureId", accountInfo->getPictureId());
 
         obs_log(LOG_INFO, "Received account: %s", accountInfo->getDisplayName().toUtf8().constData());
         emit accountInfoReady(accountInfo);
@@ -261,7 +252,7 @@ void SourceLinkApiClient::putConnection(
         return;
     }
 
-    obs_log(LOG_DEBUG, "Requesting stages.");
+    obs_log(LOG_DEBUG, "Putting stage coinnection: %s", uuid.toUtf8().constData());
     auto handler = new RequestHandler(this);
     connect(handler, &RequestHandler::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
@@ -280,7 +271,7 @@ void SourceLinkApiClient::putConnection(
     auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + uuid));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    auto body = QJsonObject();
+    QJsonObject body;
     body["stage_id"] = stageId;
     body["seat_name"] = seatName;
     body["source_name"] = sourceName;
@@ -303,7 +294,7 @@ void SourceLinkApiClient::deleteConnection(const QString &uuid)
         return;
     }
 
-    obs_log(LOG_DEBUG, "Requesting stages.");
+    obs_log(LOG_DEBUG, "Deleting stages: %s", uuid.toUtf8().constData());
     auto handler = new RequestHandler(this);
     connect(handler, &RequestHandler::finished, [this, uuid](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
@@ -318,6 +309,25 @@ void SourceLinkApiClient::deleteConnection(const QString &uuid)
 
     auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + uuid));
     handler->deleteResource(req);
+}
+
+const int SourceLinkApiClient::getFreePort()
+{
+    auto min = settings->value("portRange.min", "10000").toInt();
+    auto max = settings->value("portRange.max", "10099").toInt();
+
+    for (auto i = min; i <= max; i++) {
+        if (!usedPorts[i]) {
+            usedPorts[i] = true;
+            return i;
+        }
+    }
+    return 0;
+}
+
+void SourceLinkApiClient::releasePort(const int port)
+{
+    usedPorts[port] = false;
 }
 
 //--- AbstractRequestHandler class ---//
@@ -378,7 +388,7 @@ QString SourceLinkApiClientSettingsStore::value(const QString &key, const QStrin
 {
     auto value = obs_data_get_string(settingsData, key.toUtf8().constData());
     if (value) {
-        return QString::fromUtf8(value);
+        return QString(value);
     } else {
         return defaultValue;
     }

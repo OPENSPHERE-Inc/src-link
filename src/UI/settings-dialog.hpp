@@ -40,10 +40,13 @@ public:
 private slots:
     void onConnect();
     void onDisconnect();
-    void onLinkingSucceeded();
+    void onAccept();
+
     void onLinkingFailed();
     void onAccountInfoReady(AccountInfo* accountInfo);
     void onPartyEventsReady(QList<PartyEvent *> events);
+    void saveSettings();
+    void loadSettings();
 
 private:
     Ui::SettingsDialog *ui;

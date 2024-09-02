@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../plugin-support.h"
 #include "linked-source.hpp"
+#include "../utils.hpp"
 
 //--- LinkedSource class ---//
 
@@ -28,21 +29,23 @@ LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLin
       source(source),
       apiClient(_apiClient),
       connected(false),
-      uuid(QString::fromUtf8(obs_source_get_uuid(source)))
+      uuid(QString(obs_source_get_uuid(source))),
+      port(0)
 {
-    obs_log(LOG_DEBUG, "LinkedSource created");
+    obs_log(LOG_DEBUG, "%s: Source creating", obs_source_get_name(source));
 
-    decoderSettings = obs_data_create();
+    // Allocate port
+    port = apiClient->getFreePort();
 
-    // Fixed parameters
-    obs_data_set_string(decoderSettings, "input_format", "mpegts");
-    obs_data_set_bool(decoderSettings, "is_local_file", false);
+    // Register connection to server
+    handleConnection(settings);
 
-    // Supplied from UI
-    applyDecoderSettings(settings);
+    // Composite decoder's settings
+    auto decoderSettings = createDecoderSettings(settings);
 
     // Decoder source (SRT, RIST, etc.)
     decoderSource = obs_source_create_private("ffmpeg_source", obs_source_get_name(source), decoderSettings);
+    obs_data_release(decoderSettings);
 
     // Audio handling
     obs_source_add_audio_capture_callback(
@@ -61,50 +64,98 @@ LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLin
         this
     );
 
-    applyConnection(settings);
+    connect(
+        apiClient, SIGNAL(connectionPutSucceeded(StageConnection *)), this,
+        SLOT(onConnectionPutSucceeded(StageConnection *))
+    );
+    connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
+
+    obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
 }
 
 LinkedSource::~LinkedSource()
 {
-    if (connected) {
-        apiClient->deleteConnection(uuid);
-    }
+    obs_log(LOG_INFO, "%s: Source destroying", obs_source_get_name(source));
+
+    apiClient->deleteConnection(uuid);
+    apiClient->releasePort(port);
 
     obs_source_release(decoderSource);
-    obs_data_release(decoderSettings);
-    obs_log(LOG_DEBUG, "LinkedSource destroyed");
+
+    obs_log(LOG_INFO, "%s: Source destroyed", obs_source_get_name(source));
 }
 
-void LinkedSource::applyDecoderSettings(obs_data_t *settings)
+QString LinkedSource::compositeParameters(obs_data_t *settings, bool client)
 {
-    obs_data_set_string(decoderSettings, "input", obs_data_get_string(settings, "url"));
+    auto protocol = QString(obs_data_get_string(settings, "protocol"));
+    QString parameters;
+
+    if (protocol == QString("srt")) {
+        // Generate SRT parameters
+        auto mode = QString(obs_data_get_string(settings, "mode"));
+        if (client) {
+            // Invert mode for client
+            if (mode == QString("listener")) {
+                mode = QString("caller");
+            } else if (mode == QString("caller")) {
+                mode = QString("listener");
+            }
+        }
+
+        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&stream_id=%5")
+                         .arg(mode)
+                         .arg(obs_data_get_int(settings, "latency") * 1000) // Convert to microseconds
+                         .arg(obs_data_get_int(settings, "pbkeylen"))
+                         .arg(generatePassword(10, ""))
+                         .arg(generatePassword(16, ""));
+    }
+
+    return parameters;
+}
+
+obs_data_t *LinkedSource::createDecoderSettings(obs_data_t *settings)
+{
+    auto protocol = QString(obs_data_get_string(settings, "protocol"));
+    auto decoderSettings = obs_data_create();
+
+    if (protocol == QString("srt") && port > 0) {
+        QString parameters = compositeParameters(settings);
+        auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(parameters).toUtf8().constData();
+        obs_data_set_string(decoderSettings, "input", input);
+    } else {
+        obs_data_set_string(decoderSettings, "input", "");
+    }
+
     obs_data_set_int(decoderSettings, "reconnect_delay_sec", obs_data_get_int(settings, "reconnect_delay_sec"));
     obs_data_set_int(decoderSettings, "buffering_mb", obs_data_get_int(settings, "buffering_mb"));
     obs_data_set_bool(decoderSettings, "hw_decode", obs_data_get_bool(settings, "hw_decode"));
     obs_data_set_bool(decoderSettings, "clear_on_media_end", obs_data_get_bool(settings, "clear_on_media_end"));
+
+    // Fixed parameters
+    obs_data_set_string(decoderSettings, "input_format", "mpegts");
+    obs_data_set_bool(decoderSettings, "is_local_file", false);
+
+    return decoderSettings;
 }
 
-void LinkedSource::applyConnection(obs_data_t *settings)
+void LinkedSource::handleConnection(obs_data_t *settings)
 {
-    // Register connection to server
-    auto stageId = obs_data_get_string(settings, "stage_id");
-    auto seatName = obs_data_get_string(settings, "seat_name");
-    auto sourceName = obs_data_get_string(settings, "source_name");
-    if (stageId != nullptr && seatName != nullptr && sourceName != nullptr) {
+    auto stageId = QString(obs_data_get_string(settings, "stage_id"));
+    auto seatName = QString(obs_data_get_string(settings, "seat_name"));
+    auto sourceName = QString(obs_data_get_string(settings, "source_name"));
+
+    if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
+        // Register connection to server
+        auto protocol = QString(obs_data_get_string(settings, "protocol"));
+        QString parameters = compositeParameters(settings, true);
+
         apiClient->putConnection(
-            uuid,
-            QString::fromUtf8(stageId),
-            QString::fromUtf8(seatName),
-            QString::fromUtf8(sourceName),
-            QString::fromUtf8("srt"),
-            10001,
-            "",
-            obs_data_get_int(settings, "max_bitrate"),
-            obs_data_get_int(settings, "min_bitrate"),
-            obs_data_get_int(settings, "width"),
+            uuid, stageId, seatName, sourceName, protocol, port, parameters, obs_data_get_int(settings, "max_bitrate"),
+            obs_data_get_int(settings, "min_bitrate"), obs_data_get_int(settings, "width"),
             obs_data_get_int(settings, "height")
         );
     } else {
+        // Unregister connection if no stage/seat/source selected.
         apiClient->deleteConnection(uuid);
     }
 }
@@ -112,11 +163,14 @@ void LinkedSource::applyConnection(obs_data_t *settings)
 obs_properties_t *LinkedSource::getProperties()
 {
     auto props = obs_properties_create();
+    obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
+
     obs_property_t *prop;
 
-    auto stageList =
-        obs_properties_add_list(props, "stage", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
-
+    // Stage list
+    auto stageList = obs_properties_add_list(
+        props, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+    );
     foreach(auto stage, apiClient->getStages())
     {
         obs_property_list_add_string(
@@ -124,34 +178,40 @@ obs_properties_t *LinkedSource::getProperties()
         );
     }
 
+    // Connection group
     auto connectionGroup = obs_properties_create();
     obs_properties_add_group(props, "connection", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup);
 
+    // Connection group -> Seat list
     auto seatList = obs_properties_add_list(
-        connectionGroup, "seat", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "seat_name", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     obs_property_list_add_string(seatList, obs_module_text("ChooseStageFirst"), "");
 
+    // Connection group -> Source list
     auto sourceList = obs_properties_add_list(
-        connectionGroup, "source", obs_module_text("Source"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "source_name", obs_module_text("Source"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     obs_property_list_add_string(sourceList, obs_module_text("ChooseStageFirst"), "");
 
+    // Stage change event -> Update connection group
     obs_property_set_modified_callback2(
         stageList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
+            obs_log(LOG_DEBUG, "Stage has been changed.");
+
             auto apiClient = static_cast<SourceLinkApiClient *>(param);
-            auto stageId = obs_data_get_string(settings, "stage");
+            auto stageId = QString(obs_data_get_string(settings, "stage_id"));
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
-            obs_properties_remove_by_name(connectionGroup, "seat");
-            obs_properties_remove_by_name(connectionGroup, "source");
+            obs_properties_remove_by_name(connectionGroup, "seat_name");
+            obs_properties_remove_by_name(connectionGroup, "source_name");
 
             auto seatList = obs_properties_add_list(
-                connectionGroup, "seat", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+                connectionGroup, "seat_name", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
             );
             auto sourceList = obs_properties_add_list(
-                connectionGroup, "seat", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+                connectionGroup, "source_name", obs_module_text("Source"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
             );
 
             if (!apiClient->getStages().size()) {
@@ -162,7 +222,7 @@ obs_properties_t *LinkedSource::getProperties()
 
             foreach(auto stage, apiClient->getStages())
             {
-                if (stage->getId() != stageId) {
+                if (stageId != stage->getId()) {
                     continue;
                 }
 
@@ -194,18 +254,105 @@ obs_properties_t *LinkedSource::getProperties()
         apiClient
     );
 
+    // Other stage settings
     obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);
     obs_properties_add_int(props, "min_bitrate", obs_module_text("MinBitrate"), 0, 1000000000, 100);
     obs_properties_add_int(props, "width", obs_module_text("SpecifiedWidth"), 0, 3840, 2);
     obs_properties_add_int(props, "height", obs_module_text("SpecifiedHeight"), 0, 2160, 2);
 
+    // Private source settings
     obs_properties_add_int_slider(props, "reconnect_delay_sec", obs_module_text("ReconnectDelayTime"), 1, 60, 1);
     prop = obs_properties_add_int_slider(props, "buffering_mb", obs_module_text("BufferingMB"), 0, 16, 1);
     obs_property_int_set_suffix(prop, " MB");
     obs_properties_add_bool(props, "hw_decode", obs_module_text("HardwareDecode"));
     obs_properties_add_bool(props, "clear_on_media_end", obs_module_text("ClearOnMediaEnd"));
 
+    // Protocol list
+    auto protocolList = obs_properties_add_list(
+        props, "protocol", obs_module_text("Protocol"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+    );
+    obs_property_list_add_string(protocolList, obs_module_text("SRT"), "srt");
+
+    // Protocol setting group
+    auto protocolSettingGroup = obs_properties_create();
+    obs_properties_add_group(
+        props, "protocol_settings", obs_module_text("ProtocolSettings"), OBS_GROUP_NORMAL, protocolSettingGroup
+    );
+
+    // Protocol change event -> Update protocol settings group
+    obs_property_set_modified_callback2(
+        protocolList,
+        [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
+            obs_log(LOG_DEBUG, "Protocol has been changed.");
+            auto apiClient = static_cast<SourceLinkApiClient *>(param);
+            auto protocol = QString(obs_data_get_string(settings, "protocol"));
+
+            // Remove group's properties
+            auto protocolSettingsGroup = obs_property_group_content(obs_properties_get(props, "protocol_settings"));
+            for (auto prop = obs_properties_first(protocolSettingsGroup); prop; obs_property_next(&prop)) {
+                obs_properties_remove_by_name(protocolSettingsGroup, obs_property_name(prop));
+            }
+
+            if (protocol == QString("srt")) {
+                // mode list
+                auto modeList = obs_properties_add_list(
+                    protocolSettingsGroup, "mode", obs_module_text("Mode"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+                );
+                obs_property_list_add_string(modeList, "listener", "listener");
+                obs_property_list_add_string(modeList, "caller", "caller");
+                obs_property_list_add_string(modeList, "rendezvous", "rendezvous");
+
+                // Latency
+                obs_properties_add_int(protocolSettingsGroup, "latency", obs_module_text("LatencyMsecs"), 0, 60000, 1);
+
+                // pbkeylen list
+                auto pbkeylenList = obs_properties_add_list(
+                    protocolSettingsGroup, "pbkeylen", obs_module_text("PBKeyLen"), OBS_COMBO_TYPE_LIST,
+                    OBS_COMBO_FORMAT_INT
+                );
+                obs_property_list_add_int(pbkeylenList, "16", 16);
+                obs_property_list_add_int(pbkeylenList, "24", 24);
+                obs_property_list_add_int(pbkeylenList, "32", 32);
+
+                obs_properties_add_text(
+                    protocolSettingsGroup, "passphrase", obs_module_text("PassphraseWillBeGenerated"), OBS_TEXT_INFO
+                );
+                obs_properties_add_text(
+                    protocolSettingsGroup, "stream_id", obs_module_text("StreamIdWillBeGenerated"), OBS_TEXT_INFO
+                );
+            }
+
+            return true;
+        },
+        apiClient
+    );
+
     return props;
+}
+
+void LinkedSource::getDefault(obs_data_t *settings)
+{
+    obs_log(LOG_DEBUG, "Default settings applying.");
+
+    obs_data_set_default_int(settings, "reconnect_delay_sec", 1);
+    obs_data_set_default_int(settings, "buffering_mb", 1);
+    obs_data_set_default_bool(settings, "hw_decode", true);
+    obs_data_set_default_bool(settings, "clear_on_media_end", true);
+    obs_data_set_default_int(settings, "max_bitrate", 8000);
+    obs_data_set_default_int(settings, "min_bitrate", 4000);
+
+    obs_data_set_default_string(settings, "protocol", "srt");
+    obs_data_set_default_string(settings, "mode", "listener");
+    obs_data_set_default_int(settings, "latency", 200);
+    obs_data_set_default_int(settings, "pbkeylen", 16);
+
+    obs_video_info ovi = {0};
+    if (obs_get_video_info(&ovi)) {
+        obs_data_set_default_int(settings, "width", ovi.base_width);
+        obs_data_set_default_int(settings, "height", ovi.base_height);
+    }
+
+    obs_log(LOG_INFO, "Default settings applied.");
 }
 
 uint32_t LinkedSource::getWidth()
@@ -226,10 +373,25 @@ void LinkedSource::videoRenderCallback()
 
 void LinkedSource::update(obs_data_t *settings)
 {
-    applyDecoderSettings(settings);
-    obs_source_update(decoderSource, decoderSettings);
+    obs_log(LOG_DEBUG, "%s: Source updating", obs_source_get_name(source));
 
-    applyConnection(settings);
+    handleConnection(settings);
+
+    auto decoderSettings = createDecoderSettings(settings);
+    obs_source_update(decoderSource, decoderSettings);
+    obs_data_release(decoderSettings);
+
+    obs_log(LOG_INFO, "%s: Source updated", obs_source_get_name(source));
+}
+
+void LinkedSource::onConnectionPutSucceeded(StageConnection *connection)
+{
+    connected = true;
+}
+
+void LinkedSource::onConnectionPutFailed()
+{
+    connected = false;
 }
 
 //--- Source registration ---//
@@ -244,13 +406,19 @@ void *createSource(obs_data_t *settings, obs_source_t *source)
 void destroySource(void *data)
 {
     auto linkedSource = static_cast<LinkedSource *>(data);
-    linkedSource->deleteLater();
+    delete linkedSource;
 }
 
 obs_properties_t *getProperties(void *data)
 {
     auto linkedSource = static_cast<LinkedSource *>(data);
     return linkedSource->getProperties();
+}
+
+void getDefault(void *data, obs_data_t *settings)
+{
+    auto linkedSource = static_cast<LinkedSource *>(data);
+    linkedSource->getDefault(settings);
 }
 
 uint32_t getWidth(void *data)
@@ -291,9 +459,11 @@ obs_source_info createLinkedSourceInfo()
     sourceInfo.create = createSource;
     sourceInfo.destroy = destroySource;
     sourceInfo.get_properties = getProperties;
+    sourceInfo.get_defaults2 = getDefault;
     sourceInfo.get_width = getWidth;
     sourceInfo.get_height = getHeight;
     sourceInfo.video_render = videoRender;
+    sourceInfo.update = update;
 
     return sourceInfo;
 }

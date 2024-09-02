@@ -47,7 +47,7 @@ public:
     static inline AccountInfo *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         AccountInfo *accountInfo = new AccountInfo(parent);
-        accountInfo->setId(json["id"].toString());
+        accountInfo->setId(json["_id"].toString());
         accountInfo->setDisplayName(json["display_name"].toString());
         accountInfo->setPictureId(json["picture_id"].toString());
         return accountInfo;
@@ -95,7 +95,7 @@ public:
     static inline Stage *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         Stage *stage = new Stage(parent);
-        stage->setId(json["id"].toString());
+        stage->setId(json["_id"].toString());
         stage->setName(json["name"].toString());
         stage->setDescription(json["description"].toString());
         stage->setPictureId(json["picture_id"].toString());
@@ -147,7 +147,7 @@ public:
     static inline Party *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         Party *party = new Party(parent);
-        party->setId(json["id"].toString());
+        party->setId(json["_id"].toString());
         party->setName(json["name"].toString());
         party->setDescription(json["description"].toString());
         party->setPictureId(json["picture_id"].toString());
@@ -196,7 +196,7 @@ public:
     static inline PartyEvent *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         PartyEvent *partyEvent = new PartyEvent(parent);
-        partyEvent->setId(json["id"].toString());
+        partyEvent->setId(json["_id"].toString());
         partyEvent->setName(json["name"].toString());
         partyEvent->setDescription(json["description"].toString());
         partyEvent->setStartTime(QDateTime::fromString(json["start_time"].toString(), Qt::ISODate));
@@ -259,7 +259,7 @@ public:
     static inline StageConnection *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         StageConnection *connection = new StageConnection(parent);
-        connection->setId(json["id"].toString());
+        connection->setId(json["_id"].toString());
         connection->setStageId(json["stage_id"].toString());
         connection->setSeatName(json["seat_name"].toString());
         connection->setSourceName(json["source_name"].toString());

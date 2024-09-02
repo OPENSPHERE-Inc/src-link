@@ -18,20 +18,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <QString>
+#include <QRandomGenerator>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-
-extern const char *PLUGIN_NAME;
-extern const char *PLUGIN_VERSION;
-
-void obs_log(int log_level, const char *format, ...);
-
-#ifdef __cplusplus
+inline QString
+generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$", const QString &exclude = "lIO")
+{
+    QString chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890" + symbol;
+    QString password;
+    for (int i = 0; i < length; i++) {
+        auto index = QRandomGenerator::global()->bounded(chars.size());
+        auto c = chars[index];
+        if (exclude.contains(c)) {
+            continue;
+        }
+        password.append(c);
+    }
+    return password;
 }
-#endif

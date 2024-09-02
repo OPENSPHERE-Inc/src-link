@@ -62,6 +62,6 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
-    apiClient->deleteLater();
+    delete apiClient;
     obs_log(LOG_INFO, "plugin unloaded");
 }
