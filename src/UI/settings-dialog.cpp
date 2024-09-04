@@ -38,7 +38,7 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
 
-    setClientActive(apiClient->isLoggedIn());    
+    setClientActive(apiClient->isLoggedIn());
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
@@ -84,7 +84,7 @@ void SettingsDialog::onDisconnect()
 void SettingsDialog::onAccept()
 {
     saveSettings();
-} 
+}
 
 void SettingsDialog::onLinkingFailed()
 {
@@ -108,7 +108,8 @@ void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
             continue;
         }
         ui->activeEventComboBox->addItem(
-            QString("%1 - %2").arg(partyEvent->getParty()->getName()).arg(partyEvent->getName())
+            QString("%1 - %2").arg(partyEvent->getParty()->getName()).arg(partyEvent->getName()),
+            partyEvent->getId()
         );
     }
 }
@@ -117,12 +118,17 @@ void SettingsDialog::saveSettings()
 {
     apiClient->setPortMin(ui->portMinSpinBox->value());
     apiClient->setPortMax(ui->portMaxSpinBox->value());
-    apiClient->setPartyEventId(ui->activeEventComboBox->currentText());
+    apiClient->setPartyEventId(ui->activeEventComboBox->currentData().toString());
 }
 
 void SettingsDialog::loadSettings()
 {
-    ui->portMinSpinBox->setValue(apiClient->getPortMin());
-    ui->portMaxSpinBox->setValue(apiClient->getPortMax());
-    ui->activeEventComboBox->setCurrentText(apiClient->getPartyEventId());
+    auto portMin = apiClient->getPortMin();
+    auto portMax = apiClient->getPortMax();
+
+    obs_log(LOG_DEBUG, "porMin=%d, portMax=%d", portMin, portMax);
+
+    ui->portMinSpinBox->setValue(portMin);
+    ui->portMaxSpinBox->setValue(portMax);
+    ui->activeEventComboBox->setCurrentIndex(ui->activeEventComboBox->findData(apiClient->getPartyEventId()));
 }

@@ -24,7 +24,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QJsonArray>
 #include <QDateTime>
 
-
 class AccountInfo : public QObject {
     Q_OBJECT
 
@@ -100,7 +99,8 @@ public:
         stage->setDescription(json["description"].toString());
         stage->setPictureId(json["picture_id"].toString());
 
-        foreach (const QJsonValue sourceItem, json["sources"].toArray()) {
+        foreach(const QJsonValue sourceItem, json["sources"].toArray())
+        {
             StageSource_t source;
             const auto sourceJson = sourceItem.toObject();
             source.name = sourceJson["name"].toString();
@@ -109,7 +109,8 @@ public:
             stage->sources.append(source);
         }
 
-        foreach (const QJsonValue seatItem, json["seats"].toArray()) {
+        foreach(const QJsonValue seatItem, json["seats"].toArray())
+        {
             StageSeat_t seat;
             const auto seatJson = seatItem.toObject();
             seat.name = seatJson["name"].toString();
@@ -143,7 +144,7 @@ public:
     inline void setPictureId(const QString &value) { pictureId = value; }
     inline int getCapacity() const { return capacity; }
     inline void setCapacity(int value) { capacity = value; }
-    
+
     static inline Party *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
     {
         Party *party = new Party(parent);

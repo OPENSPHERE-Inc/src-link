@@ -37,7 +37,7 @@ SourceLinkApiClient *apiClient = nullptr;
 obs_source_info linkedSourceInfo;
 
 bool obs_module_load(void)
-{   
+{
     apiClient = new SourceLinkApiClient();
 
     // Register "linked_source" source

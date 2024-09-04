@@ -19,73 +19,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 
 #include "../plugin-support.h"
-#include "linked-source.hpp"
 #include "../utils.hpp"
+#include "linked-source.hpp"
 
-//--- LinkedSource class ---//
-
-LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent)
-    : QObject(parent),
-      source(source),
-      apiClient(_apiClient),
-      connected(false),
-      uuid(QString(obs_source_get_uuid(source))),
-      port(0)
-{
-    obs_log(LOG_DEBUG, "%s: Source creating", obs_source_get_name(source));
-
-    // Allocate port
-    port = apiClient->getFreePort();
-
-    // Register connection to server
-    handleConnection(settings);
-
-    // Composite decoder's settings
-    auto decoderSettings = createDecoderSettings(settings);
-
-    // Decoder source (SRT, RIST, etc.)
-    decoderSource = obs_source_create_private("ffmpeg_source", obs_source_get_name(source), decoderSettings);
-    obs_data_release(decoderSettings);
-
-    // Audio handling
-    obs_source_add_audio_capture_callback(
-        decoderSource,
-        // Just pass through the audio
-        [](void *data, obs_source_t *, const audio_data *audioData, bool muted) {
-            auto linkedSource = static_cast<LinkedSource *>(data);
-
-            struct obs_source_audio destData;
-            memcpy(destData.data, audioData->data, sizeof(audio_data::data));
-            destData.frames = audioData->frames;
-            destData.timestamp = audioData->timestamp;
-
-            obs_source_output_audio(linkedSource->source, &destData);
-        },
-        this
-    );
-
-    connect(
-        apiClient, SIGNAL(connectionPutSucceeded(StageConnection *)), this,
-        SLOT(onConnectionPutSucceeded(StageConnection *))
-    );
-    connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
-
-    obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
-}
-
-LinkedSource::~LinkedSource()
-{
-    obs_log(LOG_INFO, "%s: Source destroying", obs_source_get_name(source));
-
-    apiClient->deleteConnection(uuid);
-    apiClient->releasePort(port);
-
-    obs_source_release(decoderSource);
-
-    obs_log(LOG_INFO, "%s: Source destroyed", obs_source_get_name(source));
-}
-
-QString LinkedSource::compositeParameters(obs_data_t *settings, bool client)
+inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QString &streamId, bool remote = false)
 {
     auto protocol = QString(obs_data_get_string(settings, "protocol"));
     QString parameters;
@@ -93,8 +30,8 @@ QString LinkedSource::compositeParameters(obs_data_t *settings, bool client)
     if (protocol == QString("srt")) {
         // Generate SRT parameters
         auto mode = QString(obs_data_get_string(settings, "mode"));
-        if (client) {
-            // Invert mode for client
+        if (remote) {
+            // Invert mode for remote
             if (mode == QString("listener")) {
                 mode = QString("caller");
             } else if (mode == QString("caller")) {
@@ -106,57 +43,135 @@ QString LinkedSource::compositeParameters(obs_data_t *settings, bool client)
                          .arg(mode)
                          .arg(obs_data_get_int(settings, "latency") * 1000) // Convert to microseconds
                          .arg(obs_data_get_int(settings, "pbkeylen"))
-                         .arg(generatePassword(10, ""))
-                         .arg(generatePassword(16, ""));
+                         .arg(passphrase)
+                         .arg(streamId);
     }
 
     return parameters;
 }
 
-obs_data_t *LinkedSource::createDecoderSettings(obs_data_t *settings)
+//--- LinkedSource class ---//
+
+LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent)
+    : QObject(parent),
+      source(_source),
+      apiClient(_apiClient),
+      connected(false),
+      uuid(QString(obs_source_get_uuid(_source))),
+      port(0),
+      audioThread(new LinkedSourceAudioThread(this))
 {
-    auto protocol = QString(obs_data_get_string(settings, "protocol"));
+    obs_log(LOG_DEBUG, "%s: Source creating", obs_source_get_name(source));
+
+    // Allocate port
+    port = apiClient->getFreePort();
+
+    // Capture source's settings first
+    captureSettings(settings);
+
+    // Register connection to server
+    handleConnection();
+
+    // Create decoder private source (SRT, RIST, etc.)
+    auto decoderSettings = createDecoderSettings();
+    QString decoderName = QString("%1 (decoder)").arg(obs_source_get_name(source));
+    decoderSource = obs_source_create_private("ffmpeg_source", qPrintable(decoderName), decoderSettings);
+    obs_data_release(decoderSettings);
+    obs_source_inc_active(decoderSource);
+
+    channels = (speaker_layout)audio_output_get_channels(obs_get_audio());
+    samplesPerSec = audio_output_get_sample_rate(obs_get_audio());
+
+    // Audio handling
+    audioThread->start();
+    obs_source_add_audio_capture_callback(decoderSource, &audioCaptureCallback, this);
+
+    connect(
+        apiClient, SIGNAL(connectionPutSucceeded(StageConnection *)), this,
+        SLOT(onConnectionPutSucceeded(StageConnection *))
+    );
+    connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
+    connect(apiClient, SIGNAL(connectionDeleteSucceeded(QString)), this, SLOT(onConnectionDeleteSucceeded(QString)));
+
+    obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
+}
+
+LinkedSource::~LinkedSource()
+{
+    obs_log(LOG_INFO, "%s: Source destroying", obs_source_get_name(source));
+
+    // Note: apiClient instance might live in a different thread
+    QMetaObject::invokeMethod(apiClient, "deleteConnection", Q_ARG(QString, uuid));
+    QMetaObject::invokeMethod(apiClient, "releasePort", Q_ARG(int, port));
+
+    // Destroy decoder private source
+    obs_source_remove_audio_capture_callback(decoderSource, &audioCaptureCallback, this);
+    audioThread->requestInterruption();
+    audioThread->wait();
+    obs_source_dec_active(decoderSource);
+    obs_source_release(decoderSource);
+
+    obs_log(LOG_INFO, "%s: Source destroyed", obs_source_get_name(source));
+}
+
+void LinkedSource::captureSettings(obs_data_t *settings)
+{
+    stageId = QString(obs_data_get_string(settings, "stage_id"));
+    seatName = QString(obs_data_get_string(settings, "seat_name"));
+    sourceName = QString(obs_data_get_string(settings, "source_name"));
+    protocol = QString(obs_data_get_string(settings, "protocol"));
+    passphrase = generatePassword(16, "");
+    streamId = generatePassword(32, "");
+    maxBitrate = obs_data_get_int(settings, "max_bitrate");
+    minBitrate = obs_data_get_int(settings, "min_bitrate");
+    width = obs_data_get_int(settings, "width");
+    height = obs_data_get_int(settings, "height");
+    reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
+    bufferingMb = obs_data_get_int(settings, "buffering_mb");
+    hwDecode = obs_data_get_bool(settings, "hw_decode");
+    clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
+
+    localParameters = compositeParameters(settings, passphrase, streamId);
+    remoteParameters = compositeParameters(settings, passphrase, streamId, true);
+}
+
+obs_data_t *LinkedSource::createDecoderSettings()
+{
     auto decoderSettings = obs_data_create();
 
     if (protocol == QString("srt") && port > 0) {
-        QString parameters = compositeParameters(settings);
-        auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(parameters).toUtf8().constData();
-        obs_data_set_string(decoderSettings, "input", input);
+        auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
+        obs_data_set_string(decoderSettings, "input", qPrintable(input));
     } else {
         obs_data_set_string(decoderSettings, "input", "");
     }
 
-    obs_data_set_int(decoderSettings, "reconnect_delay_sec", obs_data_get_int(settings, "reconnect_delay_sec"));
-    obs_data_set_int(decoderSettings, "buffering_mb", obs_data_get_int(settings, "buffering_mb"));
-    obs_data_set_bool(decoderSettings, "hw_decode", obs_data_get_bool(settings, "hw_decode"));
-    obs_data_set_bool(decoderSettings, "clear_on_media_end", obs_data_get_bool(settings, "clear_on_media_end"));
+    obs_data_set_int(decoderSettings, "reconnect_delay_sec", reconnectDelaySec);
+    obs_data_set_int(decoderSettings, "buffering_mb", bufferingMb);
+    obs_data_set_bool(decoderSettings, "hw_decode", hwDecode);
+    obs_data_set_bool(decoderSettings, "clear_on_media_end", clearOnMediaEnd);
 
-    // Fixed parameters
+    // Static parameters
     obs_data_set_string(decoderSettings, "input_format", "mpegts");
     obs_data_set_bool(decoderSettings, "is_local_file", false);
 
     return decoderSettings;
 }
 
-void LinkedSource::handleConnection(obs_data_t *settings)
+void LinkedSource::handleConnection()
 {
-    auto stageId = QString(obs_data_get_string(settings, "stage_id"));
-    auto seatName = QString(obs_data_get_string(settings, "seat_name"));
-    auto sourceName = QString(obs_data_get_string(settings, "source_name"));
-
     if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
-        auto protocol = QString(obs_data_get_string(settings, "protocol"));
-        QString parameters = compositeParameters(settings, true);
-
-        apiClient->putConnection(
-            uuid, stageId, seatName, sourceName, protocol, port, parameters, obs_data_get_int(settings, "max_bitrate"),
-            obs_data_get_int(settings, "min_bitrate"), obs_data_get_int(settings, "width"),
-            obs_data_get_int(settings, "height")
+        // Note: apiClient instance might live in a different thread
+        QMetaObject::invokeMethod(
+            apiClient, "putConnection", Q_ARG(QString, uuid), Q_ARG(QString, stageId), Q_ARG(QString, seatName),
+            Q_ARG(QString, sourceName), Q_ARG(QString, protocol), Q_ARG(int, port), Q_ARG(QString, remoteParameters),
+            Q_ARG(int, maxBitrate), Q_ARG(int, minBitrate), Q_ARG(int, width), Q_ARG(int, height)
         );
     } else {
         // Unregister connection if no stage/seat/source selected.
-        apiClient->deleteConnection(uuid);
+        // Note: apiClient instance might live in a different thread
+        QMetaObject::invokeMethod(apiClient, "deleteConnection", Q_ARG(QString, uuid));
     }
 }
 
@@ -173,9 +188,7 @@ obs_properties_t *LinkedSource::getProperties()
     );
     foreach(auto stage, apiClient->getStages())
     {
-        obs_property_list_add_string(
-            stageList, stage->getName().toUtf8().constData(), stage->getId().toUtf8().constData()
-        );
+        obs_property_list_add_string(stageList, qPrintable(stage->getName()), qPrintable(stage->getId()));
     }
 
     // Connection group
@@ -235,15 +248,11 @@ obs_properties_t *LinkedSource::getProperties()
 
                 foreach(auto seat, stage->getSeats())
                 {
-                    obs_property_list_add_string(
-                        seatList, seat.displayName.toUtf8().constData(), seat.name.toUtf8().constData()
-                    );
+                    obs_property_list_add_string(seatList, qPrintable(seat.displayName), qPrintable(seat.name));
                 }
                 foreach(auto source, stage->getSources())
                 {
-                    obs_property_list_add_string(
-                        sourceList, source.displayName.toUtf8().constData(), source.name.toUtf8().constData()
-                    );
+                    obs_property_list_add_string(sourceList, qPrintable(source.displayName), qPrintable(source.name));
                 }
 
                 break;
@@ -375,9 +384,10 @@ void LinkedSource::update(obs_data_t *settings)
 {
     obs_log(LOG_DEBUG, "%s: Source updating", obs_source_get_name(source));
 
-    handleConnection(settings);
+    captureSettings(settings);
+    handleConnection();
 
-    auto decoderSettings = createDecoderSettings(settings);
+    auto decoderSettings = createDecoderSettings();
     obs_source_update(decoderSource, decoderSettings);
     obs_data_release(decoderSettings);
 
@@ -393,6 +403,152 @@ void LinkedSource::onConnectionPutFailed()
 {
     connected = false;
 }
+
+void LinkedSource::onConnectionDeleteSucceeded(QString)
+{
+    connected = false;
+}
+
+// DO NOT do heavy workload in this callback (It can cause crashes)
+void LinkedSource::audioCaptureCallback(void *param, obs_source_t *, const audio_data *audioData, bool muted)
+{
+    // Just pass through the audio
+    auto linkedSource = static_cast<LinkedSource *>(param);
+
+    if (muted) {
+        return;
+    }
+
+    linkedSource->audioThread->pushAudio(audioData);
+}
+
+//--- SourceLinkAudioThread class ---//
+
+LinkedSourceAudioThread::LinkedSourceAudioThread(LinkedSource *_linkedSource)
+    : linkedSource(_linkedSource),
+      QThread(_linkedSource),
+      audioBuffer({0}),
+      audioBufferFrames(0),
+      audioConvBuffer(nullptr),
+      audioConvBufferSize(0)
+{
+}
+
+LinkedSourceAudioThread::~LinkedSourceAudioThread()
+{
+    if (isRunning()) {
+        requestInterruption();
+        wait();
+    }
+    deque_free(&audioBuffer);
+    bfree(audioConvBuffer);
+}
+
+void LinkedSourceAudioThread::run()
+{
+    obs_log(LOG_DEBUG, "%s: Audio thread started.", obs_source_get_name(linkedSource->source));
+
+    while (!isInterruptionRequested()) {
+        audioBufferMutex.lock();
+        {
+            if (!audioBufferFrames) {
+                // No data at this time
+                audioBufferMutex.unlock();
+                msleep(10);
+                continue;
+            }
+
+            // Peek header of first chunk
+            deque_peek_front(&audioBuffer, audioConvBuffer, sizeof(AudioBufferHeader));
+            auto header = (AudioBufferHeader *)audioConvBuffer;
+            size_t dataSize = sizeof(AudioBufferHeader) + header->speakers * header->frames * 4;
+
+            // Read chunk data
+            deque_pop_front(&audioBuffer, audioConvBuffer, dataSize);
+
+            // Create audio data to send source output
+            obs_source_audio audioData = {0};
+            audioData.frames = header->frames;
+            audioData.timestamp = header->timestamp;
+            audioData.speakers = header->speakers;
+            audioData.format = header->format;
+            audioData.samples_per_sec = header->samples_per_sec;
+
+            for (int i = 0; i < header->speakers; i++) {
+                if (!header->data_idx[i]) {
+                    continue;
+                }
+                audioData.data[i] = audioConvBuffer + header->data_idx[i];
+            }
+
+            // Send data to source output
+            obs_source_output_audio(linkedSource->source, &audioData);
+
+            audioBufferFrames -= header->frames;
+        }
+        audioBufferMutex.unlock();
+        msleep(10);
+    }
+
+    obs_log(LOG_DEBUG, "%s: Audio thread stopped.", obs_source_get_name(linkedSource->source));
+}
+
+void LinkedSourceAudioThread::pushAudio(const audio_data *audioData)
+{
+    if (!isRunning()) {
+        return;
+    }
+
+    audioBufferMutex.lock();
+    {
+        // Push audio data to buffer
+        if (audioBufferFrames + audioData->frames > MAX_AUDIO_BUFFER_FRAMES) {
+            obs_log(LOG_WARNING, "%s: The audio buffer is full", obs_source_get_name(linkedSource->source));
+            deque_free(&audioBuffer);
+            deque_init(&audioBuffer);
+            audioBufferFrames = 0;
+        }
+
+        // Compute header
+        AudioBufferHeader header = {0};
+        header.frames = audioData->frames;
+        header.timestamp = audioData->timestamp;
+        header.samples_per_sec = linkedSource->samplesPerSec;
+        header.speakers = (speaker_layout)linkedSource->channels;
+        header.format = AUDIO_FORMAT_FLOAT_PLANAR;
+
+        for (int i = 0, channels = 0; i < header.speakers; i++) {
+            if (!audioData->data[i]) {
+                continue;
+            }
+            header.data_idx[i] = sizeof(AudioBufferHeader) + channels * audioData->frames * 4;
+            channels++;
+        }
+
+        // Push audio data to buffer
+        deque_push_back(&audioBuffer, &header, sizeof(AudioBufferHeader));
+        for (int i = 0; i < header.speakers; i++) {
+            if (!audioData->data[i]) {
+                continue;
+            }
+            deque_push_back(&audioBuffer, audioData->data[i], audioData->frames * 4);
+        }
+
+        size_t dataSize = sizeof(AudioBufferHeader) + header.speakers * header.frames * 4;
+        if (dataSize > audioConvBufferSize) {
+            obs_log(
+                LOG_DEBUG, "%s: Expand audioConvBuffer from %zu to %zu bytes",
+                obs_source_get_name(linkedSource->source), audioConvBufferSize, dataSize
+            );
+            audioConvBuffer = (uint8_t *)brealloc(audioConvBuffer, dataSize);
+            audioConvBufferSize = dataSize;
+        }
+
+        audioBufferFrames += audioData->frames;
+    }
+    audioBufferMutex.unlock();
+}
+
 
 //--- Source registration ---//
 
