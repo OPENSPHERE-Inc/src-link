@@ -71,7 +71,7 @@ class LinkedSource : public QObject {
     static void audioCaptureCallback(void *param, obs_source_t* source, const audio_data *audioData, bool muted);
 
 public:
-    LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
+    explicit LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
     ~LinkedSource();
 
     obs_properties_t *getProperties();
@@ -111,7 +111,7 @@ class LinkedSourceAudioThread : public QThread {
     };    
 
 public:
-    LinkedSourceAudioThread(LinkedSource* _linkedSource);
+    explicit LinkedSourceAudioThread(LinkedSource* _linkedSource);
     ~LinkedSourceAudioThread();
 
     void run() override;

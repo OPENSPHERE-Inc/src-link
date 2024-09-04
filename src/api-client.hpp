@@ -50,6 +50,7 @@ class SourceLinkApiClient : public QObject {
 
     friend class RequestInvoker;
 
+    QString uuid;
     SourceLinkApiClientSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
@@ -60,6 +61,7 @@ class SourceLinkApiClient : public QObject {
     // Online rsources
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
+    StageSeatAllocation *seatAllocation;
 
 protected:
     inline O2 *getO2Client() { return client; }
@@ -67,7 +69,6 @@ protected:
     inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
 
 signals:
-    void extraTokensReady(const QVariantMap &extraTokens);
     void linkingFailed();
     void linkingSucceeded();
     void accountInfoReady(AccountInfo *accountInfo);
@@ -76,11 +77,16 @@ signals:
     void partyEventsFailed();
     void stagesReady(QList<Stage *> stages);
     void stagesFailed();
+    void seatAllocationReady(StageSeatAllocation *seatAllocation);
+    void seatAllocationFailed();
     void connectionPutSucceeded(StageConnection *connection);
     void connectionPutFailed();
     void connectionDeleteSucceeded(const QString uuid);
     void connectionDeleteFailed();
-    void connectionDeleteScheduled(const QString uuid);
+    void seatAllocationPutSucceeded(StageSeatAllocation *seatAllocation);
+    void seatAllocationPutFailed();
+    void seatAllocationDeleteSucceeded(const QString uuid);
+    void seatAllocationDeleteFailed();
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
@@ -93,6 +99,7 @@ public slots:
     void requestAccountInfo();
     void requestPartyEvents();
     void requestStages();
+    void requestSeatAllocation();
     void putConnection(
         const QString &uuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
@@ -101,8 +108,11 @@ public slots:
     void deleteConnection(const QString &uuid);
     const int getFreePort();
     void releasePort(const int port);
+    void putSeatAllocation(const QString &partyEventId);
+    void deleteSeatAllocation();
 
 public:
+    inline const QString getUuid() const { return uuid; }
     inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
     inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
     inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }

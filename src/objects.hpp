@@ -275,3 +275,50 @@ public:
         return connection;
     }
 };
+
+class StageSeatAllocation : public QObject {
+    Q_OBJECT
+
+    QString id;
+    QString stageId;
+    QString seatName;
+    QString memberId;
+    QString accountId;
+
+    QList<StageConnection *> connections;
+
+public:
+    explicit inline StageSeatAllocation(QObject *parent = nullptr) : QObject(parent) {}
+
+    inline QString getId() const { return id; }
+    inline void setId(const QString &value) { id = value; }
+    inline QString getStageId() const { return stageId; }
+    inline void setStageId(const QString &value) { stageId = value; }
+    inline QString getSeatName() const { return seatName; }
+    inline void setSeatName(const QString &value) { seatName = value; }
+    inline QString getMemberId() const { return memberId; }
+    inline void setMemberId(const QString &value) { memberId = value; }
+    inline QString getAccountId() const { return accountId; }
+    inline void setAccountId(const QString &value) { accountId = value; }
+
+    inline QList<StageConnection *> getConnections() const { return connections; }
+    inline void setConnections(const QList<StageConnection *> &value) { connections = value; }
+
+    static inline StageSeatAllocation *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
+    {
+        StageSeatAllocation *allocation = new StageSeatAllocation(parent);
+        allocation->setId(json["_id"].toString());
+        allocation->setStageId(json["stage_id"].toString());
+        allocation->setSeatName(json["seat_name"].toString());
+        allocation->setMemberId(json["member_id"].toString());
+        allocation->setAccountId(json["account_id"].toString());
+        
+        foreach(const QJsonValue connectionItem, json["connections"].toArray())
+        {
+            StageConnection *connection = StageConnection::fromJsonObject(connectionItem.toObject(), allocation);
+            allocation->connections.append(connection);
+        }
+
+        return allocation;
+    }
+};

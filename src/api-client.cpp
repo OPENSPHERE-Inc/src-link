@@ -46,6 +46,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PARTY_EVENTS_URL "http://localhost:3000/api/v1/events/my"
 #define STAGES_URL "http://localhost:3000/api/v1/stages"
 #define STAGES_CONNECTIONS_URL "http://localhost:3000/api/v1/stages/connections"
+#define STAGE_SEAT_ALLOCATIONS_URL "http://localhost:3000/api/v1/stages/seat-allocations"
 #define SCOPE "read write"
 #define SETTINGS_JSON_NAME "settings.json"
 
@@ -57,11 +58,16 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
       settings(new SourceLinkApiClientSettingsStore()),
       networkManager(nullptr),
       client(nullptr),
-      requestor(nullptr)
+      requestor(nullptr),
+      seatAllocation(nullptr)
 {
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
     requestor = new O2Requestor(networkManager, client, this);
+
+    auto defaultUuid = os_generate_uuid();
+    uuid = settings->value("uuid", QString(defaultUuid));
+    bfree(defaultUuid);
 
     client->setRequestUrl(AUTHORIZE_URL);
     client->setTokenUrl(TOKEN_URL);
@@ -82,6 +88,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
         requestAccountInfo();
         requestPartyEvents();
         requestStages();
+        requestSeatAllocation();
     }
 
     obs_log(LOG_DEBUG, "SourceLinkApiClient created");
@@ -132,20 +139,10 @@ void SourceLinkApiClient::onLinkingSucceeded()
         return;
     }
 
-    QVariantMap tokens = client->extraTokens();
-    if (!tokens.isEmpty()) {
-        emit extraTokensReady(tokens);
-        obs_log(LOG_DEBUG, "Extra tokens in response:");
-
-        foreach(QString key, tokens.keys())
-        {
-            obs_log(LOG_DEBUG, "\t%s: %s...", qPrintable(key), qPrintable(tokens.value(key).toString().left(3)));
-        }
-    }
-
     requestAccountInfo();
     requestPartyEvents();
     requestStages();
+    requestSeatAllocation();
 
     emit linkingSucceeded();
 }
@@ -199,8 +196,9 @@ void SourceLinkApiClient::requestPartyEvents()
         }
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
+        qDeleteAll(partyEvents);
         partyEvents.clear();
-        foreach(const QJsonValue partyEventItem, jsonDoc.array())
+        foreach(const QJsonValue &partyEventItem, jsonDoc.array())
         {
             auto partyEvent = PartyEvent::fromJsonObject(partyEventItem.toObject(), this);
             partyEvents.append(partyEvent);
@@ -230,8 +228,9 @@ void SourceLinkApiClient::requestStages()
         }
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
+        qDeleteAll(stages);
         stages.clear();
-        foreach(const QJsonValue stageItem, jsonDoc.array())
+        foreach(const QJsonValue &stageItem, jsonDoc.array())
         {
             auto stage = Stage::fromJsonObject(stageItem.toObject(), this);
             stages.append(stage);
@@ -241,6 +240,35 @@ void SourceLinkApiClient::requestStages()
         emit stagesReady(stages);
     });
     handler->get(QNetworkRequest(QUrl(QString(STAGES_URL))));
+}
+
+void SourceLinkApiClient::requestSeatAllocation()
+{
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        emit seatAllocationFailed();
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "Requesting seat allocation for %s", qPrintable(uuid));
+    auto handler = new RequestInvoker(this);
+    connect(handler, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Reply error: %d", error);
+            emit seatAllocationFailed();
+            return;
+        }
+
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        if (seatAllocation) {
+            delete seatAllocation;
+        }
+        seatAllocation = StageSeatAllocation::fromJsonObject(jsonDoc.object(), this);
+
+        obs_log(LOG_INFO, "Received seat allocation for %s", qPrintable(seatAllocation->getId()));
+        emit seatAllocationReady(seatAllocation);
+    });
+    handler->get(QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + uuid)));
 }
 
 void SourceLinkApiClient::putConnection(
@@ -311,6 +339,64 @@ void SourceLinkApiClient::deleteConnection(const QString &uuid)
     });
 
     auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + uuid));
+    handler->deleteResource(req);
+}
+
+void SourceLinkApiClient::putSeatAllocation(const QString &partyEventId)
+{
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        emit seatAllocationPutFailed();
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "Putting stage seat allocation: %s", qPrintable(uuid));
+    auto handler = new RequestInvoker(this);
+    connect(handler, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Reply error: %d", error);
+            emit seatAllocationPutFailed();
+            return;
+        }
+
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        auto seatAllocation = StageSeatAllocation::fromJsonObject(jsonDoc.object(), this);
+
+        obs_log(LOG_INFO, "Put stage seat allocation %s succeeded", qPrintable(seatAllocation->getId()));
+        emit seatAllocationPutSucceeded(seatAllocation);
+    });
+
+    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject body;
+    body["party_event_id"] = partyEventId;
+
+    handler->put(req, QJsonDocument(body).toJson());
+}
+
+void SourceLinkApiClient::deleteSeatAllocation()
+{
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        emit seatAllocationDeleteFailed();
+        return;
+    }
+    
+    obs_log(LOG_DEBUG, "Deleting stage seat allocation: %s", qPrintable(uuid));
+    auto handler = new RequestInvoker(this);
+    connect(handler, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Reply error: %d", error);
+            emit seatAllocationDeleteFailed();
+            return;
+        }
+
+        obs_log(LOG_INFO, "Delete stage seat allocation %s succeeded", qPrintable(uuid));
+        emit seatAllocationDeleteSucceeded(uuid);
+    });
+
+    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
     handler->deleteResource(req);
 }
 
