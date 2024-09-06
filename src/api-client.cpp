@@ -61,6 +61,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
       networkManager(nullptr),
       client(nullptr),
       requestor(nullptr),
+      accountInfo(nullptr),
       seatAllocation(nullptr)
 {
     networkManager = new QNetworkAccessManager(this);
@@ -97,11 +98,13 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
         SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
     );
 
-    if (client->expires() <= QDateTime().currentSecsSinceEpoch()) {
+    if (client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
         // Refresh token now
         auto invoker = new RequestInvoker(this);
         invoker->refresh();
     } else {
+        requestOnlineResources();
+
         // Schedule next refresh
         QTimer::singleShot(
             client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
@@ -115,10 +118,6 @@ SourceLinkApiClient::~SourceLinkApiClient()
 {
     if (requestQueue.size() > 0) {
         obs_log(LOG_WARNING, "Remaining %d requests in queue.", requestQueue.size());
-        foreach(auto handler, requestQueue)
-        {
-            handler->deleteLater();
-        }
     }
 
     obs_log(LOG_DEBUG, "SourceLinkApiClient destroyed");
@@ -152,11 +151,21 @@ void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
 
 void SourceLinkApiClient::onO2LinkedChanged()
 {
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        return;        
+    }
+
     obs_log(LOG_DEBUG, "The API client link has been changed.");
 }
 
 void SourceLinkApiClient::onO2LinkingSucceeded()
 {
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        return;        
+    }
+
     obs_log(LOG_DEBUG, "The API client has linked up.");
 
     requestOnlineResources();
@@ -170,6 +179,10 @@ void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
         obs_log(LOG_ERROR, "Refreshing token failed: %d", error);
         return;
     }
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        return;
+    }
 
     // Schedule next refresh
     QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
@@ -178,6 +191,7 @@ void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 void SourceLinkApiClient::requestOnlineResources()
 {
     if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
         return;
     }
 
@@ -208,12 +222,10 @@ void SourceLinkApiClient::requestAccountInfo()
         }
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
-        auto accountInfo = AccountInfo::fromJsonObject(jsonDoc.object(), this);
-
-        // Save account info to settings.json
-        settings->setValue("account.id", accountInfo->getId());
-        settings->setValue("account.displayName", accountInfo->getDisplayName());
-        settings->setValue("account.pictureId", accountInfo->getPictureId());
+        if (accountInfo) {
+            accountInfo->deleteLater();
+        }
+        accountInfo = AccountInfo::fromJsonObject(jsonDoc.object(), this);
 
         obs_log(LOG_INFO, "Received account: %s", qPrintable(accountInfo->getDisplayName()));
         emit accountInfoReady(accountInfo);
@@ -344,7 +356,7 @@ void SourceLinkApiClient::requestSeatAllocation()
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         if (seatAllocation) {
-            delete seatAllocation;
+            seatAllocation->deleteLater();
         }
         seatAllocation = StageSeatAllocation::fromJsonObject(jsonDoc.object(), this);
 
@@ -552,6 +564,7 @@ void RequestInvoker::onO2RefreshFinished(QNetworkReply::NetworkError error)
     }
     obs_log(LOG_DEBUG, "Refresh finished");
 
+    apiClient->requestQueue.removeOne(this);
     emit finished(error, nullptr);
     deleteLater();
 }

@@ -549,7 +549,6 @@ void LinkedSourceAudioThread::pushAudio(const audio_data *audioData)
     audioBufferMutex.unlock();
 }
 
-
 //--- Source registration ---//
 
 extern SourceLinkApiClient *apiClient;

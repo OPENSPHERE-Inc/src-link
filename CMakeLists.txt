@@ -34,8 +34,19 @@ if(ENABLE_QT)
                AUTORCC ON)
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/UI/settings-dialog.cpp src/api-client.cpp
-                                             src/objects.hpp src/sources/linked-source.cpp)
+add_subdirectory(${CMAKE_SOURCE_DIR}/shared/properties-view)
+
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
+
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/plugin-main.cpp
+          src/UI/settings-dialog.cpp
+          src/api-client.cpp
+          src/objects.hpp
+          src/sources/linked-source.cpp
+          src/UI/output-dialog.cpp
+          src/outputs/linked-output.cpp)
 
 set(o2_SRCS
     lib/o2/o2.cpp
@@ -50,6 +61,8 @@ set(o2_SRCS
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2)
+target_include_directories(
+  ${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2 ${CMAKE_SOURCE_DIR}/shared/properties-view
+                                ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

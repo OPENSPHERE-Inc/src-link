@@ -16,13 +16,88 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <obs-module.h>
+#include <obs-frontend-api.h>
+#include <util/config-file.h>
+
 #include "linked-output.hpp"
 #include "../utils.hpp"
 
+// Hardcoded in obs-studio/UI/window-basic-main.hpp
+#define SIMPLE_ENCODER_X264 "x264"
+#define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
+#define SIMPLE_ENCODER_QSV "qsv"
+#define SIMPLE_ENCODER_QSV_AV1 "qsv_av1"
+#define SIMPLE_ENCODER_NVENC "nvenc"
+#define SIMPLE_ENCODER_NVENC_AV1 "nvenc_av1"
+#define SIMPLE_ENCODER_NVENC_HEVC "nvenc_hevc"
+#define SIMPLE_ENCODER_AMD "amd"
+#define SIMPLE_ENCODER_AMD_HEVC "amd_hevc"
+#define SIMPLE_ENCODER_AMD_AV1 "amd_av1"
+#define SIMPLE_ENCODER_APPLE_H264 "apple_h264"
+#define SIMPLE_ENCODER_APPLE_HEVC "apple_hevc"
+
+inline bool encoder_available(const char *encoder)
+{
+    const char *val;
+    int i = 0;
+
+    while (obs_enum_encoder_types(i++, &val)) {
+        if (strcmp(val, encoder) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Hardcoded in obs-studio/UI/window-basic-settings.cpp
+inline const char *get_simple_video_encoder(const char *encoder)
+{
+    if (!strcmp(encoder, SIMPLE_ENCODER_X264)) {
+        return "obs_x264";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU)) {
+        return "obs_x264";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV)) {
+        return "obs_qsv11_v2";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV_AV1)) {
+        return "obs_qsv11_av1";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD)) {
+        return "h264_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC)) {
+        return "h265_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_AV1)) {
+        return "av1_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC)) {
+        return encoder_available("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC)) {
+        return encoder_available("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1)) {
+        return "jim_av1_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_H264)) {
+        return "com.apple.videotoolbox.videoencoder.ave.avc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC)) {
+        return "com.apple.videotoolbox.videoencoder.ave.hevc";
+    }
+
+    return "obs_x264";
+}
+
+// Hardcoded in obs-studio/UI/window-basic-main-outputs.cpp
+inline const char *get_simple_audio_encoder(const char *encoder)
+{
+    if (strcmp(encoder, "opus")) {
+        return "ffmpeg_opus";
+    } else {
+        return "ffmpeg_aac";
+    }
+}
+
 //--- LinkedOutput class ---//
 
-LinkedOutput::LinkedOutput(obs_data_t *settings, SourceLinkApiClient *_apiClient, QObject *parent)
+LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
+      name(_name),
       apiClient(_apiClient),
       output(nullptr),
       service(nullptr),
@@ -30,10 +105,22 @@ LinkedOutput::LinkedOutput(obs_data_t *settings, SourceLinkApiClient *_apiClient
       audioEncoder(nullptr),
       outputActive(false)
 {
-    sourceName = QString(obs_data_get_string(settings, "source_name"));
+    obs_log(LOG_DEBUG, "%s: Output creating", qPrintable(name));
+
+    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    auto data = obs_data_create_from_json_file(path);
+    bfree(path);
+    settings = OBSData(data);
+    obs_data_release(data);
+
+    obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
 
-LinkedOutput::~LinkedOutput() {}
+LinkedOutput::~LinkedOutput()
+{
+    obs_log(LOG_DEBUG, "%s: Output destroying", qPrintable(name));
+    obs_log(LOG_INFO, "%s: Output destroyed", qPrintable(name));
+}
 
 obs_properties_t *LinkedOutput::getProperties()
 {
@@ -50,18 +137,18 @@ obs_properties_t *LinkedOutput::getProperties()
     obs_properties_add_list(
         audioEncoderGroup, "audio_bitrate", obs_module_text("AudioBitrate"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT
     );
-
     obs_properties_add_group(
         props, "audio_encoder_group", obs_module_text("AudioEncoder"), OBS_GROUP_NORMAL, audioEncoderGroup
     );
 
     // "Video Encoder" group
     auto videoEncoderGroup = obs_properties_create();
-
-    // "Video Encoder" prop
     auto videoEncoderList = obs_properties_add_list(
         videoEncoderGroup, "video_encoder", obs_module_text("VideoEncoder"), OBS_COMBO_TYPE_LIST,
         OBS_COMBO_FORMAT_STRING
+    );
+    obs_properties_add_group(
+        props, "video_encoder_group", obs_module_text("VideoEncoder"), OBS_GROUP_NORMAL, videoEncoderGroup
     );
 
     // Enum audio and video encoders
@@ -87,7 +174,7 @@ obs_properties_t *LinkedOutput::getProperties()
         audioEncoderList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
             auto linkedOutput = static_cast<LinkedOutput *>(param);
-            obs_log(LOG_DEBUG, "Audio encoder chainging");
+            obs_log(LOG_DEBUG, "%s: Audio encoder chainging", qPrintable(linkedOutput->getName()));
 
             const auto encoderId = obs_data_get_string(settings, "audio_encoder");
             const auto encoderProps = obs_get_encoder_properties(encoderId);
@@ -103,7 +190,7 @@ obs_properties_t *LinkedOutput::getProperties()
             auto result = true;
             switch (type) {
             case OBS_PROPERTY_INT: {
-                const auto max_value = obs_property_int_max(audioBitrateProp);
+                const auto max_value = obs_property_int_max(encoderBitrateProp);
                 const auto step_value = obs_property_int_step(encoderBitrateProp);
 
                 for (int i = obs_property_int_min(encoderBitrateProp); i <= max_value; i += step_value) {
@@ -118,12 +205,15 @@ obs_properties_t *LinkedOutput::getProperties()
             case OBS_PROPERTY_LIST: {
                 const auto format = obs_property_list_format(encoderBitrateProp);
                 if (format != OBS_COMBO_FORMAT_INT) {
-                    obs_log(LOG_ERROR, "Invalid bitrate property given by encoder: %s", encoderId);
+                    obs_log(
+                        LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s",
+                        qPrintable(linkedOutput->getName()), encoderId
+                    );
                     result = false;
                     break;
                 }
 
-                const auto count = obs_property_list_item_count(audioBitrateProp);
+                const auto count = obs_property_list_item_count(encoderBitrateProp);
                 for (size_t i = 0; i < count; i++) {
                     if (obs_property_list_item_disabled(encoderBitrateProp, i)) {
                         continue;
@@ -140,7 +230,7 @@ obs_properties_t *LinkedOutput::getProperties()
                 break;
             }
 
-            obs_log(LOG_INFO, "Audio encoder changed.");
+            obs_log(LOG_INFO, "%s: Audio encoder changed.", qPrintable(linkedOutput->getName()));
             return result;
         },
         this
@@ -150,7 +240,7 @@ obs_properties_t *LinkedOutput::getProperties()
         videoEncoderList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
             auto linkedOutput = static_cast<LinkedOutput *>(param);
-            obs_log(LOG_DEBUG, "Video encoder chainging");
+            obs_log(LOG_DEBUG, "%s: Video encoder chainging", qPrintable(linkedOutput->getName()));
 
             auto videoEncoderGroup = obs_property_group_content(obs_properties_get(props, "video_encoder_group"));
             auto encoderId = obs_data_get_string(settings, "video_encoder");
@@ -170,7 +260,7 @@ obs_properties_t *LinkedOutput::getProperties()
             applyDefaults(settings, encoderDefaults);
             obs_data_release(encoderDefaults);
 
-            obs_log(LOG_INFO, "Video encoder changed.");
+            obs_log(LOG_INFO, "%s: Video encoder changed", qPrintable(linkedOutput->getName()));
             return true;
         },
         this
@@ -179,9 +269,52 @@ obs_properties_t *LinkedOutput::getProperties()
     return props;
 }
 
-obs_data_t *LinkedOutput::createEgressSettings(obs_data_t *settings)
+void LinkedOutput::getDefault(OBSData defaults)
 {
-    auto *egressSettings = obs_data_create();
+    obs_log(LOG_DEBUG, "%s: Default settings applying", qPrintable(name));
+
+    auto config = obs_frontend_get_profile_config();
+    auto mode = config_get_string(config, "Output", "Mode");
+    bool advanced_out = strcmp(mode, "Advanced") == 0 || strcmp(mode, "advanced");
+
+    const char *videoEncoderId;
+    const char *audioEncoderId;
+    uint64_t audioBitrate;
+    if (advanced_out) {
+        videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
+        audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
+        audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
+    } else {
+        videoEncoderId = get_simple_video_encoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
+        audioEncoderId = get_simple_audio_encoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
+        audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
+    }
+    obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
+    obs_data_set_default_string(defaults, "video_encoder", videoEncoderId);
+    obs_data_set_default_int(defaults, "audio_bitrate", audioBitrate);
+
+    obs_log(LOG_INFO, "%s: Default settings applied", qPrintable(name));
+}
+
+void LinkedOutput::update(OBSData newSettings)
+{
+    obs_log(LOG_DEBUG, "%s: Output updating", qPrintable(name));
+
+    obs_data_apply(settings, newSettings);
+
+    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    obs_data_save_json_safe(settings, path, "tmp", "bak");
+    bfree(path);
+
+    obs_log(LOG_INFO, "%s: Output updated", qPrintable(name));
+}
+
+OBSData LinkedOutput::createEgressSettings()
+{
+    auto data = obs_data_create();
+    auto egressSettings = OBSData(data);
+    obs_data_release(data);
+
     obs_data_apply(egressSettings, settings);
 
     if (connection->getProtocol() == QString("srt")) {
@@ -197,7 +330,7 @@ obs_data_t *LinkedOutput::createEgressSettings(obs_data_t *settings)
     return egressSettings;
 }
 
-void LinkedOutput::startOutput(obs_data_t *settings, video_t *video, audio_t *audio)
+void LinkedOutput::startOutput(video_t *video, audio_t *audio)
 {
     // Force free resources
     stopOutput();
@@ -221,7 +354,7 @@ void LinkedOutput::startOutput(obs_data_t *settings, video_t *video, audio_t *au
         return;
     }
 
-    auto egressSettings = createEgressSettings(settings);
+    auto egressSettings = createEgressSettings();
     if (!egressSettings) {
         obs_log(LOG_ERROR, "Unsupported connection for %s", qPrintable(sourceName));
         return;

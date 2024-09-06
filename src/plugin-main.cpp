@@ -23,8 +23,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QUrl>
 #include <QMainWindow>
 
-#include <plugin-support.h>
+#include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
+#include "UI/output-dialog.hpp"
+#include "outputs/linked-output.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -33,6 +35,8 @@ extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
 SourceLinkApiClient *apiClient = nullptr;
+OutputDialog *outputDialog = nullptr;
+LinkedOutput *mainOutput = nullptr;
 
 obs_source_info linkedSourceInfo;
 
@@ -44,15 +48,26 @@ bool obs_module_load(void)
     linkedSourceInfo = createLinkedSourceInfo();
     obs_register_source(&linkedSourceInfo);
 
+    // Create main output
+    mainOutput = new LinkedOutput(QString("main"), apiClient);
+
     // Register menu action
     QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-    if (mainWindow) {
-        QAction *menuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
-
+    if (mainWindow) {        
         settingsDialog = new SettingsDialog(apiClient, mainWindow);
 
-        menuAction->connect(menuAction, &QAction::triggered, [] {
+        outputDialog = new OutputDialog(apiClient, mainOutput, mainWindow);
+
+        // Settings menu item
+        QAction *settingsMenuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
+        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
             settingsDialog->setVisible(!settingsDialog->isVisible());
+        });
+
+        // Output menu item
+        QAction *outputMenuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Output"));
+        outputMenuAction->connect(outputMenuAction, &QAction::triggered, [] {
+            outputDialog->setVisible(!outputDialog->isVisible());
         });
     }
 
@@ -62,6 +77,7 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
+    delete mainOutput;
     delete apiClient;
     obs_log(LOG_INFO, "plugin unloaded");
 }

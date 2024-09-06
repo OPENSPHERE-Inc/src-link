@@ -30,3 +30,6 @@
 
 # Except lib files
 !/lib
+
+# Except shared files
+!/shared

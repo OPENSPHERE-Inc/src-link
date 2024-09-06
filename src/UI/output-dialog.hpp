@@ -19,37 +19,25 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <obs-module.h>
+#include <properties-view.hpp>
 
 #include <QDialog>
 
-#include "ui_settings-dialog.h"
+#include "ui_output-dialog.h"
 #include "../api-client.hpp"
-#include "../objects.hpp"
+#include "../outputs/linked-output.hpp"
 
-class SettingsDialog : public QDialog {
+class OutputDialog : public QDialog {
     Q_OBJECT
 
-    SourceLinkApiClient* apiClient;
-
-    void setClientActive(bool active);
+    SourceLinkApiClient *apiClient;
+    LinkedOutput *output;
+    OBSPropertiesView *view;
 
 public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
-
-private slots:
-    void onConnect();
-    void onDisconnect();
-    void onAccept();
-
-    void onLinkingFailed();
-    void onAccountInfoReady(const AccountInfo *accountInfo);
-    void onPartiesReady(QList<Party *> parties);
-    void onPartyEventsReady(QList<PartyEvent *> events);
-    void saveSettings();
-    void loadSettings();
-    void onActivePartyChanged(int index);
+    explicit OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent = nullptr);
+    ~OutputDialog();
 
 private:
-    Ui::SettingsDialog *ui;
+    Ui::OutputDialog *ui;
 };

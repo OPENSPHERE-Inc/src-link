@@ -32,7 +32,7 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
 
     loadSettings();
 
-    connect(apiClient, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
+    connect(apiClient, SIGNAL(accountInfoReady(const AccountInfo *)), this, SLOT(onAccountInfoReady(const AccountInfo *)));
     connect(apiClient, SIGNAL(partiesReady(QList<Party *>)), this, SLOT(onPartiesReady(QList<Party *>)));
     connect(
         apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
@@ -41,11 +41,9 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->activePartyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
 
     setClientActive(apiClient->isLoggedIn());
-
-    apiClient->requestParties();
-    if (!apiClient->getPartyId().isEmpty()) {
-        apiClient->requestPartyEvents(apiClient->getPartyId());
-    }
+    onAccountInfoReady(apiClient->getAccountInfo());
+    onPartiesReady(apiClient->getParties());
+    onPartyEventsReady(apiClient->getPartyEvents());
 
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
@@ -64,7 +62,6 @@ void SettingsDialog::setClientActive(bool active)
         disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
     } else {
         ui->connectButton->setText(QTStr("Disconnect"));
-        ui->accountName->setText(QString("Connected: %1").arg(apiClient->getAccountDisplayName()));
         connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
         disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
     }
@@ -100,10 +97,15 @@ void SettingsDialog::onLinkingFailed()
     setClientActive(false);
 }
 
-void SettingsDialog::onAccountInfoReady(AccountInfo *)
+void SettingsDialog::onAccountInfoReady(const AccountInfo *accountInfo)
 {
-    ui->connectButton->setEnabled(true);
+    if (!accountInfo) {
+        return;
+    }
+    
     setClientActive(true);
+    ui->accountName->setText(QString("Connected: %1").arg(accountInfo->getDisplayName()));
+    ui->connectButton->setEnabled(true);
 }
 
 void SettingsDialog::onPartiesReady(QList<Party *> parties)

@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <obs-module.h>
+#include <obs.hpp>
 
 #include <QObject>
 
@@ -27,31 +28,36 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define OUTPUT_MAX_RETRIES 7
 #define OUTPUT_RETRY_DELAY_SECS 1
+#define OUTPUT_JSON_NAME "output.json"
 
 class LinkedOutput : public QObject {
     Q_OBJECT
 
+    QString name;
     QString sourceName;
     StageConnection *connection;
 
     SourceLinkApiClient *apiClient;
+    OBSData settings;
     obs_service_t *service;
     obs_output_t *output;
     obs_encoder_t *videoEncoder;
     obs_encoder_t *audioEncoder;
     bool outputActive;
 
-    obs_data_t *createEgressSettings(obs_data_t *settings);
-
+    OBSData createEgressSettings();
 
 public:
-    explicit LinkedOutput(
-        obs_data_t *settings, SourceLinkApiClient *_apiClient, QObject *parent = nullptr
-    );
+    explicit LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
     ~LinkedOutput();
 
     obs_properties_t *getProperties();
-    void startOutput(obs_data_t *settings, video_t *video, audio_t *audio);
+    void getDefault(OBSData defaults);
+    void update(OBSData newSettings);
+    void startOutput(video_t *video, audio_t *audio);
     void stopOutput();
 
+    inline QString getName() { return name; }
+    inline void setName(QString &value) { name = value; }
+    inline OBSData getSettings() { return settings; }
 };

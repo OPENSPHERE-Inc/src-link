@@ -59,6 +59,7 @@ class SourceLinkApiClient : public QObject {
     QMap<int, bool> usedPorts;
 
     // Online rsources
+    AccountInfo *accountInfo;
     QList<Party *> parties;
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
@@ -72,7 +73,7 @@ protected:
 signals:
     void linkingFailed();
     void linkingSucceeded();
-    void accountInfoReady(AccountInfo *accountInfo);
+    void accountInfoReady(const AccountInfo *accountInfo);
     void accountInfoFailed();
     void partiesReady(QList<Party *> parties);
     void partiesFailed();
@@ -128,9 +129,8 @@ public:
     inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
     inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
 
-    inline const QString getAccountId() const { return settings->value("account.id"); }
-    inline const QString getAccountDisplayName() const { return settings->value("account.displayName"); }
-    inline const QString getAccountPictureId() const { return settings->value("account.pictureId"); }
+    inline const AccountInfo *getAccountInfo() const { return accountInfo; }
+    inline const QList<Party *> &getParties() const { return parties; }
     inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
     inline const QList<Stage *> &getStages() const { return stages; }
     inline const StageSeatAllocation *getSeatAllocation() const { return seatAllocation; }
