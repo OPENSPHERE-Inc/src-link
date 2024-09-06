@@ -59,6 +59,7 @@ class SourceLinkApiClient : public QObject {
     QMap<int, bool> usedPorts;
 
     // Online rsources
+    QList<Party *> parties;
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
     StageSeatAllocation *seatAllocation;
@@ -73,6 +74,8 @@ signals:
     void linkingSucceeded();
     void accountInfoReady(AccountInfo *accountInfo);
     void accountInfoFailed();
+    void partiesReady(QList<Party *> parties);
+    void partiesFailed();
     void partyEventsReady(QList<PartyEvent *> partyEvents);
     void partyEventsFailed();
     void stagesReady(QList<Stage *> stages);
@@ -96,48 +99,56 @@ public slots:
     void login();
     void logout();
     bool isLoggedIn();
+    void refresh();
+    void requestOnlineResources();
     void requestAccountInfo();
-    void requestPartyEvents();
+    void requestParties();
+    void requestPartyEvents(const QString &partyId);
     void requestStages();
     void requestSeatAllocation();
     void putConnection(
-        const QString &uuid, const QString &stageId, const QString &seatName, const QString &sourceName,
+        const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height
     );
-    void deleteConnection(const QString &uuid);
+    void deleteConnection(const QString &sourceUuid);
     const int getFreePort();
     void releasePort(const int port);
-    void putSeatAllocation(const QString &partyEventId);
+    void putSeatAllocation();
     void deleteSeatAllocation();
 
 public:
     inline const QString getUuid() const { return uuid; }
+    inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
+    inline const QString getPartyId() const { return settings->value("partyId"); }
+    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
+    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
     inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
     inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
     inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
     inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
-    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
-    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
 
     inline const QString getAccountId() const { return settings->value("account.id"); }
     inline const QString getAccountDisplayName() const { return settings->value("account.displayName"); }
     inline const QString getAccountPictureId() const { return settings->value("account.pictureId"); }
     inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
     inline const QList<Stage *> &getStages() const { return stages; }
+    inline const StageSeatAllocation *getSeatAllocation() const { return seatAllocation; }
 
 private slots:
-    void onLinkedChanged();
-    void onLinkingSucceeded();
-    void onOpenBrowser(const QUrl &url);
+    void onO2LinkedChanged();
+    void onO2LinkingSucceeded();
+    void onO2OpenBrowser(const QUrl &url);
+    void onO2RefreshFinished(QNetworkReply::NetworkError);
 };
 
+// This class introduces sequencial invocation of requests
 class RequestInvoker : public QObject {
     Q_OBJECT
 
     O2Requestor *requestor;
     SourceLinkApiClient *apiClient;
-    int requestId = -1;
+    int requestId = -1; // -1: no request, -2: refresh, other: Proper request ID from O2Requestor
 
 signals:
     void finished(QNetworkReply::NetworkError error, QByteArray data);
@@ -156,6 +167,16 @@ public:
             connect(apiClient->getRequestQueue().last(), &RequestInvoker::finished, invoker);
         }
         apiClient->getRequestQueue().append(this);
+    }
+
+    /// Do token refresh
+    inline void refresh()
+    {
+        queue([this]() {
+            obs_log(LOG_DEBUG, "Invoke refresh token");
+            apiClient->refresh();
+            requestId = -2;
+        });
     }
 
     /// Make a GET request.
@@ -208,4 +229,5 @@ public:
 
 private slots:
     void onRequestorFinished(int, QNetworkReply::NetworkError error, QByteArray data);
+    void onO2RefreshFinished(QNetworkReply::NetworkError error);
 };

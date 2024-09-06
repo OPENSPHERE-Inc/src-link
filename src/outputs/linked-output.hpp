@@ -23,27 +23,35 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QObject>
 
 #include "../api-client.hpp"
+#include "../objects.hpp"
+
+#define OUTPUT_MAX_RETRIES 7
+#define OUTPUT_RETRY_DELAY_SECS 1
 
 class LinkedOutput : public QObject {
     Q_OBJECT
 
-    QString partyId;
-    QString partyEventId;
+    QString sourceName;
+    StageConnection *connection;
 
     SourceLinkApiClient *apiClient;
+    obs_service_t *service;
     obs_output_t *output;
+    obs_encoder_t *videoEncoder;
+    obs_encoder_t *audioEncoder;
+    bool outputActive;
 
-    // Unregister connection if no party events selected.
-    void handleConnection();
+    obs_data_t *createEgressSettings(obs_data_t *settings);
+
 
 public:
     explicit LinkedOutput(
-        obs_data_t *settings, obs_output_t *output, SourceLinkApiClient *_apiClient, QObject *parent = nullptr
+        obs_data_t *settings, SourceLinkApiClient *_apiClient, QObject *parent = nullptr
     );
     ~LinkedOutput();
 
     obs_properties_t *getProperties();
-
-
+    void startOutput(obs_data_t *settings, video_t *video, audio_t *audio);
+    void stopOutput();
 
 };

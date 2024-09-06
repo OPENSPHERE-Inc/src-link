@@ -342,7 +342,7 @@ void O2Requestor::retry() {
     }
         break;
     case QNetworkAccessManager::PutOperation:
-        reply_ = rawData_ ? manager_->post(request_, data_) : manager_->put(request_, multipartData_);
+        reply_ = rawData_ ? manager_->put(request_, data_) : manager_->put(request_, multipartData_);
         break;
     case QNetworkAccessManager::HeadOperation:
         reply_ = manager_->head(request_);

@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
+#include <QMap>
 
 class AccountInfo : public QObject {
     Q_OBJECT
@@ -280,10 +281,12 @@ class StageSeatAllocation : public QObject {
     Q_OBJECT
 
     QString id;
+    QString partyId;
+    QString partyEventId;
     QString stageId;
     QString seatName;
-    QString memberId;
-    QString accountId;
+    QString ownerUserId;
+    QMap<QString, QString> screenshots;
 
     QList<StageConnection *> connections;
 
@@ -292,15 +295,16 @@ public:
 
     inline QString getId() const { return id; }
     inline void setId(const QString &value) { id = value; }
+    inline QString getPartyId() const { return partyId; }
+    inline void setPartyId(const QString &value) { partyId = value; }
+    inline QString getPartyEventId() const { return partyEventId; }
+    inline void setPartyEventId(const QString &value) { partyEventId = value; }
     inline QString getStageId() const { return stageId; }
     inline void setStageId(const QString &value) { stageId = value; }
     inline QString getSeatName() const { return seatName; }
     inline void setSeatName(const QString &value) { seatName = value; }
-    inline QString getMemberId() const { return memberId; }
-    inline void setMemberId(const QString &value) { memberId = value; }
-    inline QString getAccountId() const { return accountId; }
-    inline void setAccountId(const QString &value) { accountId = value; }
-
+    inline QMap<QString, QString> getScreenshots() { return screenshots; }
+    inline void setScreenshots(const QMap<QString, QString> &value) { screenshots = value; }
     inline QList<StageConnection *> getConnections() const { return connections; }
     inline void setConnections(const QList<StageConnection *> &value) { connections = value; }
 
@@ -308,15 +312,20 @@ public:
     {
         StageSeatAllocation *allocation = new StageSeatAllocation(parent);
         allocation->setId(json["_id"].toString());
+        allocation->setPartyId(json["party_id"].toString());
+        allocation->setPartyEventId(json["party_event_id"].toString());
         allocation->setStageId(json["stage_id"].toString());
         allocation->setSeatName(json["seat_name"].toString());
-        allocation->setMemberId(json["member_id"].toString());
-        allocation->setAccountId(json["account_id"].toString());
-        
+
         foreach(const QJsonValue connectionItem, json["connections"].toArray())
         {
             StageConnection *connection = StageConnection::fromJsonObject(connectionItem.toObject(), allocation);
             allocation->connections.append(connection);
+        }
+
+        foreach(const QString key, json["screenshots"].toObject().keys())
+        {
+            allocation->screenshots[key] = json["screenshots"][key].toString();
         }
 
         return allocation;

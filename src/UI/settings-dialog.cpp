@@ -33,12 +33,20 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     loadSettings();
 
     connect(apiClient, SIGNAL(accountInfoReady(AccountInfo *)), this, SLOT(onAccountInfoReady(AccountInfo *)));
+    connect(apiClient, SIGNAL(partiesReady(QList<Party *>)), this, SLOT(onPartiesReady(QList<Party *>)));
     connect(
         apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
     );
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
+    connect(ui->activePartyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
 
     setClientActive(apiClient->isLoggedIn());
+
+    apiClient->requestParties();
+    if (!apiClient->getPartyId().isEmpty()) {
+        apiClient->requestPartyEvents(apiClient->getPartyId());
+    }
+
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
@@ -75,7 +83,7 @@ void SettingsDialog::onDisconnect()
 {
     apiClient->logout();
 
-    ui->activeEventComboBox->clear();
+    ui->activePartyEventComboBox->clear();
     ui->connectButton->setEnabled(true);
 
     setClientActive(false);
@@ -98,19 +106,35 @@ void SettingsDialog::onAccountInfoReady(AccountInfo *)
     setClientActive(true);
 }
 
+void SettingsDialog::onPartiesReady(QList<Party *> parties)
+{
+    ui->activePartyComboBox->clear();
+
+    foreach(const auto party, parties)
+    {
+        ui->activePartyComboBox->addItem(QString(party->getName()), party->getId());
+    }
+
+    if (!apiClient->getPartyId().isEmpty()) {
+        ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
+    }
+}
+
 void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
 {
-    ui->activeEventComboBox->clear();
+    ui->activePartyEventComboBox->clear();
 
     foreach(const auto partyEvent, events)
     {
         if (!partyEvent->getParty()) {
             continue;
         }
-        ui->activeEventComboBox->addItem(
-            QString("%1 - %2").arg(partyEvent->getParty()->getName()).arg(partyEvent->getName()),
-            partyEvent->getId()
-        );
+        ui->activePartyEventComboBox->addItem(QString(partyEvent->getName()), partyEvent->getId());
+    }
+
+    if (!apiClient->getPartyEventId().isEmpty()) {
+        ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId(
+        )));
     }
 }
 
@@ -118,17 +142,25 @@ void SettingsDialog::saveSettings()
 {
     apiClient->setPortMin(ui->portMinSpinBox->value());
     apiClient->setPortMax(ui->portMaxSpinBox->value());
-    apiClient->setPartyEventId(ui->activeEventComboBox->currentData().toString());
+    apiClient->setPartyId(ui->activePartyComboBox->currentData().toString());
+    apiClient->setPartyEventId(ui->activePartyEventComboBox->currentData().toString());
+    apiClient->putSeatAllocation();
 }
 
 void SettingsDialog::loadSettings()
 {
-    auto portMin = apiClient->getPortMin();
-    auto portMax = apiClient->getPortMax();
+    ui->portMinSpinBox->setValue(apiClient->getPortMin());
+    ui->portMaxSpinBox->setValue(apiClient->getPortMax());
+    ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
+    ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId()));
+}
 
-    obs_log(LOG_DEBUG, "porMin=%d, portMax=%d", portMin, portMax);
+void SettingsDialog::onActivePartyChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
 
-    ui->portMinSpinBox->setValue(portMin);
-    ui->portMaxSpinBox->setValue(portMax);
-    ui->activeEventComboBox->setCurrentIndex(ui->activeEventComboBox->findData(apiClient->getPartyEventId()));
+    auto partyId = ui->activePartyComboBox->itemData(index).toString();
+    apiClient->requestPartyEvents(partyId);
 }

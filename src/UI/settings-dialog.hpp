@@ -43,10 +43,12 @@ private slots:
     void onAccept();
 
     void onLinkingFailed();
-    void onAccountInfoReady(AccountInfo* accountInfo);
+    void onAccountInfoReady(AccountInfo *accountInfo);
+    void onPartiesReady(QList<Party *> parties);
     void onPartyEventsReady(QList<PartyEvent *> events);
     void saveSettings();
     void loadSettings();
+    void onActivePartyChanged(int index);
 
 private:
     Ui::SettingsDialog *ui;
