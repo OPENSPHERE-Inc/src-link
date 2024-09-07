@@ -45,6 +45,8 @@ class LinkedOutput : public QObject {
     obs_encoder_t *audioEncoder;
     bool outputActive;
 
+    void loadSettings();
+    void saveSettings();
     OBSData createEgressSettings();
 
 public:

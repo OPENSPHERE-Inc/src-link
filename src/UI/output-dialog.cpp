@@ -28,28 +28,57 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 {
     ui->setupUi(this);
 
-    view = new OBSPropertiesView(
+    propsView = new OBSPropertiesView(
         output->getSettings(), output,
         [](void *data) {
             auto output = static_cast<LinkedOutput *>(data);
             return output->getProperties();
         },
         nullptr,
-        [](void *data, obs_data_t *settings) {
-            auto output = static_cast<LinkedOutput *>(data);
-            output->update(settings);
-        }
+        nullptr
     );
 
-    view->setMinimumHeight(150);
+    propsView->setMinimumHeight(150);
+    propsView->SetDeferrable(true); // Always deferrable
 
-    ui->propertiesLayout->addWidget(view);
-    view->show();
+    ui->propertiesLayout->addWidget(propsView);
+    propsView->show();
+
+    connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
+    connect(
+        apiClient, SIGNAL(seatAllocationReady(const SeatAllocation *)), this,
+        SLOT(onSeatAllocationReady(const SeatAllocation *))
+    );
 
     obs_log(LOG_DEBUG, "OutputDialog created");
 }
 
-OutputDialog::~OutputDialog() 
+OutputDialog::~OutputDialog()
 {
+    disconnect(
+        apiClient, SIGNAL(seatAllocationReady(const SeatAllocation *)), this,
+        SLOT(onSeatAllocationReady(const SeatAllocation *))
+    );
+
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
+}
+
+void OutputDialog::onAccept()
+{
+    // Apply encoder settings to output
+    output->update(propsView->GetSettings());   
+
+    if (ui->enableCheckBox->isChecked()) {
+        // Start output
+        output->startOutput(obs_get_video(), obs_get_audio());
+    } else {
+        // Stop output
+        output->stopOutput();
+    }
+}
+
+void OutputDialog::onSeatAllocationReady(const StageSeatAllocation *seatAllocation)
+{
+    // Refresh properties view
+    propsView->ReloadProperties();
 }

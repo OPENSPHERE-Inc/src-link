@@ -39,7 +39,6 @@ generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$
     return password;
 }
 
-
 inline void applyDefaults(obs_data_t *dest, obs_data_t *src)
 {
     for (auto item = obs_data_first(src); item; obs_data_item_next(&item)) {
@@ -77,5 +76,75 @@ inline void applyDefaults(obs_data_t *dest, obs_data_t *src)
         case OBS_DATA_NULL:
             break;
         }
+    }
+}
+
+// Hardcoded in obs-studio/UI/window-basic-main.hpp
+#define SIMPLE_ENCODER_X264 "x264"
+#define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
+#define SIMPLE_ENCODER_QSV "qsv"
+#define SIMPLE_ENCODER_QSV_AV1 "qsv_av1"
+#define SIMPLE_ENCODER_NVENC "nvenc"
+#define SIMPLE_ENCODER_NVENC_AV1 "nvenc_av1"
+#define SIMPLE_ENCODER_NVENC_HEVC "nvenc_hevc"
+#define SIMPLE_ENCODER_AMD "amd"
+#define SIMPLE_ENCODER_AMD_HEVC "amd_hevc"
+#define SIMPLE_ENCODER_AMD_AV1 "amd_av1"
+#define SIMPLE_ENCODER_APPLE_H264 "apple_h264"
+#define SIMPLE_ENCODER_APPLE_HEVC "apple_hevc"
+
+inline bool encoderAvailable(const char *encoder)
+{
+    const char *val;
+    int i = 0;
+
+    while (obs_enum_encoder_types(i++, &val)) {
+        if (strcmp(val, encoder) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Hardcoded in obs-studio/UI/window-basic-settings.cpp
+inline const char *getSimpleVideoEncoder(const char *encoder)
+{
+    if (!strcmp(encoder, SIMPLE_ENCODER_X264)) {
+        return "obs_x264";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU)) {
+        return "obs_x264";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV)) {
+        return "obs_qsv11_v2";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV_AV1)) {
+        return "obs_qsv11_av1";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD)) {
+        return "h264_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC)) {
+        return "h265_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_AV1)) {
+        return "av1_texture_amf";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC)) {
+        return encoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC)) {
+        return encoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1)) {
+        return "jim_av1_nvenc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_H264)) {
+        return "com.apple.videotoolbox.videoencoder.ave.avc";
+    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC)) {
+        return "com.apple.videotoolbox.videoencoder.ave.hevc";
+    }
+
+    return "obs_x264";
+}
+
+// Hardcoded in obs-studio/UI/window-basic-main-outputs.cpp
+inline const char *getSimpleAudioEncoder(const char *encoder)
+{
+    if (strcmp(encoder, "opus")) {
+        return "ffmpeg_opus";
+    } else {
+        return "ffmpeg_aac";
     }
 }

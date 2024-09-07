@@ -288,6 +288,7 @@ class StageSeatAllocation : public QObject {
     QString ownerUserId;
     QMap<QString, QString> screenshots;
 
+    Stage *stage;
     QList<StageConnection *> connections;
 
 public:
@@ -305,6 +306,8 @@ public:
     inline void setSeatName(const QString &value) { seatName = value; }
     inline QMap<QString, QString> getScreenshots() { return screenshots; }
     inline void setScreenshots(const QMap<QString, QString> &value) { screenshots = value; }
+    inline Stage *getStage() const { return stage; }
+    inline void setStage(Stage *value) { stage = value; }
     inline QList<StageConnection *> getConnections() const { return connections; }
     inline void setConnections(const QList<StageConnection *> &value) { connections = value; }
 
@@ -316,6 +319,10 @@ public:
         allocation->setPartyEventId(json["party_event_id"].toString());
         allocation->setStageId(json["stage_id"].toString());
         allocation->setSeatName(json["seat_name"].toString());
+
+        if (json["stage"].isObject()) {
+            allocation->setStage(Stage::fromJsonObject(json["stage"].toObject(), allocation));
+        }
 
         foreach(const QJsonValue connectionItem, json["connections"].toArray())
         {

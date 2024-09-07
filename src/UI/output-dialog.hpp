@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialog>
 
 #include "ui_output-dialog.h"
+#include "../objects.hpp"
 #include "../api-client.hpp"
 #include "../outputs/linked-output.hpp"
 
@@ -32,11 +33,15 @@ class OutputDialog : public QDialog {
 
     SourceLinkApiClient *apiClient;
     LinkedOutput *output;
-    OBSPropertiesView *view;
+    OBSPropertiesView *propsView;
 
 public:
     explicit OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent = nullptr);
     ~OutputDialog();
+
+private slots:
+    void onAccept();
+    void onSeatAllocationReady(const StageSeatAllocation *seatAllocation);
 
 private:
     Ui::OutputDialog *ui;

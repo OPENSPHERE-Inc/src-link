@@ -23,76 +23,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "linked-output.hpp"
 #include "../utils.hpp"
 
-// Hardcoded in obs-studio/UI/window-basic-main.hpp
-#define SIMPLE_ENCODER_X264 "x264"
-#define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
-#define SIMPLE_ENCODER_QSV "qsv"
-#define SIMPLE_ENCODER_QSV_AV1 "qsv_av1"
-#define SIMPLE_ENCODER_NVENC "nvenc"
-#define SIMPLE_ENCODER_NVENC_AV1 "nvenc_av1"
-#define SIMPLE_ENCODER_NVENC_HEVC "nvenc_hevc"
-#define SIMPLE_ENCODER_AMD "amd"
-#define SIMPLE_ENCODER_AMD_HEVC "amd_hevc"
-#define SIMPLE_ENCODER_AMD_AV1 "amd_av1"
-#define SIMPLE_ENCODER_APPLE_H264 "apple_h264"
-#define SIMPLE_ENCODER_APPLE_HEVC "apple_hevc"
-
-inline bool encoder_available(const char *encoder)
-{
-    const char *val;
-    int i = 0;
-
-    while (obs_enum_encoder_types(i++, &val)) {
-        if (strcmp(val, encoder) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-// Hardcoded in obs-studio/UI/window-basic-settings.cpp
-inline const char *get_simple_video_encoder(const char *encoder)
-{
-    if (!strcmp(encoder, SIMPLE_ENCODER_X264)) {
-        return "obs_x264";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU)) {
-        return "obs_x264";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV)) {
-        return "obs_qsv11_v2";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_QSV_AV1)) {
-        return "obs_qsv11_av1";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD)) {
-        return "h264_texture_amf";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC)) {
-        return "h265_texture_amf";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_AV1)) {
-        return "av1_texture_amf";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC)) {
-        return encoder_available("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC)) {
-        return encoder_available("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1)) {
-        return "jim_av1_nvenc";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_H264)) {
-        return "com.apple.videotoolbox.videoencoder.ave.avc";
-    } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC)) {
-        return "com.apple.videotoolbox.videoencoder.ave.hevc";
-    }
-
-    return "obs_x264";
-}
-
-// Hardcoded in obs-studio/UI/window-basic-main-outputs.cpp
-inline const char *get_simple_audio_encoder(const char *encoder)
-{
-    if (strcmp(encoder, "opus")) {
-        return "ffmpeg_opus";
-    } else {
-        return "ffmpeg_aac";
-    }
-}
-
 //--- LinkedOutput class ---//
 
 LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent)
@@ -107,11 +37,7 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qPrintable(name));
 
-    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
-    auto data = obs_data_create_from_json_file(path);
-    bfree(path);
-    settings = OBSData(data);
-    obs_data_release(data);
+    loadSettings();
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
@@ -126,6 +52,28 @@ obs_properties_t *LinkedOutput::getProperties()
 {
     auto props = obs_properties_create();
     obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
+
+    // "Connection" group
+    auto connectionGroup = obs_properties_create();
+    auto sourceNameList = obs_properties_add_list(
+        connectionGroup, "source_name", obs_module_text("Connection"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+    );
+    if (apiClient->getSeatAllocation() && apiClient->getSeatAllocation()->getStage()) {
+        foreach(auto source, apiClient->getSeatAllocation()->getStage()->getSources())
+        {
+            obs_property_list_add_string(sourceNameList, qPrintable(source.displayName), qPrintable(source.name));
+        }
+    }
+    obs_properties_add_button2(
+        connectionGroup, "reload", obs_module_text("Reload"),
+        [](obs_properties_t *, obs_property_t *, void *param) {
+            LinkedOutput *linkedOutput = static_cast<LinkedOutput *>(param);
+            linkedOutput->apiClient->requestSeatAllocation();
+            return true;
+        },
+        this
+    );
+    obs_properties_add_group(props, "general_group", obs_module_text("General"), OBS_GROUP_NORMAL, connectionGroup);
 
     // "Audio Encoder" group
     auto audioEncoderGroup = obs_properties_create();
@@ -285,8 +233,8 @@ void LinkedOutput::getDefault(OBSData defaults)
         audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
         audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
     } else {
-        videoEncoderId = get_simple_video_encoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
-        audioEncoderId = get_simple_audio_encoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
+        videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
+        audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
     }
     obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
@@ -301,12 +249,30 @@ void LinkedOutput::update(OBSData newSettings)
     obs_log(LOG_DEBUG, "%s: Output updating", qPrintable(name));
 
     obs_data_apply(settings, newSettings);
+    saveSettings();
 
+    obs_log(LOG_INFO, "%s: Output updated", qPrintable(name));
+}
+
+void LinkedOutput::loadSettings()
+{
+    // Load settings from json
+    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    auto data = obs_data_create_from_json_file(path);
+    bfree(path);
+    settings = OBSData(data);
+    obs_data_release(data);
+
+    // Re-apply defaults
+    getDefault(settings);
+}
+
+void LinkedOutput::saveSettings()
+{
+    // Save settings to json file
     auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
     obs_data_save_json_safe(settings, path, "tmp", "bak");
     bfree(path);
-
-    obs_log(LOG_INFO, "%s: Output updated", qPrintable(name));
 }
 
 OBSData LinkedOutput::createEgressSettings()

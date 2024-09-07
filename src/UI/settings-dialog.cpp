@@ -108,7 +108,7 @@ void SettingsDialog::onAccountInfoReady(const AccountInfo *accountInfo)
     ui->connectButton->setEnabled(true);
 }
 
-void SettingsDialog::onPartiesReady(QList<Party *> parties)
+void SettingsDialog::onPartiesReady(const QList<Party *> &parties)
 {
     ui->activePartyComboBox->clear();
 
@@ -122,7 +122,7 @@ void SettingsDialog::onPartiesReady(QList<Party *> parties)
     }
 }
 
-void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
+void SettingsDialog::onPartyEventsReady(const QList<PartyEvent *> &events)
 {
     ui->activePartyEventComboBox->clear();
 
