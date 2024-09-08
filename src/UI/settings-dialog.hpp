@@ -24,7 +24,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "ui_settings-dialog.h"
 #include "../api-client.hpp"
-#include "../objects.hpp"
 
 class SettingsDialog : public QDialog {
     Q_OBJECT

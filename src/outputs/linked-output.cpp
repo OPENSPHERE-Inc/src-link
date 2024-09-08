@@ -50,13 +50,15 @@ LinkedOutput::~LinkedOutput()
 
 obs_properties_t *LinkedOutput::getProperties()
 {
+    obs_log(LOG_DEBUG, "%s: Properties creating", qPrintable(name));
+
     auto props = obs_properties_create();
     obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
 
     // "Connection" group
     auto connectionGroup = obs_properties_create();
     auto sourceNameList = obs_properties_add_list(
-        connectionGroup, "source_name", obs_module_text("Connection"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "source_name", obs_module_text("Type"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     if (apiClient->getSeatAllocation() && apiClient->getSeatAllocation()->getStage()) {
         foreach(auto source, apiClient->getSeatAllocation()->getStage()->getSources())
@@ -178,7 +180,7 @@ obs_properties_t *LinkedOutput::getProperties()
                 break;
             }
 
-            obs_log(LOG_INFO, "%s: Audio encoder changed.", qPrintable(linkedOutput->getName()));
+            obs_log(LOG_INFO, "%s: Audio encoder changed", qPrintable(linkedOutput->getName()));
             return result;
         },
         this
@@ -214,6 +216,7 @@ obs_properties_t *LinkedOutput::getProperties()
         this
     );
 
+    obs_log(LOG_INFO, "%s: Properties created", qPrintable(name));
     return props;
 }
 
@@ -226,19 +229,23 @@ void LinkedOutput::getDefault(OBSData defaults)
     bool advanced_out = strcmp(mode, "Advanced") == 0 || strcmp(mode, "advanced");
 
     const char *videoEncoderId;
+    uint64_t videoBitrate;
     const char *audioEncoderId;
     uint64_t audioBitrate;
     if (advanced_out) {
         videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
+        videoBitrate = config_get_uint(config, "AdvOut", "FFVBitrate");
         audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
         audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
     } else {
         videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
+        videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
         audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
     }
-    obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
     obs_data_set_default_string(defaults, "video_encoder", videoEncoderId);
+    obs_data_set_default_int(defaults, "video_bitrate", videoBitrate);
+    obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
     obs_data_set_default_int(defaults, "audio_bitrate", audioBitrate);
 
     obs_log(LOG_INFO, "%s: Default settings applied", qPrintable(name));
@@ -256,15 +263,22 @@ void LinkedOutput::update(OBSData newSettings)
 
 void LinkedOutput::loadSettings()
 {
-    // Load settings from json
-    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
-    auto data = obs_data_create_from_json_file(path);
-    bfree(path);
+    auto data = obs_data_create();
     settings = OBSData(data);
     obs_data_release(data);
 
-    // Re-apply defaults
+    // Apply defaults
     getDefault(settings);
+
+    // Load settings from json
+    auto path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    data = obs_data_create_from_json_file(path);
+    bfree(path);
+
+    if (data) {
+        obs_data_apply(settings, data);
+        obs_data_release(data);
+    } 
 }
 
 void LinkedOutput::saveSettings()
@@ -277,6 +291,10 @@ void LinkedOutput::saveSettings()
 
 OBSData LinkedOutput::createEgressSettings()
 {
+    if (!connection) {
+        return nullptr;
+    }
+
     auto data = obs_data_create();
     auto egressSettings = OBSData(data);
     obs_data_release(data);
@@ -291,6 +309,14 @@ OBSData LinkedOutput::createEgressSettings()
         obs_data_set_string(egressSettings, "server", qPrintable(server));
     } else {
         return nullptr;
+    }
+
+    // Limit bitrate
+    auto bitrate = obs_data_get_int(egressSettings, "bitrate");
+    if (bitrate > connection->getMaxBitrate()) {
+        obs_data_set_int(egressSettings, "bitrate", connection->getMaxBitrate());
+    } else if (bitrate < connection->getMinBitrate()) {
+        obs_data_set_int(egressSettings, "bitrate", connection->getMinBitrate());
     }
 
     return egressSettings;

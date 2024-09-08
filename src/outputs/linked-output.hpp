@@ -24,7 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QObject>
 
 #include "../api-client.hpp"
-#include "../objects.hpp"
+#include "../schema.hpp"
 
 #define OUTPUT_MAX_RETRIES 7
 #define OUTPUT_RETRY_DELAY_SECS 1

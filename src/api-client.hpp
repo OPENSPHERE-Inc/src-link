@@ -28,7 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <o2requestor.h>
 
 #include "plugin-support.h"
-#include "objects.hpp"
+#include "schema.hpp"
 
 #define DEFAULT_TIMEOUT_MSECS (10 * 1000)
 

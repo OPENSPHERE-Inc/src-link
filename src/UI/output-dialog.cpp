@@ -28,14 +28,17 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 {
     ui->setupUi(this);
 
+    // First arg must has non-null reference
     propsView = new OBSPropertiesView(
         output->getSettings(), output,
         [](void *data) {
             auto output = static_cast<LinkedOutput *>(data);
-            return output->getProperties();
+            auto properties = output->getProperties();
+            // Neccessary to apply default settings
+            obs_properties_apply_settings(properties, output->getSettings());
+            return properties;
         },
-        nullptr,
-        nullptr
+        nullptr, nullptr
     );
 
     propsView->setMinimumHeight(150);
@@ -46,8 +49,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
     connect(
-        apiClient, SIGNAL(seatAllocationReady(const SeatAllocation *)), this,
-        SLOT(onSeatAllocationReady(const SeatAllocation *))
+        apiClient, SIGNAL(seatAllocationReady(const StageSeatAllocation *)), this,
+        SLOT(onSeatAllocationReady(const StageSeatAllocation *))
     );
 
     obs_log(LOG_DEBUG, "OutputDialog created");
@@ -56,8 +59,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 OutputDialog::~OutputDialog()
 {
     disconnect(
-        apiClient, SIGNAL(seatAllocationReady(const SeatAllocation *)), this,
-        SLOT(onSeatAllocationReady(const SeatAllocation *))
+        apiClient, SIGNAL(seatAllocationReady(const StageSeatAllocation *)), this,
+        SLOT(onSeatAllocationReady(const StageSeatAllocation *))
     );
 
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
@@ -66,7 +69,7 @@ OutputDialog::~OutputDialog()
 void OutputDialog::onAccept()
 {
     // Apply encoder settings to output
-    output->update(propsView->GetSettings());   
+    output->update(propsView->GetSettings());
 
     if (ui->enableCheckBox->isChecked()) {
         // Start output

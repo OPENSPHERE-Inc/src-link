@@ -24,7 +24,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialog>
 
 #include "ui_output-dialog.h"
-#include "../objects.hpp"
 #include "../api-client.hpp"
 #include "../outputs/linked-output.hpp"
 

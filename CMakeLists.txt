@@ -43,7 +43,7 @@ target_sources(
   PRIVATE src/plugin-main.cpp
           src/UI/settings-dialog.cpp
           src/api-client.cpp
-          src/objects.hpp
+          src/schema.hpp
           src/sources/linked-source.cpp
           src/UI/output-dialog.cpp
           src/outputs/linked-output.cpp)

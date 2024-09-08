@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
+    <width>582</width>
     <height>453</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Source Linked Output</string>
   </property>
   <layout class="QVBoxLayout" name="outputDialogLayout">
    <item>
