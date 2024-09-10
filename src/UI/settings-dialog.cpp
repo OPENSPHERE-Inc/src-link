@@ -32,7 +32,9 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
 
     loadSettings();
 
-    connect(apiClient, SIGNAL(accountInfoReady(const AccountInfo *)), this, SLOT(onAccountInfoReady(const AccountInfo *)));
+    connect(
+        apiClient, SIGNAL(accountInfoReady(const AccountInfo *)), this, SLOT(onAccountInfoReady(const AccountInfo *))
+    );
     connect(apiClient, SIGNAL(partiesReady(QList<Party *>)), this, SLOT(onPartiesReady(QList<Party *>)));
     connect(
         apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
@@ -102,7 +104,7 @@ void SettingsDialog::onAccountInfoReady(const AccountInfo *accountInfo)
     if (!accountInfo) {
         return;
     }
-    
+
     setClientActive(true);
     ui->accountName->setText(QString("Connected: %1").arg(accountInfo->getDisplayName()));
     ui->connectButton->setEnabled(true);
@@ -165,4 +167,14 @@ void SettingsDialog::onActivePartyChanged(int index)
 
     auto partyId = ui->activePartyComboBox->itemData(index).toString();
     apiClient->requestPartyEvents(partyId);
+}
+
+void SettingsDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+
+    apiClient->requestParties();
+    if (!apiClient->getPartyId().isEmpty()) {
+        apiClient->requestPartyEvents(apiClient->getPartyId());
+    }
 }

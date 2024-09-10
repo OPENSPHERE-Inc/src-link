@@ -34,7 +34,6 @@ class LinkedOutput : public QObject {
     Q_OBJECT
 
     QString name;
-    QString sourceName;
     StageConnection *connection;
 
     SourceLinkApiClient *apiClient;
@@ -63,3 +62,4 @@ public:
     inline void setName(QString &value) { name = value; }
     inline OBSData getSettings() { return settings; }
 };
+

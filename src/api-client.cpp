@@ -39,18 +39,28 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
+#define LOCAL_DEBUG
+
+#ifdef LOCAL_DEBUG
+#  define API_SERVER "http://localhost:3000"
+#else
+#  define API_SERVER "https://source-link-test.opensphere.co.jp"
+#endif
+
 #define CLIENT_ID "testClientId"
 #define CLIENT_SECRET "testClientSecret"
-#define AUTHORIZE_URL "http://localhost:3000/oauth2/authorize"
-#define TOKEN_URL "http://localhost:3000/oauth2/token"
-#define ACCOUNT_INFO_URL "http://localhost:3000/api/v1/accounts/me"
-#define PARTIES_URL "http://localhost:3000/api/v1/parties/my"
-#define PARTY_EVENTS_URL "http://localhost:3000/api/v1/events/my"
-#define STAGES_URL "http://localhost:3000/api/v1/stages"
-#define STAGES_CONNECTIONS_URL "http://localhost:3000/api/v1/stages/connections"
-#define STAGE_SEAT_ALLOCATIONS_URL "http://localhost:3000/api/v1/stages/seat-allocations"
+#define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
+#define TOKEN_URL (API_SERVER "/oauth2/token")
+#define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
+#define PARTIES_URL (API_SERVER "/api/v1/parties/my")
+#define PARTY_EVENTS_URL (API_SERVER "/api/v1/events/my")
+#define STAGES_URL (API_SERVER "/api/v1/stages")
+#define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections")
+#define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations")
+#define PING_URL (API_SERVER "/api/v1/ping")
 #define SCOPE "read write"
 #define SETTINGS_JSON_NAME "settings.json"
+#define POLLING_INTERVAL 10000
 
 //--- SourceLinkApiClient class ---//
 
@@ -58,12 +68,15 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     : QObject(parent),
       // Create a store object for writing the received tokens (It will be child of O2 instance)
       settings(new SourceLinkApiClientSettingsStore()),
+      pollingTimer(nullptr),
       networkManager(nullptr),
       client(nullptr),
       requestor(nullptr),
       accountInfo(nullptr),
-      seatAllocation(nullptr)
+      seatAllocation(nullptr),
+      seatAllocationRefs(0)
 {
+    pollingTimer = new QTimer(this);
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
     requestor = new O2Requestor(networkManager, client, this);
@@ -111,6 +124,11 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
         );
     }
 
+    // Setup interval timer for polling
+    connect(pollingTimer, SIGNAL(timeout()), this, SLOT(onPollingTimerTimeout()));
+    pollingTimer->setInterval(POLLING_INTERVAL);
+    pollingTimer->start();
+
     obs_log(LOG_DEBUG, "SourceLinkApiClient created");
 }
 
@@ -142,6 +160,36 @@ bool SourceLinkApiClient::isLoggedIn()
 void SourceLinkApiClient::refresh()
 {
     client->refresh();
+}
+
+void SourceLinkApiClient::ping()
+{
+    if (!client->linked()) {
+        obs_log(LOG_ERROR, "Client is offline.");
+        emit pingFailed();
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "Pinging API server.");
+    auto invoker = new RequestInvoker(this);
+    connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Pinging API server failed: %d", error);
+            emit pingFailed();
+            return;
+        }
+
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        if (accountInfo) {
+            accountInfo->deleteLater();
+        }
+        auto jsonObj = jsonDoc.object();
+        accountInfo = AccountInfo::fromJsonObject(jsonObj["account"].toObject(), this);
+
+        obs_log(LOG_INFO, "Pong from API server: %s", qPrintable(accountInfo->getDisplayName()));
+        emit pingSucceeded();
+    });
+    invoker->get(QNetworkRequest(QUrl(QString(PING_URL))));
 }
 
 void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
@@ -201,7 +249,6 @@ void SourceLinkApiClient::requestOnlineResources()
         requestPartyEvents(getPartyId());
     }
     requestStages();
-    putSeatAllocation();
 }
 
 void SourceLinkApiClient::requestAccountInfo()
@@ -516,6 +563,12 @@ const int SourceLinkApiClient::getFreePort()
 void SourceLinkApiClient::releasePort(const int port)
 {
     usedPorts[port] = false;
+}
+
+void SourceLinkApiClient::onPollingTimerTimeout()
+{
+    // Polling to ping endpoint
+    ping();
 }
 
 //--- AbstractRequestHandler class ---//

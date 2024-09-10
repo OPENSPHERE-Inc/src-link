@@ -49,6 +49,9 @@ private slots:
     void loadSettings();
     void onActivePartyChanged(int index);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     Ui::SettingsDialog *ui;
 };

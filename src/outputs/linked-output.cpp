@@ -38,6 +38,7 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
     obs_log(LOG_DEBUG, "%s: Output creating", qPrintable(name));
 
     loadSettings();
+    apiClient->putSeatAllocation();
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
@@ -45,6 +46,7 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
 LinkedOutput::~LinkedOutput()
 {
     obs_log(LOG_DEBUG, "%s: Output destroying", qPrintable(name));
+
     obs_log(LOG_INFO, "%s: Output destroyed", qPrintable(name));
 }
 
@@ -75,7 +77,7 @@ obs_properties_t *LinkedOutput::getProperties()
         },
         this
     );
-    obs_properties_add_group(props, "general_group", obs_module_text("General"), OBS_GROUP_NORMAL, connectionGroup);
+    obs_properties_add_group(props, "connection_group", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup);
 
     // "Audio Encoder" group
     auto audioEncoderGroup = obs_properties_create();
@@ -255,7 +257,11 @@ void LinkedOutput::update(OBSData newSettings)
 {
     obs_log(LOG_DEBUG, "%s: Output updating", qPrintable(name));
 
+    // Apply default first
+    obs_data_apply(settings, obs_data_get_defaults(newSettings));
+    // Apply new settings
     obs_data_apply(settings, newSettings);
+    // Save settings to permanent storage
     saveSettings();
 
     obs_log(LOG_INFO, "%s: Output updated", qPrintable(name));
@@ -329,10 +335,12 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
 
     // Retrieve connection
     connection = nullptr;
+    auto sourceName = QString(obs_data_get_string(settings, "source_name"));
     if (sourceName.isEmpty()) {
         return;
     }
 
+    // Find connection specified by source_name
     foreach(const auto c, apiClient->getSeatAllocation()->getConnections())
     {
         if (c->getSourceName() == sourceName) {
@@ -342,28 +350,28 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
     }
 
     if (!connection) {
-        obs_log(LOG_WARNING, "No active connection for %s", qPrintable(sourceName));
+        obs_log(LOG_WARNING, "No active connection for %s (source=%s)", qPrintable(name), qPrintable(sourceName));
         return;
     }
 
     auto egressSettings = createEgressSettings();
     if (!egressSettings) {
-        obs_log(LOG_ERROR, "Unsupported connection for %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Unsupported connection for %s", qPrintable(name));
         return;
     }
 
     // Service : always use rtmp_custom
-    service = obs_service_create("rtmp_custom", obs_output_get_name(output), egressSettings, nullptr);
+    service = obs_service_create("rtmp_custom", qPrintable(name), egressSettings, nullptr);
     if (!service) {
-        obs_log(LOG_ERROR, "Failed to create service %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Failed to create service %s", qPrintable(name));
         obs_data_release(egressSettings);
         return;
     }
 
     // Output : always use ffmpeg_mpegts_muxer
-    output = obs_output_create("ffmpeg_mpegts_muxer", obs_output_get_name(output), egressSettings, nullptr);
+    output = obs_output_create("ffmpeg_mpegts_muxer", qPrintable(name), egressSettings, nullptr);
     if (!output) {
-        obs_log(LOG_ERROR, "Failed to create output %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Failed to create output %s", qPrintable(name));
         obs_data_release(egressSettings);
         return;
     }
@@ -372,10 +380,11 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
     obs_output_set_service(output, service);
 
     // Setup video encoder
-    auto videoEncoderId = obs_data_get_string(settings, "video_encoder");
-    videoEncoder = obs_video_encoder_create(videoEncoderId, obs_output_get_name(output), egressSettings, nullptr);
+    auto videoEncoderId = obs_data_get_string(egressSettings, "video_encoder");
+    obs_log(LOG_DEBUG, "Video encoder: %s", videoEncoderId);
+    videoEncoder = obs_video_encoder_create(videoEncoderId, qPrintable(name), egressSettings, nullptr);
     if (!videoEncoder) {
-        obs_log(LOG_ERROR, "Failed to create video encoder %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Failed to create video encoder %s for %s", videoEncoderId, qPrintable(name));
         obs_data_release(egressSettings);
         return;
     }
@@ -389,17 +398,18 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
 
     // Setup audio encoder
     auto audioEncoderId = obs_data_get_string(egressSettings, "audio_encoder");
+    obs_log(LOG_DEBUG, "Audio encoder: %s", audioEncoderId);
     auto audioBitrate = obs_data_get_int(egressSettings, "audio_bitrate");
     auto audioTrack = obs_data_get_int(egressSettings, "audio_track");
     auto audioEncoderSettings = obs_encoder_defaults(audioEncoderId);
     obs_data_set_int(audioEncoderSettings, "bitrate", audioBitrate);
 
     audioEncoder =
-        obs_audio_encoder_create(audioEncoderId, qPrintable(sourceName), audioEncoderSettings, audioTrack, nullptr);
+        obs_audio_encoder_create(audioEncoderId, qPrintable(name), audioEncoderSettings, audioTrack, nullptr);
     obs_data_release(audioEncoderSettings);
     obs_data_release(egressSettings);
     if (!audioEncoder) {
-        obs_log(LOG_ERROR, "Failed to create audio encoder %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Failed to create audio encoder %s for %s", audioEncoderId, qPrintable(name));
         return;
     }
 
@@ -408,12 +418,12 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
 
     // Start output
     if (!obs_output_start(output)) {
-        obs_log(LOG_ERROR, "Failed to start output %s", qPrintable(sourceName));
+        obs_log(LOG_ERROR, "Failed to start output %s", qPrintable(name));
         return;
     }
 
     outputActive = true;
-    obs_log(LOG_INFO, "Started output %s", qPrintable(sourceName));
+    obs_log(LOG_INFO, "Started output %s", qPrintable(name));
 }
 
 void LinkedOutput::stopOutput()
@@ -444,6 +454,6 @@ void LinkedOutput::stopOutput()
 
     if (outputActive) {
         outputActive = false;
-        obs_log(LOG_INFO, "Stopped output %s", qPrintable(sourceName));
+        obs_log(LOG_INFO, "Stopped output %s", qPrintable(name));
     }
 }

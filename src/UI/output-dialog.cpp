@@ -28,9 +28,14 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 {
     ui->setupUi(this);
 
-    // First arg must has non-null reference
+    // Create dedicated data instance
+    auto settings = obs_data_create();
+    output->getDefault(settings);
+    obs_data_apply(settings, output->getSettings());
+
+    // First arg must has non-null reference    
     propsView = new OBSPropertiesView(
-        output->getSettings(), output,
+        settings, output,
         [](void *data) {
             auto output = static_cast<LinkedOutput *>(data);
             auto properties = output->getProperties();
@@ -40,6 +45,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
         },
         nullptr, nullptr
     );
+
+    obs_data_release(settings);
 
     propsView->setMinimumHeight(150);
     propsView->SetDeferrable(true); // Always deferrable
@@ -69,6 +76,8 @@ OutputDialog::~OutputDialog()
 void OutputDialog::onAccept()
 {
     // Apply encoder settings to output
+    propsView->UpdateSettings();
+
     output->update(propsView->GetSettings());
 
     if (ui->enableCheckBox->isChecked()) {
@@ -84,4 +93,11 @@ void OutputDialog::onSeatAllocationReady(const StageSeatAllocation *seatAllocati
 {
     // Refresh properties view
     propsView->ReloadProperties();
+}
+
+void OutputDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+
+    apiClient->requestSeatAllocation();
 }

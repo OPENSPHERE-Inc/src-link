@@ -42,6 +42,9 @@ private slots:
     void onAccept();
     void onSeatAllocationReady(const StageSeatAllocation *seatAllocation);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     Ui::OutputDialog *ui;
 };

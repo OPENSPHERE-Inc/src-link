@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QNetworkAccessManager>
 #include <QByteArray>
 #include <QException>
+#include <QTimer>
 
 #include <o2.h>
 #include <o2requestor.h>
@@ -57,6 +58,7 @@ class SourceLinkApiClient : public QObject {
     O2Requestor *requestor;
     QList<RequestInvoker *> requestQueue;
     QMap<int, bool> usedPorts;
+    QTimer *pollingTimer;
 
     // Online rsources
     AccountInfo *accountInfo;
@@ -64,6 +66,7 @@ class SourceLinkApiClient : public QObject {
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
     StageSeatAllocation *seatAllocation;
+    int seatAllocationRefs;
 
 protected:
     inline O2 *getO2Client() { return client; }
@@ -91,6 +94,8 @@ signals:
     void seatAllocationPutFailed();
     void seatAllocationDeleteSucceeded(const QString uuid);
     void seatAllocationDeleteFailed();
+    void pingSucceeded();
+    void pingFailed();
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
@@ -101,6 +106,7 @@ public slots:
     void logout();
     bool isLoggedIn();
     void refresh();
+    void ping();
     void requestOnlineResources();
     void requestAccountInfo();
     void requestParties();
@@ -140,6 +146,7 @@ private slots:
     void onO2LinkingSucceeded();
     void onO2OpenBrowser(const QUrl &url);
     void onO2RefreshFinished(QNetworkReply::NetworkError);
+    void onPollingTimerTimeout();
 };
 
 // This class introduces sequencial invocation of requests
