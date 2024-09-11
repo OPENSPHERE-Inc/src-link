@@ -56,8 +56,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
     connect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatAllocation *)), this,
-        SLOT(onSeatAllocationReady(const StageSeatAllocation *))
+        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo *)), this,
+        SLOT(onSeatAllocationReady(const StageSeatInfo *))
     );
 
     obs_log(LOG_DEBUG, "OutputDialog created");
@@ -66,8 +66,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 OutputDialog::~OutputDialog()
 {
     disconnect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatAllocation *)), this,
-        SLOT(onSeatAllocationReady(const StageSeatAllocation *))
+        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo *)), this,
+        SLOT(onSeatAllocationReady(const StageSeatInfo *))
     );
 
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
@@ -89,7 +89,7 @@ void OutputDialog::onAccept()
     }
 }
 
-void OutputDialog::onSeatAllocationReady(const StageSeatAllocation *seatAllocation)
+void OutputDialog::onSeatAllocationReady(const StageSeatInfo *seat)
 {
     // Refresh properties view
     propsView->ReloadProperties();
@@ -99,5 +99,5 @@ void OutputDialog::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
 
-    apiClient->requestSeatAllocation();
+    apiClient->putSeatAllocation();
 }

@@ -82,6 +82,7 @@ void SettingsDialog::onDisconnect()
 {
     apiClient->logout();
 
+    ui->activePartyComboBox->clear();
     ui->activePartyEventComboBox->clear();
     ui->connectButton->setEnabled(true);
 
@@ -121,6 +122,8 @@ void SettingsDialog::onPartiesReady(const QList<Party *> &parties)
 
     if (!apiClient->getPartyId().isEmpty()) {
         ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
+    } else {
+        ui->activePartyComboBox->setCurrentIndex(0);
     }
 }
 
@@ -139,6 +142,8 @@ void SettingsDialog::onPartyEventsReady(const QList<PartyEvent *> &events)
     if (!apiClient->getPartyEventId().isEmpty()) {
         ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId(
         )));
+    } else {
+        ui->activePartyEventComboBox->setCurrentIndex(0);
     }
 }
 

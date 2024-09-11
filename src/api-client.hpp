@@ -31,7 +31,33 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "schema.hpp"
 
+#define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
+#define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
+
+#define LOCAL_DEBUG
+
+#ifdef LOCAL_DEBUG
+#define API_SERVER "http://localhost:3000"
+#else
+#define API_SERVER "https://source-link-test.opensphere.co.jp"
+#endif
+
+#define CLIENT_ID "testClientId"
+#define CLIENT_SECRET "testClientSecret"
+#define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
+#define TOKEN_URL (API_SERVER "/oauth2/token")
+#define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
+#define PARTIES_URL (API_SERVER "/api/v1/parties/my")
+#define PARTY_EVENTS_URL (API_SERVER "/api/v1/events/my")
+#define STAGES_URL (API_SERVER "/api/v1/stages")
+#define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections")
+#define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations")
+#define PING_URL (API_SERVER "/api/v1/ping")
+#define SCOPE "read write"
+#define SETTINGS_JSON_NAME "settings.json"
+#define POLLING_INTERVAL_MSECS 30000
 #define DEFAULT_TIMEOUT_MSECS (10 * 1000)
+
 
 class SourceLinkApiClientSettingsStore : public O0AbstractStore {
     Q_OBJECT
@@ -65,7 +91,7 @@ class SourceLinkApiClient : public QObject {
     QList<Party *> parties;
     QList<PartyEvent *> partyEvents;
     QList<Stage *> stages;
-    StageSeatAllocation *seatAllocation;
+    StageSeatInfo *seat;
     int seatAllocationRefs;
 
 protected:
@@ -84,13 +110,13 @@ signals:
     void partyEventsFailed();
     void stagesReady(const QList<Stage *> &stages);
     void stagesFailed();
-    void seatAllocationReady(const StageSeatAllocation *seatAllocation);
+    void seatAllocationReady(const StageSeatInfo *setPartyEventId);
     void seatAllocationFailed();
     void connectionPutSucceeded(const StageConnection *connection);
     void connectionPutFailed();
     void connectionDeleteSucceeded(const QString uuid);
     void connectionDeleteFailed();
-    void seatAllocationPutSucceeded(const StageSeatAllocation *seatAllocation);
+    void seatAllocationPutSucceeded(const StageSeatInfo *seat);
     void seatAllocationPutFailed();
     void seatAllocationDeleteSucceeded(const QString uuid);
     void seatAllocationDeleteFailed();
@@ -139,7 +165,7 @@ public:
     inline const QList<Party *> &getParties() const { return parties; }
     inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
     inline const QList<Stage *> &getStages() const { return stages; }
-    inline const StageSeatAllocation *getSeatAllocation() const { return seatAllocation; }
+    inline const StageSeatInfo *getSeat() const { return seat; }
 
 private slots:
     void onO2LinkedChanged();
@@ -149,92 +175,3 @@ private slots:
     void onPollingTimerTimeout();
 };
 
-// This class introduces sequencial invocation of requests
-class RequestInvoker : public QObject {
-    Q_OBJECT
-
-    O2Requestor *requestor;
-    SourceLinkApiClient *apiClient;
-    int requestId = -1; // -1: no request, -2: refresh, other: Proper request ID from O2Requestor
-
-signals:
-    void finished(QNetworkReply::NetworkError error, QByteArray data);
-
-public:
-    explicit RequestInvoker(SourceLinkApiClient *apiClient, QObject *parent = nullptr);
-    ~RequestInvoker();
-
-    template<class Func> inline void queue(Func invoker)
-    {
-        if (apiClient->getRequestQueue().isEmpty()) {
-            invoker();
-        } else {
-            // Reserve next invocation
-            obs_log(LOG_DEBUG, "Queue next request: pos=%d", apiClient->getRequestQueue().size());
-            connect(apiClient->getRequestQueue().last(), &RequestInvoker::finished, invoker);
-        }
-        apiClient->getRequestQueue().append(this);
-    }
-
-    /// Do token refresh
-    inline void refresh()
-    {
-        queue([this]() {
-            obs_log(LOG_DEBUG, "Invoke refresh token");
-            apiClient->refresh();
-            requestId = -2;
-        });
-    }
-
-    /// Make a GET request.
-    inline void get(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->get(req, timeout); });
-    }
-
-    /// Make a POST request.
-    inline void post(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestor->post(req, data, timeout); });
-    }
-
-    inline void post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->post(req, data, timeout); });
-    }
-
-    /// Make a PUT request.
-    inline void put(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
-
-    inline void put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
-
-    /// Make a DELETE request.
-    inline void deleteResource(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->deleteResource(req, timeout); });
-    }
-
-    /// Make a HEAD request.
-    inline void head(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->head(req, timeout); });
-    }
-
-    /// Make a custom request.
-    inline void customRequest(
-        const QNetworkRequest &req, const QByteArray &verb, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS
-    )
-    {
-        queue([this, req, verb, data, timeout]() { requestId = requestor->customRequest(req, verb, data, timeout); });
-    }
-
-private slots:
-    void onRequestorFinished(int, QNetworkReply::NetworkError error, QByteArray data);
-    void onO2RefreshFinished(QNetworkReply::NetworkError error);
-};

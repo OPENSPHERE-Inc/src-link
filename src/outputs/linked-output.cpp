@@ -62,8 +62,8 @@ obs_properties_t *LinkedOutput::getProperties()
     auto sourceNameList = obs_properties_add_list(
         connectionGroup, "source_name", obs_module_text("Type"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
-    if (apiClient->getSeatAllocation() && apiClient->getSeatAllocation()->getStage()) {
-        foreach(auto source, apiClient->getSeatAllocation()->getStage()->getSources())
+    if (apiClient->getSeat() && apiClient->getSeat()->getStage()) {
+        foreach(auto source, apiClient->getSeat()->getStage()->getSources())
         {
             obs_property_list_add_string(sourceNameList, qPrintable(source.displayName), qPrintable(source.name));
         }
@@ -341,7 +341,7 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
     }
 
     // Find connection specified by source_name
-    foreach(const auto c, apiClient->getSeatAllocation()->getConnections())
+    foreach(const auto c, apiClient->getSeat()->getConnections())
     {
         if (c->getSourceName() == sourceName) {
             connection = c;

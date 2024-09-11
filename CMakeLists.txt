@@ -41,11 +41,12 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE src/plugin-main.cpp
-          src/UI/settings-dialog.cpp
           src/api-client.cpp
+          src/request-invoker.cpp
           src/schema.hpp
-          src/sources/linked-source.cpp
+          src/UI/settings-dialog.cpp
           src/UI/output-dialog.cpp
+          src/sources/linked-source.cpp
           src/outputs/linked-output.cpp)
 
 set(o2_SRCS

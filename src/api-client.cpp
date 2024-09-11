@@ -34,33 +34,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <o0globals.h>
 #include "plugin-support.h"
 #include "api-client.hpp"
+#include "request-invoker.hpp"
 #include "UI/common.hpp"
-
-#define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
-#define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
-
-#define LOCAL_DEBUG
-
-#ifdef LOCAL_DEBUG
-#  define API_SERVER "http://localhost:3000"
-#else
-#  define API_SERVER "https://source-link-test.opensphere.co.jp"
-#endif
-
-#define CLIENT_ID "testClientId"
-#define CLIENT_SECRET "testClientSecret"
-#define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
-#define TOKEN_URL (API_SERVER "/oauth2/token")
-#define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
-#define PARTIES_URL (API_SERVER "/api/v1/parties/my")
-#define PARTY_EVENTS_URL (API_SERVER "/api/v1/events/my")
-#define STAGES_URL (API_SERVER "/api/v1/stages")
-#define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections")
-#define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations")
-#define PING_URL (API_SERVER "/api/v1/ping")
-#define SCOPE "read write"
-#define SETTINGS_JSON_NAME "settings.json"
-#define POLLING_INTERVAL 10000
 
 //--- SourceLinkApiClient class ---//
 
@@ -73,7 +48,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
       client(nullptr),
       requestor(nullptr),
       accountInfo(nullptr),
-      seatAllocation(nullptr),
+      seat(nullptr),
       seatAllocationRefs(0)
 {
     pollingTimer = new QTimer(this);
@@ -126,7 +101,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
 
     // Setup interval timer for polling
     connect(pollingTimer, SIGNAL(timeout()), this, SLOT(onPollingTimerTimeout()));
-    pollingTimer->setInterval(POLLING_INTERVAL);
+    pollingTimer->setInterval(POLLING_INTERVAL_MSECS);
     pollingTimer->start();
 
     obs_log(LOG_DEBUG, "SourceLinkApiClient created");
@@ -201,7 +176,7 @@ void SourceLinkApiClient::onO2LinkedChanged()
 {
     if (!client->linked()) {
         obs_log(LOG_ERROR, "Client is offline.");
-        return;        
+        return;
     }
 
     obs_log(LOG_DEBUG, "The API client link has been changed.");
@@ -211,7 +186,7 @@ void SourceLinkApiClient::onO2LinkingSucceeded()
 {
     if (!client->linked()) {
         obs_log(LOG_ERROR, "Client is offline.");
-        return;        
+        return;
     }
 
     obs_log(LOG_DEBUG, "The API client has linked up.");
@@ -402,13 +377,13 @@ void SourceLinkApiClient::requestSeatAllocation()
         }
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
-        if (seatAllocation) {
-            seatAllocation->deleteLater();
+        if (seat) {
+            seat->deleteLater();
         }
-        seatAllocation = StageSeatAllocation::fromJsonObject(jsonDoc.object(), this);
+        seat = StageSeatInfo::fromJsonObject(jsonDoc.object(), this);
 
-        obs_log(LOG_INFO, "Received seat allocation for %s", qPrintable(seatAllocation->getId()));
-        emit seatAllocationReady(seatAllocation);
+        obs_log(LOG_INFO, "Received seat allocation for %s", qPrintable(uuid));
+        emit seatAllocationReady(seat);
     });
     invoker->get(QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid)));
 }
@@ -505,17 +480,17 @@ void SourceLinkApiClient::putSeatAllocation()
         }
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
-        auto seatAllocation = StageSeatAllocation::fromJsonObject(jsonDoc.object(), this);
+        seat = StageSeatInfo::fromJsonObject(jsonDoc.object(), this);
 
         obs_log(LOG_INFO, "Put stage seat allocation of %s succeeded", qPrintable(uuid));
-        emit seatAllocationPutSucceeded(seatAllocation);
+        emit seatAllocationPutSucceeded(seat);
+        emit seatAllocationReady(seat);
     });
 
     auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
-    body["party_id"] = getPartyId();
     body["party_event_id"] = getPartyEventId();
 
     invoker->put(req, QJsonDocument(body).toJson());
@@ -571,56 +546,6 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     ping();
 }
 
-//--- AbstractRequestHandler class ---//
-
-RequestInvoker::RequestInvoker(SourceLinkApiClient *_apiClient, QObject *parent)
-    : QObject(parent),
-      apiClient(_apiClient),
-      requestor(_apiClient->getRequestor())
-{
-    connect(
-        requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
-        SLOT(onRequestorFinished(int, QNetworkReply::NetworkError, QByteArray))
-    );
-    connect(
-        apiClient->getO2Client(), SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
-        SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
-    );
-    obs_log(LOG_DEBUG, "RequestInvoker created");
-}
-
-RequestInvoker::~RequestInvoker()
-{
-    disconnect(
-        requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
-        SLOT(onRequestorFinished(int, QNetworkReply::NetworkError, QByteArray))
-    );
-    obs_log(LOG_DEBUG, "RequestInvoker destroyed");
-}
-
-void RequestInvoker::onRequestorFinished(int _requestId, QNetworkReply::NetworkError error, QByteArray data)
-{
-    if (requestId != _requestId) {
-        return;
-    }
-    obs_log(LOG_DEBUG, "Request finished: %d", _requestId);
-
-    apiClient->requestQueue.removeOne(this);
-    emit finished(error, data);
-    deleteLater();
-}
-
-void RequestInvoker::onO2RefreshFinished(QNetworkReply::NetworkError error)
-{
-    if (requestId != -2) {
-        return;
-    }
-    obs_log(LOG_DEBUG, "Refresh finished");
-
-    apiClient->requestQueue.removeOne(this);
-    emit finished(error, nullptr);
-    deleteLater();
-}
 
 //--- SourceLinkSettingsStore class ---//
 
