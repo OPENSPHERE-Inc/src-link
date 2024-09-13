@@ -22,6 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "linked-output.hpp"
 #include "../utils.hpp"
+#include "../UI/common.hpp"
+
+#define OUTPUT_MAX_RETRIES 7
+#define OUTPUT_RETRY_DELAY_SECS 1
+#define OUTPUT_JSON_NAME "output.json"
+#define OUTPUT_POLLING_INTERVAL_MSECS 10000
+#define OUTPUT_MONITORING_INTERVAL_MSECS 1000
+#define OUTPUT_RETRY_TIMEOUT_MSECS 15000
 
 //--- LinkedOutput class ---//
 
@@ -39,6 +47,16 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
 
     loadSettings();
     apiClient->putSeatAllocation();
+
+    pollingTimer = new QTimer(this);
+    pollingTimer->setInterval(OUTPUT_POLLING_INTERVAL_MSECS);
+    pollingTimer->start();
+    connect(pollingTimer, SIGNAL(timeout()), this, SLOT(onPollingTimerTimeout()));
+
+    monitoringTimer = new QTimer(this);
+    monitoringTimer->setInterval(OUTPUT_MONITORING_INTERVAL_MSECS);
+    monitoringTimer->start();
+    connect(monitoringTimer, SIGNAL(timeout()), this, SLOT(onMonitoringTimerTimeout()));
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
@@ -59,6 +77,16 @@ obs_properties_t *LinkedOutput::getProperties()
 
     // "Connection" group
     auto connectionGroup = obs_properties_create();
+    auto triggerList = obs_properties_add_list(
+        connectionGroup, "trigger", obs_module_text("Start trigger"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+    );
+    obs_property_list_add_string(triggerList, obs_module_text("Always"), "always");
+    obs_property_list_add_string(triggerList, obs_module_text("DuringStreaming"), "streaming");
+    obs_property_list_add_string(triggerList, obs_module_text("DuringRecording"), "recording");
+    obs_property_list_add_string(triggerList, obs_module_text("DuringStreamingOrRecording"), "both");
+    obs_property_list_add_string(triggerList, obs_module_text("DuringVertualCam"), "virtual_cam");
+    obs_property_list_add_string(triggerList, obs_module_text("Disabled"), "disabled");
+
     auto sourceNameList = obs_properties_add_list(
         connectionGroup, "source_name", obs_module_text("Type"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
@@ -77,7 +105,9 @@ obs_properties_t *LinkedOutput::getProperties()
         },
         this
     );
-    obs_properties_add_group(props, "connection_group", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup);
+    obs_properties_add_group(
+        props, "connection_group", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup
+    );
 
     // "Audio Encoder" group
     auto audioEncoderGroup = obs_properties_create();
@@ -284,7 +314,7 @@ void LinkedOutput::loadSettings()
     if (data) {
         obs_data_apply(settings, data);
         obs_data_release(data);
-    } 
+    }
 }
 
 void LinkedOutput::saveSettings()
@@ -378,6 +408,8 @@ void LinkedOutput::startOutput(video_t *video, audio_t *audio)
 
     obs_output_set_reconnect_settings(output, OUTPUT_MAX_RETRIES, OUTPUT_RETRY_DELAY_SECS);
     obs_output_set_service(output, service);
+    // Reduce reconnect with timeout
+    connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
     // Setup video encoder
     auto videoEncoderId = obs_data_get_string(egressSettings, "video_encoder");
@@ -455,5 +487,41 @@ void LinkedOutput::stopOutput()
     if (outputActive) {
         outputActive = false;
         obs_log(LOG_INFO, "Stopped output %s", qPrintable(name));
+    }
+}
+
+
+void LinkedOutput::onPollingTimerTimeout()
+{
+    if (!outputActive) {
+        return;
+    }
+
+    // polling seat allocation
+    apiClient->requestSeatAllocation();
+
+    // Upload screenshot during output is active
+    auto source = obs_frontend_get_current_scene();
+    bool success = false;
+    auto screenshot = TakeSourceScreenshot(source, success, connection->getWidth(), connection->getHeight());
+    obs_source_release(source);
+
+    if (success) {
+        apiClient->putScreenshot(connection->getSourceName(), screenshot);
+    }
+}
+
+void LinkedOutput::onMonitoringTimerTimeout()
+{
+    if (!outputActive) {
+        return;
+    }
+
+    auto outputOnLive = obs_output_active(output);
+    if (QDateTime().currentMSecsSinceEpoch() - connectionAttemptingAt > OUTPUT_RETRY_TIMEOUT_MSECS) {
+        if (!outputOnLive) {
+            obs_log(LOG_INFO, "%s: Attempting reactivate output", qPrintable(name));
+            startOutput(obs_get_video(), obs_get_audio());
+        }
     }
 }

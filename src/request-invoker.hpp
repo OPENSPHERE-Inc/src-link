@@ -55,8 +55,8 @@ public:
     {
         queue([this]() {
             obs_log(LOG_DEBUG, "Invoke refresh token");
-            apiClient->refresh();
             requestId = -2;
+            apiClient->refresh();
         });
     }
 

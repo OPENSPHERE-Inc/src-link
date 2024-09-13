@@ -127,13 +127,15 @@ void SettingsDialog::onPartiesReady(const QList<Party *> &parties)
     }
 }
 
-void SettingsDialog::onPartyEventsReady(const QList<PartyEvent *> &events)
+void SettingsDialog::onPartyEventsReady(const QList<PartyEvent *> &partyEvents)
 {
     ui->activePartyEventComboBox->clear();
+    auto partyId = ui->activePartyComboBox->currentData().toString();
 
-    foreach(const auto partyEvent, events)
+    // Fiter out party events that are not related to the selected party
+    foreach(const auto partyEvent, partyEvents)
     {
-        if (!partyEvent->getParty()) {
+        if (!partyEvent->getParty() || partyEvent->getParty()->getId() != partyId) {
             continue;
         }
         ui->activePartyEventComboBox->addItem(QString(partyEvent->getName()), partyEvent->getId());
@@ -153,6 +155,7 @@ void SettingsDialog::saveSettings()
     apiClient->setPortMax(ui->portMaxSpinBox->value());
     apiClient->setPartyId(ui->activePartyComboBox->currentData().toString());
     apiClient->setPartyEventId(ui->activePartyEventComboBox->currentData().toString());
+    apiClient->setForceConnection(ui->forceConnectionCheckBox->isChecked());
     apiClient->putSeatAllocation();
 }
 
@@ -162,16 +165,15 @@ void SettingsDialog::loadSettings()
     ui->portMaxSpinBox->setValue(apiClient->getPortMax());
     ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
     ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId()));
+    ui->forceConnectionCheckBox->setChecked(apiClient->getForceConnection());
 }
 
 void SettingsDialog::onActivePartyChanged(int index)
 {
-    if (index < 0) {
-        return;
-    }
-
-    auto partyId = ui->activePartyComboBox->itemData(index).toString();
-    apiClient->requestPartyEvents(partyId);
+    // Refresh party events combo box
+    QMetaObject::invokeMethod(
+        this, "onPartyEventsReady", Qt::QueuedConnection, Q_ARG(QList<PartyEvent *>, apiClient->getPartyEvents())
+    );
 }
 
 void SettingsDialog::showEvent(QShowEvent *event)
@@ -179,7 +181,6 @@ void SettingsDialog::showEvent(QShowEvent *event)
     QDialog::showEvent(event);
 
     apiClient->requestParties();
-    if (!apiClient->getPartyId().isEmpty()) {
-        apiClient->requestPartyEvents(apiClient->getPartyId());
-    }
+    apiClient->requestPartyEvents();
+    setClientActive(apiClient->isLoggedIn());
 }

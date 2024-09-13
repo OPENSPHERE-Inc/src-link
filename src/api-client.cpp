@@ -28,6 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QtConcurrent>
 #include <QPromise>
 #include <QTimer>
+#include <QByteArray>
 
 #include <o2requestor.h>
 #include <o0settingsstore.h>
@@ -36,6 +37,23 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "api-client.hpp"
 #include "request-invoker.hpp"
 #include "UI/common.hpp"
+
+#define CHECK_CLIENT_TOKEN(...)                                \
+    {                                                          \
+        if (client->refreshToken().isEmpty()) {                \
+            obs_log(LOG_ERROR, "Client has no access token."); \
+            return __VA_ARGS__;                                \
+        }                                                      \
+    }
+
+#define CHECK_RESPONSE_NOERROR(signal, message, ...)  \
+    {                                                 \
+        if (error != QNetworkReply::NoError) {        \
+            obs_log(LOG_ERROR, message, __VA_ARGS__); \
+            emit signal();                            \
+            return;                                   \
+        }                                             \
+    }
 
 //--- SourceLinkApiClient class ---//
 
@@ -137,22 +155,14 @@ void SourceLinkApiClient::refresh()
     client->refresh();
 }
 
-void SourceLinkApiClient::ping()
+bool SourceLinkApiClient::ping()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit pingFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     obs_log(LOG_DEBUG, "Pinging API server.");
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Pinging API server failed: %d", error);
-            emit pingFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(pingFailed, "Pinging API server failed: %d", error);
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         if (accountInfo) {
@@ -165,6 +175,8 @@ void SourceLinkApiClient::ping()
         emit pingSucceeded();
     });
     invoker->get(QNetworkRequest(QUrl(QString(PING_URL))));
+
+    return true;
 }
 
 void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
@@ -174,20 +186,14 @@ void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
 
 void SourceLinkApiClient::onO2LinkedChanged()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        return;
-    }
+    CHECK_CLIENT_TOKEN();
 
     obs_log(LOG_DEBUG, "The API client link has been changed.");
 }
 
 void SourceLinkApiClient::onO2LinkingSucceeded()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        return;
-    }
+    CHECK_CLIENT_TOKEN();
 
     obs_log(LOG_DEBUG, "The API client has linked up.");
 
@@ -199,49 +205,34 @@ void SourceLinkApiClient::onO2LinkingSucceeded()
 void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 {
     if (error != QNetworkReply::NoError) {
-        obs_log(LOG_ERROR, "Refreshing token failed: %d", error);
         return;
     }
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        return;
-    }
+    CHECK_CLIENT_TOKEN();
 
     // Schedule next refresh
     QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
 }
 
-void SourceLinkApiClient::requestOnlineResources()
+bool SourceLinkApiClient::requestOnlineResources()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     requestAccountInfo();
     requestParties();
-    if (!getPartyId().isEmpty()) {
-        requestPartyEvents(getPartyId());
-    }
+    requestPartyEvents();
     requestStages();
+
+    return true;
 }
 
-void SourceLinkApiClient::requestAccountInfo()
+bool SourceLinkApiClient::requestAccountInfo()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit accountInfoFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     obs_log(LOG_DEBUG, "Requesting account info.");
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Requesting account info failed: %d", error);
-            emit accountInfoFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(accountInfoFailed, "Requesting account info failed: %d", error);
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         if (accountInfo) {
@@ -253,24 +244,18 @@ void SourceLinkApiClient::requestAccountInfo()
         emit accountInfoReady(accountInfo);
     });
     invoker->get(QNetworkRequest(QUrl(QString(ACCOUNT_INFO_URL))));
+
+    return true;
 }
 
-void SourceLinkApiClient::requestParties()
+bool SourceLinkApiClient::requestParties()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit partiesFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     obs_log(LOG_DEBUG, "Requesting parties.");
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Requesting parties failed: %d", error);
-            emit partiesFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(partiesFailed, "Requesting parties failed: %d", error);
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         qDeleteAll(parties);
@@ -281,68 +266,56 @@ void SourceLinkApiClient::requestParties()
             parties.append(party);
         }
 
+        if (getPartyId().isEmpty() && parties.size() > 0) {
+            setPartyId(parties[0]->getId());
+        }
+
         obs_log(LOG_INFO, "Received %d parties", parties.size());
         emit partiesReady(parties);
     });
     invoker->get(QNetworkRequest(QUrl(QString(PARTIES_URL))));
+
+    return true;
 }
 
-void SourceLinkApiClient::requestPartyEvents(const QString &partyId)
+bool SourceLinkApiClient::requestPartyEvents()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit partyEventsFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
-    obs_log(LOG_DEBUG, "Requesting party events for %s.", qPrintable(partyId));
+    obs_log(LOG_DEBUG, "Requesting party events");
     auto invoker = new RequestInvoker(this);
-    connect(
-        invoker, &RequestInvoker::finished,
-        [this, partyId](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "Requesting party events for %s failed: %d", qPrintable(partyId), error);
-                emit partyEventsFailed();
-                return;
-            }
+    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(partyEventsFailed, "Requesting party events failed: %d", error);
 
-            auto jsonDoc = QJsonDocument::fromJson(replyData);
-            qDeleteAll(partyEvents);
-            partyEvents.clear();
-            foreach(const QJsonValue &partyEventItem, jsonDoc.array())
-            {
-                auto partyEvent = PartyEvent::fromJsonObject(partyEventItem.toObject(), this);
-                partyEvents.append(partyEvent);
-            }
-
-            obs_log(LOG_INFO, "Received %d party events for %s", partyEvents.size(), qPrintable(partyId));
-            emit partyEventsReady(partyEvents);
+        auto jsonDoc = QJsonDocument::fromJson(replyData);
+        qDeleteAll(partyEvents);
+        partyEvents.clear();
+        foreach(const QJsonValue &partyEventItem, jsonDoc.array())
+        {
+            auto partyEvent = PartyEvent::fromJsonObject(partyEventItem.toObject(), this);
+            partyEvents.append(partyEvent);
         }
-    );
 
-    auto url = QUrl(QString(PARTY_EVENTS_URL));
-    auto query = QUrlQuery();
-    query.addQueryItem("party_id", partyId);
-    url.setQuery(query);
-    invoker->get(QNetworkRequest(url));
+        if (getPartyEventId().isEmpty() && partyEvents.size() > 0) {
+            setPartyEventId(partyEvents[0]->getId());
+        }
+
+        obs_log(LOG_INFO, "Received %d party events", partyEvents.size());
+        emit partyEventsReady(partyEvents);
+    });
+    invoker->get(QNetworkRequest(QUrl(QString(PARTY_EVENTS_URL))));
+
+    return true;
 }
 
-void SourceLinkApiClient::requestStages()
+bool SourceLinkApiClient::requestStages()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit stagesFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     obs_log(LOG_DEBUG, "Requesting stages.");
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Requesting stages failed: %d", error);
-            emit stagesFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(stagesFailed, "Requesting stages failed: %d", error);
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         qDeleteAll(stages);
@@ -357,24 +330,20 @@ void SourceLinkApiClient::requestStages()
         emit stagesReady(stages);
     });
     invoker->get(QNetworkRequest(QUrl(QString(STAGES_URL))));
+
+    return true;
 }
 
-void SourceLinkApiClient::requestSeatAllocation()
+bool SourceLinkApiClient::requestSeatAllocation()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit seatAllocationFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
 
     obs_log(LOG_DEBUG, "Requesting seat allocation for %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Requesting seat allocation for %s failed: %d", qPrintable(uuid), error);
-            emit seatAllocationFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(
+            seatAllocationFailed, "Requesting seat allocation for %s failed: %d", qPrintable(uuid), error
+        );
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         if (seat) {
@@ -386,38 +355,17 @@ void SourceLinkApiClient::requestSeatAllocation()
         emit seatAllocationReady(seat);
     });
     invoker->get(QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid)));
+
+    return true;
 }
 
-void SourceLinkApiClient::putConnection(
+bool SourceLinkApiClient::putConnection(
     const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
     const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
     const int width, const int height
 )
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit connectionPutFailed();
-        return;
-    }
-
-    obs_log(LOG_DEBUG, "Putting stage connection: %s", qPrintable(sourceUuid));
-    auto invoker = new RequestInvoker(this);
-    connect(
-        invoker, &RequestInvoker::finished,
-        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "Putting stage coinnection %s failed: %d", qPrintable(sourceUuid), error);
-                emit connectionPutFailed();
-                return;
-            }
-
-            auto jsonDoc = QJsonDocument::fromJson(replyData);
-            auto connection = StageConnection::fromJsonObject(jsonDoc.object(), this);
-
-            obs_log(LOG_INFO, "Put stage connection %s succeeded", qPrintable(connection->getId()));
-            emit connectionPutSucceeded(connection);
-        }
-    );
+    CHECK_CLIENT_TOKEN(false);
 
     auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + sourceUuid));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -434,50 +382,65 @@ void SourceLinkApiClient::putConnection(
     body["width"] = width;
     body["height"] = height;
 
+    obs_log(LOG_DEBUG, "Putting stage connection: %s", qPrintable(sourceUuid));
+    auto invoker = new RequestInvoker(this);
+    connect(
+        invoker, &RequestInvoker::finished,
+        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
+            CHECK_RESPONSE_NOERROR(
+                connectionPutFailed, "Putting stage connection %s failed: %d", qPrintable(sourceUuid), error
+            );
+
+            auto jsonDoc = QJsonDocument::fromJson(replyData);
+            auto connection = StageConnection::fromJsonObject(jsonDoc.object(), this);
+
+            obs_log(LOG_INFO, "Put stage connection %s succeeded", qPrintable(connection->getId()));
+            emit connectionPutSucceeded(connection);
+        }
+    );
     invoker->put(req, QJsonDocument(body).toJson());
+
+    return true;
 }
 
-void SourceLinkApiClient::deleteConnection(const QString &sourceUuid)
+bool SourceLinkApiClient::deleteConnection(const QString &sourceUuid)
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit connectionDeleteFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
+
+    auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + sourceUuid));
 
     obs_log(LOG_DEBUG, "Deleting stage connection of %s", qPrintable(sourceUuid));
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "RDeleting stage connection of %s: %d", qPrintable(sourceUuid), error);
-            emit connectionDeleteFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(
+            connectionDeleteFailed, "Deleting stage connection of %s failed: %d", qPrintable(sourceUuid), error
+        );
 
         obs_log(LOG_INFO, "Delete stage connection of %s succeeded", qPrintable(sourceUuid));
         emit connectionDeleteSucceeded(sourceUuid);
     });
-
-    auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL) + "/" + sourceUuid));
     invoker->deleteResource(req);
+
+    return true;
 }
 
-void SourceLinkApiClient::putSeatAllocation()
+bool SourceLinkApiClient::putSeatAllocation(const bool force)
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit seatAllocationPutFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
+
+    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject body;
+    body["party_event_id"] = getPartyEventId();
+    body["force"] = force || getForceConnection() ? "1" : "0";
 
     obs_log(LOG_DEBUG, "Putting stage seat allocation of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Putting stage seat allocation of %s failed: %d", qPrintable(uuid), error);
-            emit seatAllocationPutFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(
+            seatAllocationPutFailed, "Putting stage seat allocation of %s failed: %d", qPrintable(uuid), error
+        );
 
         auto jsonDoc = QJsonDocument::fromJson(replyData);
         seat = StageSeatInfo::fromJsonObject(jsonDoc.object(), this);
@@ -486,39 +449,57 @@ void SourceLinkApiClient::putSeatAllocation()
         emit seatAllocationPutSucceeded(seat);
         emit seatAllocationReady(seat);
     });
-
-    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    QJsonObject body;
-    body["party_event_id"] = getPartyEventId();
-
     invoker->put(req, QJsonDocument(body).toJson());
+
+    return true;
 }
 
-void SourceLinkApiClient::deleteSeatAllocation()
+bool SourceLinkApiClient::deleteSeatAllocation()
 {
-    if (!client->linked()) {
-        obs_log(LOG_ERROR, "Client is offline.");
-        emit seatAllocationDeleteFailed();
-        return;
-    }
+    CHECK_CLIENT_TOKEN(false);
+
+    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
 
     obs_log(LOG_DEBUG, "Deleting stage seat allocation of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "Deleting stage seat allocation of %s failed: %d", qPrintable(uuid), error);
-            emit seatAllocationDeleteFailed();
-            return;
-        }
+        CHECK_RESPONSE_NOERROR(
+            seatAllocationDeleteFailed, "Deleting stage seat allocation of %s failed: %d", qPrintable(uuid), error
+        );
 
         obs_log(LOG_INFO, "Delete stage seat allocation %s succeeded", qPrintable(uuid));
         emit seatAllocationDeleteSucceeded(uuid);
     });
-
-    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL) + "/" + uuid));
     invoker->deleteResource(req);
+
+    return true;
+}
+
+bool SourceLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
+{
+    CHECK_CLIENT_TOKEN(false);
+
+    auto req = QNetworkRequest(QUrl(QString(ACCOUNT_SCREENSHOTS_URL) + "/" + uuid + "/" + sourceName));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "image/jpeg");
+
+    QByteArray imageBytes(image.sizeInBytes(), Qt::Uninitialized);
+    QBuffer imageBuffer(&imageBytes);
+    imageBuffer.open(QIODevice::WriteOnly);
+    image.save(&imageBuffer, "JPG");
+
+    obs_log(LOG_DEBUG, "Putting screenshot of %s", qPrintable(sourceName));
+    auto invoker = new RequestInvoker(this);
+    connect(invoker, &RequestInvoker::finished, [this, sourceName](QNetworkReply::NetworkError error, QByteArray) {
+        CHECK_RESPONSE_NOERROR(
+            screenshotPutFailed, "Putting screenshot of %s failed: %d", qPrintable(sourceName), error
+        );
+
+        obs_log(LOG_INFO, "Put screenshot of %s succeeded", qPrintable(sourceName));
+        emit screenshotPutSucceeded(sourceName);
+    });
+    invoker->put(req, imageBytes);
+
+    return true;
 }
 
 const int SourceLinkApiClient::getFreePort()
@@ -545,7 +526,6 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     // Polling to ping endpoint
     ping();
 }
-
 
 //--- SourceLinkSettingsStore class ---//
 

@@ -62,7 +62,11 @@ void RequestInvoker::onO2RefreshFinished(QNetworkReply::NetworkError error)
     if (requestId != -2) {
         return;
     }
-    obs_log(LOG_DEBUG, "Refresh finished");
+    if (error != QNetworkReply::NoError) {
+        obs_log(LOG_ERROR, "Refresh failed: %d", error);
+    } else {
+        obs_log(LOG_DEBUG, "Refresh finished");
+    }
 
     apiClient->requestQueue.removeOne(this);
     emit finished(error, nullptr);

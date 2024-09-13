@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>455</width>
+    <width>509</width>
     <height>270</height>
    </rect>
   </property>
@@ -51,6 +51,16 @@
       </widget>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="forceConnectionCheckBox">
+     <property name="text">
+      <string>Force disconnect other clients (if connected)</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
    </item>
    <item>
     <spacer name="spacer1">
@@ -110,7 +120,7 @@
         </size>
        </property>
        <property name="placeholderText">
-        <string/>
+        <string>No parties</string>
        </property>
       </widget>
      </item>
@@ -155,7 +165,7 @@
         </size>
        </property>
        <property name="placeholderText">
-        <string>SelectPartyFirst</string>
+        <string>Select party first</string>
        </property>
       </widget>
      </item>

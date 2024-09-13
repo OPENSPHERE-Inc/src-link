@@ -91,7 +91,7 @@ LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *_source, SourceLi
         SLOT(onConnectionPutSucceeded(StageConnection *))
     );
     connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
-    connect(apiClient, SIGNAL(connectionDeleteSucceeded(QString)), this, SLOT(onConnectionDeleteSucceeded(QString)));
+    connect(apiClient, SIGNAL(connectionDeleteSucceeded(const QString &)), this, SLOT(onConnectionDeleteSucceeded(const QString &)));
 
     obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
 }
@@ -404,7 +404,7 @@ void LinkedSource::onConnectionPutFailed()
     connected = false;
 }
 
-void LinkedSource::onConnectionDeleteSucceeded(QString)
+void LinkedSource::onConnectionDeleteSucceeded(const QString &)
 {
     connected = false;
 }

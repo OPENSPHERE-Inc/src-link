@@ -44,6 +44,7 @@ target_sources(
           src/api-client.cpp
           src/request-invoker.cpp
           src/schema.hpp
+          src/UI/common.cpp
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.cpp
           src/sources/linked-source.cpp

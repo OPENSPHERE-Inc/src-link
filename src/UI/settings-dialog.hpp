@@ -44,7 +44,7 @@ private slots:
     void onLinkingFailed();
     void onAccountInfoReady(const AccountInfo *accountInfo);
     void onPartiesReady(const QList<Party *> &parties);
-    void onPartyEventsReady(const QList<PartyEvent *> &events);
+    void onPartyEventsReady(const QList<PartyEvent *> &partyEvents);
     void saveSettings();
     void loadSettings();
     void onActivePartyChanged(int index);

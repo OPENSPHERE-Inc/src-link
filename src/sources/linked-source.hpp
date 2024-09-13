@@ -87,7 +87,7 @@ public:
 private slots:
     void onConnectionPutSucceeded(StageConnection *connection);
     void onConnectionPutFailed();
-    void onConnectionDeleteSucceeded(QString uuid);
+    void onConnectionDeleteSucceeded(const QString &uuid);
 };
 
 

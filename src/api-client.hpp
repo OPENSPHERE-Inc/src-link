@@ -34,7 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
-#define LOCAL_DEBUG
+//#define LOCAL_DEBUG
 
 #ifdef LOCAL_DEBUG
 #define API_SERVER "http://localhost:3000"
@@ -52,12 +52,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define STAGES_URL (API_SERVER "/api/v1/stages")
 #define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections")
 #define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations")
+#define ACCOUNT_SCREENSHOTS_URL (API_SERVER "/api/v1/accounts/screenshots")
 #define PING_URL (API_SERVER "/api/v1/ping")
 #define SCOPE "read write"
 #define SETTINGS_JSON_NAME "settings.json"
 #define POLLING_INTERVAL_MSECS 30000
 #define DEFAULT_TIMEOUT_MSECS (10 * 1000)
-
 
 class SourceLinkApiClientSettingsStore : public O0AbstractStore {
     Q_OBJECT
@@ -89,7 +89,7 @@ class SourceLinkApiClient : public QObject {
     // Online rsources
     AccountInfo *accountInfo;
     QList<Party *> parties;
-    QList<PartyEvent *> partyEvents;
+    QList<PartyEvent *> partyEvents;  // Contains all events of all parties
     QList<Stage *> stages;
     StageSeatInfo *seat;
     int seatAllocationRefs;
@@ -114,14 +114,16 @@ signals:
     void seatAllocationFailed();
     void connectionPutSucceeded(const StageConnection *connection);
     void connectionPutFailed();
-    void connectionDeleteSucceeded(const QString uuid);
+    void connectionDeleteSucceeded(const QString &uuid);
     void connectionDeleteFailed();
     void seatAllocationPutSucceeded(const StageSeatInfo *seat);
     void seatAllocationPutFailed();
-    void seatAllocationDeleteSucceeded(const QString uuid);
+    void seatAllocationDeleteSucceeded(const QString &uuid);
     void seatAllocationDeleteFailed();
     void pingSucceeded();
     void pingFailed();
+    void screenshotPutSucceeded(const QString &sourceName);
+    void screenshotPutFailed();
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
@@ -132,23 +134,25 @@ public slots:
     void logout();
     bool isLoggedIn();
     void refresh();
-    void ping();
-    void requestOnlineResources();
-    void requestAccountInfo();
-    void requestParties();
-    void requestPartyEvents(const QString &partyId);
-    void requestStages();
-    void requestSeatAllocation();
-    void putConnection(
+    bool ping();
+    bool requestOnlineResources();
+    bool requestAccountInfo();
+    bool requestParties();
+    bool requestPartyEvents();
+    bool requestStages();
+    bool requestSeatAllocation();
+    bool putConnection(
         const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height
     );
-    void deleteConnection(const QString &sourceUuid);
+    bool deleteConnection(const QString &sourceUuid);
+    bool putSeatAllocation(const bool force = false);
+    bool deleteSeatAllocation();
+    bool putScreenshot(const QString &sourceName, const QImage& image);
+
     const int getFreePort();
     void releasePort(const int port);
-    void putSeatAllocation();
-    void deleteSeatAllocation();
 
 public:
     inline const QString getUuid() const { return uuid; }
@@ -160,6 +164,11 @@ public:
     inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
     inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
     inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
+    inline void setForceConnection(const bool forceConnection)
+    {
+        settings->setValue("forceConnection", forceConnection ? "true" : "false");
+    }
+    inline const bool getForceConnection() { return settings->value("forceConnection", "false") == "true"; }
 
     inline const AccountInfo *getAccountInfo() const { return accountInfo; }
     inline const QList<Party *> &getParties() const { return parties; }
@@ -174,4 +183,3 @@ private slots:
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onPollingTimerTimeout();
 };
-

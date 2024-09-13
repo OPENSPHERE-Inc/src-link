@@ -26,10 +26,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../api-client.hpp"
 #include "../schema.hpp"
 
-#define OUTPUT_MAX_RETRIES 7
-#define OUTPUT_RETRY_DELAY_SECS 1
-#define OUTPUT_JSON_NAME "output.json"
-
 class LinkedOutput : public QObject {
     Q_OBJECT
 
@@ -43,6 +39,9 @@ class LinkedOutput : public QObject {
     obs_encoder_t *videoEncoder;
     obs_encoder_t *audioEncoder;
     bool outputActive;
+    QTimer *pollingTimer;
+    QTimer *monitoringTimer;
+    uint64_t connectionAttemptingAt;
 
     void loadSettings();
     void saveSettings();
@@ -61,5 +60,9 @@ public:
     inline QString getName() { return name; }
     inline void setName(QString &value) { name = value; }
     inline OBSData getSettings() { return settings; }
+
+private slots:
+    void onPollingTimerTimeout();
+    void onMonitoringTimerTimeout();
 };
 
