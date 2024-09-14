@@ -19,9 +19,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <obs-module.h>
+#include <obs.hpp>
 
 #include <QString>
 #include <QRandomGenerator>
+
+
+using OBSString = OBSPtr<char *, (void (*)(char *))bfree>;
 
 inline QString
 generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$", const QString &exclude = "lIO")
@@ -62,15 +66,13 @@ inline void applyDefaults(obs_data_t *dest, obs_data_t *src)
             obs_data_set_default_bool(dest, name, obs_data_item_get_bool(item));
             break;
         case OBS_DATA_OBJECT: {
-            auto value = obs_data_item_get_obj(item);
+            OBSDataAutoRelease value = obs_data_item_get_obj(item);
             obs_data_set_default_obj(dest, name, value);
-            obs_data_release(value);
             break;
         }
         case OBS_DATA_ARRAY: {
-            auto value = obs_data_item_get_array(item);
+            OBSDataArrayAutoRelease value = obs_data_item_get_array(item);
             obs_data_set_default_array(dest, name, value);
-            obs_data_array_release(value);
             break;
         }
         case OBS_DATA_NULL:

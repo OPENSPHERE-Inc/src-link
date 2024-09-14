@@ -40,7 +40,7 @@ public:
 
 private slots:
     void onAccept();
-    void onSeatAllocationReady(const StageSeatInfo *seat);
+    void onSeatAllocationReady(const StageSeatInfo &seat);
 
 protected:
     void showEvent(QShowEvent *event) override;

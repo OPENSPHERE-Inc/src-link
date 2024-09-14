@@ -25,343 +25,219 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDateTime>
 #include <QMap>
 
-class AccountInfo : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString displayName;
-    QString pictureId;
-
+class AccountInfo : public QJsonObject {
 public:
-    explicit inline AccountInfo(QObject *parent = nullptr) : QObject(parent) {}
+    AccountInfo() = default;
+    AccountInfo(const QJsonObject &json) : QJsonObject(json) {}
 
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getDisplayName() const { return displayName; };
-    inline void setDisplayName(const QString &value) { displayName = value; }
-    inline QString getPictureId() const { return pictureId; }
-    inline void setPictureId(const QString &value) { pictureId = value; }
-
-    static inline AccountInfo *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
-    {
-        AccountInfo *accountInfo = new AccountInfo(parent);
-        accountInfo->setId(json["_id"].toString());
-        accountInfo->setDisplayName(json["display_name"].toString());
-        accountInfo->setPictureId(json["picture_id"].toString());
-        return accountInfo;
-    }
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getDisplayName() const { return value("display_name").toString(); };
+    inline void setDisplayName(const QString &value) { insert("display_name", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
 };
 
-class Stage : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString name;
-    QString description;
-    QString pictureId;
-
-    struct StageSource_t {
-        QString name;
-        QString displayName;
-        QString description;
-    };
-
-    struct StageSeat_t {
-        QString name;
-        QString displayName;
-    };
-
-    QList<StageSource_t> sources;
-    QList<StageSeat_t> seats;
-
+class StageSource : public QJsonObject {
 public:
-    explicit inline Stage(QObject *parent = nullptr) : QObject(parent) {}
+    StageSource() = default;
+    StageSource(const QJsonObject &json) : QJsonObject(json) {}
 
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getName() const { return name; }
-    inline void setName(const QString &value) { name = value; }
-    inline QString getDescription() const { return description; }
-    inline void setDescription(const QString &value) { description = value; }
-    inline QString getPictureId() const { return pictureId; }
-    inline void setPictureId(const QString &value) { pictureId = value; }
-    inline QList<StageSource_t> getSources() const { return sources; }
-    inline void setSources(const QList<StageSource_t> &value) { sources = value; }
-    inline QList<StageSeat_t> getSeats() const { return seats; }
-    inline void setSeats(const QList<StageSeat_t> &value) { seats = value; }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDisplayName() const { return value("display_name").toString(); }
+    inline void setDisplayName(const QString &value) { insert("display_name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+};
 
-    static inline Stage *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
+class StageSeat : public QJsonObject {
+public:
+    StageSeat() = default;
+    StageSeat(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDisplayName() const { return value("display_name").toString(); }
+    inline void setDisplayName(const QString &value) { insert("display_name", value); }
+};
+
+class Stage : public QJsonObject {
+public:
+    Stage() = default;
+    Stage(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline QList<StageSource> getSources() const
     {
-        Stage *stage = new Stage(parent);
-        stage->setId(json["_id"].toString());
-        stage->setName(json["name"].toString());
-        stage->setDescription(json["description"].toString());
-        stage->setPictureId(json["picture_id"].toString());
-
-        foreach(const QJsonValue sourceItem, json["sources"].toArray())
+        QList<StageSource> sources;
+        foreach(const QJsonValue sourceItem, value("sources").toArray())
         {
-            StageSource_t source;
-            const auto sourceJson = sourceItem.toObject();
-            source.name = sourceJson["name"].toString();
-            source.displayName = sourceJson["display_name"].toString();
-            source.description = sourceJson["description"].toString();
-            stage->sources.append(source);
+            sources.append(sourceItem.toObject());
         }
-
-        foreach(const QJsonValue seatItem, json["seats"].toArray())
+        return sources;
+    }
+    inline void setSources(const QList<StageSource> &value)
+    {
+        QJsonArray sourcesArray;
+        foreach(const StageSource &source, value)
         {
-            StageSeat_t seat;
-            const auto seatJson = seatItem.toObject();
-            seat.name = seatJson["name"].toString();
-            seat.displayName = seatJson["display_name"].toString();
-            stage->seats.append(seat);
+            sourcesArray.append(source);
         }
-
-        return stage;
+        insert("sources", sourcesArray);
     }
-};
-
-class Party : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString name;
-    QString description;
-    QString pictureId;
-    int capacity;
-
-public:
-    explicit inline Party(QObject *parent = nullptr) : QObject(parent) {}
-
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getName() const { return name; }
-    inline void setName(const QString &value) { name = value; }
-    inline QString getDescription() const { return description; }
-    inline void setDescription(const QString &value) { description = value; }
-    inline QString getPictureId() const { return pictureId; }
-    inline void setPictureId(const QString &value) { pictureId = value; }
-    inline int getCapacity() const { return capacity; }
-    inline void setCapacity(int value) { capacity = value; }
-
-    static inline Party *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
+    inline QList<StageSeat> getSeats() const
     {
-        Party *party = new Party(parent);
-        party->setId(json["_id"].toString());
-        party->setName(json["name"].toString());
-        party->setDescription(json["description"].toString());
-        party->setPictureId(json["picture_id"].toString());
-        party->setCapacity(json["capacity"].toInt());
-        return party;
-    }
-};
-
-class PartyEvent : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString name;
-    QString description;
-    QDateTime startTime;
-    QDateTime endTime;
-    QString pictureId;
-    QString status;
-    QDateTime statusChangedAt;
-
-    Party *party;
-    Stage *stage;
-
-public:
-    explicit inline PartyEvent(QObject *parent = nullptr) : QObject(parent) {}
-
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getName() const { return name; }
-    inline void setName(const QString &value) { name = value; }
-    inline QString getDescription() const { return description; }
-    inline void setDescription(const QString &value) { description = value; }
-    inline QDateTime getStartTime() const { return startTime; }
-    inline void setStartTime(const QDateTime &value) { startTime = value; }
-    inline QDateTime getEndTime() const { return endTime; }
-    inline void setEndTime(const QDateTime &value) { endTime = value; }
-    inline QString getPictureId() const { return pictureId; }
-    inline void setPictureId(const QString &value) { pictureId = value; }
-    inline QString getStatus() const { return status; }
-    inline void setStatus(const QString &value) { status = value; }
-    inline QDateTime getStatusChangedAt() const { return statusChangedAt; }
-    inline void setStatusChangedAt(const QDateTime &value) { statusChangedAt = value; }
-    inline Party *getParty() const { return party; }
-    inline void setParty(Party *value) { party = value; }
-
-    static inline PartyEvent *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
-    {
-        PartyEvent *partyEvent = new PartyEvent(parent);
-        partyEvent->setId(json["_id"].toString());
-        partyEvent->setName(json["name"].toString());
-        partyEvent->setDescription(json["description"].toString());
-        partyEvent->setStartTime(QDateTime::fromString(json["start_time"].toString(), Qt::ISODate));
-        partyEvent->setEndTime(QDateTime::fromString(json["end_time"].toString(), Qt::ISODate));
-        partyEvent->setPictureId(json["picture_id"].toString());
-        partyEvent->setStatus(json["status"].toString());
-        partyEvent->setStatusChangedAt(QDateTime::fromString(json["status_changed_at"].toString(), Qt::ISODate));
-
-        partyEvent->party = Party::fromJsonObject(json["party"].toObject(), partyEvent);
-        partyEvent->stage = Stage::fromJsonObject(json["stage"].toObject(), partyEvent);
-
-        return partyEvent;
-    }
-};
-
-class StageConnection : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString stageId;
-    QString seatName;
-    QString sourceName;
-    QString protocol;
-    QString server;
-    int port;
-    QString parameters;
-    int maxBitrate;
-    int minBitrate;
-    int width;
-    int height;
-
-public:
-    explicit inline StageConnection(QObject *parent = nullptr) : QObject(parent) {}
-
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getStageId() const { return stageId; }
-    inline void setStageId(const QString &value) { stageId = value; }
-    inline QString getSeatName() const { return seatName; }
-    inline void setSeatName(const QString &value) { seatName = value; }
-    inline QString getSourceName() const { return sourceName; }
-    inline void setSourceName(const QString &value) { sourceName = value; }
-    inline QString getProtocol() const { return protocol; }
-    inline void setProtocol(const QString &value) { protocol = value; }
-    inline QString getServer() const { return server; }
-    inline void setServer(const QString &value) { server = value; }
-    inline int getPort() const { return port; }
-    inline void setPort(int value) { port = value; }
-    inline QString getParameters() const { return parameters; }
-    inline void setParameters(const QString &value) { parameters = value; }
-    inline int getMaxBitrate() const { return maxBitrate; }
-    inline void setMaxBitrate(int value) { maxBitrate = value; }
-    inline int getMinBitrate() const { return minBitrate; }
-    inline void setMinBitrate(int value) { minBitrate = value; }
-    inline int getWidth() const { return width; }
-    inline void setWidth(int value) { width = value; }
-    inline int getHeight() const { return height; }
-    inline void setHeight(int value) { height = value; }
-
-    static inline StageConnection *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
-    {
-        StageConnection *connection = new StageConnection(parent);
-        connection->setId(json["_id"].toString());
-        connection->setStageId(json["stage_id"].toString());
-        connection->setSeatName(json["seat_name"].toString());
-        connection->setSourceName(json["source_name"].toString());
-        connection->setProtocol(json["protocol"].toString());
-        connection->setServer(json["server"].toString());
-        connection->setPort(json["port"].toInt());
-        connection->setParameters(json["parameters"].toString());
-        connection->setMaxBitrate(json["max_bitrate"].toInt());
-        connection->setMinBitrate(json["min_bitrate"].toInt());
-        connection->setWidth(json["width"].toInt());
-        connection->setHeight(json["height"].toInt());
-        return connection;
-    }
-
-    static inline QList<StageConnection *> fromJsonArray(const QJsonArray &jsonArray, QObject *parent = nullptr)
-    {
-        QList<StageConnection *> connections;
-        foreach(const QJsonValue connectionItem, jsonArray)
+        QList<StageSeat> seats;
+        foreach(const QJsonValue seatItem, value("seats").toArray())
         {
-            connections.append(fromJsonObject(connectionItem.toObject(), parent));
+            seats.append(seatItem.toObject());
+        }
+        return seats;
+    }
+    inline void setSeats(const QList<StageSeat> &value)
+    {
+        QJsonArray seatsArray;
+        foreach(const StageSeat &seat, value)
+        {
+            seatsArray.append(seat);
+        }
+        insert("seats", seatsArray);
+    }
+};
+
+class Party : public QJsonObject {
+public:
+    Party() = default;
+    Party(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline int getCapacity() const { return value("capacity").toInt(); }
+    inline void setCapacity(int value) { insert("capacity", value); }
+};
+
+class PartyEvent : public QJsonObject {
+public:
+    PartyEvent() = default;
+    PartyEvent(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QDateTime getStartTime() const { return QDateTime::fromString(value("start_time").toString(), Qt::ISODate); }
+    inline void setStartTime(const QDateTime &value) { insert("start_time", value.toString(Qt::ISODate)); }
+    inline QDateTime getEndTime() const { return QDateTime::fromString(value("end_time").toString(), Qt::ISODate); }
+    inline void setEndTime(const QDateTime &value) { insert("end_time", value.toString(Qt::ISODate)); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline QString getStatus() const { return value("status").toString(); }
+    inline void setStatus(const QString &value) { insert("status", value); }
+    inline QDateTime getStatusChangedAt() const { return QDateTime::fromString(value("status_changed_at").toString(), Qt::ISODate); }
+    inline void setStatusChangedAt(const QDateTime &value) { insert("status_changed_at", value.toString(Qt::ISODate)); }
+    inline Party getParty() const { return value("party").toObject(); }
+    inline void setParty(const Party &value) { insert("party", value); }
+    inline Stage getStage() const { return value("stage").toObject(); }
+    inline void setStage(const Stage &value) { insert("stage", value); }
+};
+
+class StageConnection : public QJsonObject {
+public:
+    StageConnection() = default;
+    StageConnection(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getStageId() const { return value("stage_id").toString(); }
+    inline void setStageId(const QString &value) { insert("stage_id", value); }
+    inline QString getSeatName() const { return value("seat_name").toString(); }
+    inline void setSeatName(const QString &value) { insert("seat_name", value); }
+    inline QString getSourceName() const { return value("source_name").toString(); }
+    inline void setSourceName(const QString &value) { insert("source_name", value); }
+    inline QString getProtocol() const { return value("protocol").toString(); }
+    inline void setProtocol(const QString &value) { insert("protocol", value); }
+    inline QString getServer() const { return value("server").toString(); }
+    inline void setServer(const QString &value) { insert("server", value); }
+    inline int getPort() const { return value("port").toInt(); }
+    inline void setPort(int value) { insert("port", value); }
+    inline QString getParameters() const { return value("parameters").toString(); }
+    inline void setParameters(const QString &value) { insert("parameters", value); }
+    inline int getMaxBitrate() const { return value("max_bitrate").toInt(); }
+    inline void setMaxBitrate(int value) { insert("max_bitrate", value); }
+    inline int getMinBitrate() const { return value("min_bitrate").toInt(); }
+    inline void setMinBitrate(int value) { insert("min_bitrate", value); }
+    inline int getWidth() const { return value("width").toInt(); }
+    inline void setWidth(int value) { insert("width", value); }
+    inline int getHeight() const { return value("height").toInt(); }
+    inline void setHeight(int value) { insert("height", value); }
+};
+
+class StageSeatAllocation : public QJsonObject {
+public:
+    StageSeatAllocation() = default;
+    StageSeatAllocation(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getPartyId() const { return value("party_id").toString(); }
+    inline void setPartyId(const QString &value) { insert("party_id", value); }
+    inline QString getPartyEventId() const { return value("party_event_id").toString(); }
+    inline void setPartyEventId(const QString &value) { insert("party_event_id", value); }
+    inline QString getStageId() const { return value("stage_id").toString(); }
+    inline void setStageId(const QString &value) { insert("stage_id", value); }
+    inline QString getSeatName() const { return value("seat_name").toString(); }
+    inline void setSeatName(const QString &value) { insert("seat_name", value); }
+    inline QString getMemberId() const { return value("member_id").toString(); }
+    inline void setMemberId(const QString &value) { insert("member_id", value); }
+    inline QString getParticipantId() const { return value("participant_id").toString(); }
+    inline void setParticipantId(const QString &value) { insert("participant_id", value); }
+    inline QString getAccountId() const { return value("account_id").toString(); }
+    inline void setAccountId(const QString &value) { insert("account_id", value); }
+    inline QString getUuid() const { return value("uuid").toString(); }
+    inline void setUuid(const QString &value) { insert("uuid", value); }
+};
+
+class StageSeatInfo : public QJsonObject {
+public:
+    StageSeatInfo() = default;
+    StageSeatInfo(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline StageSeatAllocation getAllocation() const { return value("allocation").toObject(); }
+    inline void setAllocation(const StageSeatAllocation &value) { insert("allocation", value); }
+    inline Stage getStage() const { return value("stage").toObject(); }
+    inline void setStage(const Stage &value) { insert("stage", value); }
+    inline QList<StageConnection> getConnections() const
+    {
+        QList<StageConnection> connections;
+        foreach(const QJsonValue connectionItem, value("connections").toArray())
+        {
+            connections.append(connectionItem.toObject());
         }
         return connections;
     }
-};
-
-class StageSeatAllocation : public QObject {
-    Q_OBJECT
-
-    QString id;
-    QString partyId;
-    QString partyEventId;
-    QString stageId;
-    QString seatName;
-    QString memberId;
-    QString participantId;
-    QString accountId;
-    QString uuid;
-
-public:
-    explicit inline StageSeatAllocation(QObject *parent = nullptr) : QObject(parent) {}
-
-    inline QString getId() const { return id; }
-    inline void setId(const QString &value) { id = value; }
-    inline QString getPartyId() const { return partyId; }
-    inline void setPartyId(const QString &value) { partyId = value; }
-    inline QString getPartyEventId() const { return partyEventId; }
-    inline void setPartyEventId(const QString &value) { partyEventId = value; }
-    inline QString getStageId() const { return stageId; }
-    inline void setStageId(const QString &value) { stageId = value; }
-    inline QString getSeatName() const { return seatName; }
-    inline void setSeatName(const QString &value) { seatName = value; }
-    inline QString getMemberId() const { return memberId; }
-    inline void setMemberId(const QString &value) { memberId = value; }
-    inline QString getParticipantId() const { return participantId; }
-    inline void setParticipantId(const QString &value) { participantId = value; }
-    inline QString getAccountId() const { return accountId; }
-    inline void setAccountId(const QString &value) { accountId = value; }
-    inline QString getUuid() const { return uuid; }
-    inline void setUuid(const QString &value) { uuid = value; }
-
-    static inline StageSeatAllocation *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
+    inline void setConnections(const QList<StageConnection> &value)
     {
-        StageSeatAllocation *allocation = new StageSeatAllocation(parent);
-        allocation->setId(json["_id"].toString());
-        allocation->setPartyId(json["party_id"].toString());
-        allocation->setPartyEventId(json["party_event_id"].toString());
-        allocation->setStageId(json["stage_id"].toString());
-        allocation->setSeatName(json["seat_name"].toString());
-        allocation->setMemberId(json["member_id"].toString());
-        allocation->setParticipantId(json["participant_id"].toString());
-        allocation->setAccountId(json["account_id"].toString());
-        allocation->setUuid(json["uuid"].toString());
-        return allocation;
-    }
-};
-
-class StageSeatInfo : public QObject {
-    Q_OBJECT
-
-    StageSeatAllocation *allocation;
-    Stage *stage;
-    QList<StageConnection *> connections;
-
-public:
-    explicit inline StageSeatInfo(QObject *parent = nullptr) : QObject(parent) {}
-
-    inline StageSeatAllocation *getAllocation() const { return allocation; }
-    inline void setAllocation(StageSeatAllocation *value) { allocation = value; }
-    inline Stage *getStage() const { return stage; }
-    inline void setStage(Stage *value) { stage = value; }
-    inline QList<StageConnection *> getConnections() const { return connections; }
-    inline void setConnections(const QList<StageConnection *> &value) { connections = value; }
-
-    static inline StageSeatInfo *fromJsonObject(const QJsonObject &json, QObject *parent = nullptr)
-    {
-        StageSeatInfo *info = new StageSeatInfo(parent);
-        info->setAllocation(
-            json["allocation"].isObject() ? StageSeatAllocation::fromJsonObject(json["allocation"].toObject(), info)
-                                          : nullptr
-        );
-        info->setStage(json["stage"].isObject() ? Stage::fromJsonObject(json["stage"].toObject(), info) : nullptr);
-        info->setConnections(StageConnection::fromJsonArray(json["connections"].toArray(), info));
-        return info;
+        QJsonArray connectionsArray;
+        foreach(const StageConnection &connection, value)
+        {
+            connectionsArray.append(connection);
+        }
+        insert("connections", connectionsArray);
     }
 };

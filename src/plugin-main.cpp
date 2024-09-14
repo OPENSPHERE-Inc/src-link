@@ -54,11 +54,8 @@ bool obs_module_load(void)
     // Register menu action
     QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
-        settingsDialog = new SettingsDialog(apiClient, mainWindow);
-
-        outputDialog = new OutputDialog(apiClient, mainOutput, mainWindow);
-
         // Settings menu item
+        settingsDialog = new SettingsDialog(apiClient, mainWindow);
         QAction *settingsMenuAction =
             (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
         settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
@@ -66,6 +63,7 @@ bool obs_module_load(void)
         });
 
         // Output menu item
+        outputDialog = new OutputDialog(apiClient, mainOutput, mainWindow);
         QAction *outputMenuAction =
             (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Output"));
         outputMenuAction->connect(outputMenuAction, &QAction::triggered, [] {

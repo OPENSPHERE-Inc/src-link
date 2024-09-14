@@ -22,6 +22,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "api-client.hpp"
 
+#define DEFAULT_TIMEOUT_MSECS (10 * 1000)
+
 // This class introduces sequencial invocation of requests
 class RequestInvoker : public QObject {
     Q_OBJECT

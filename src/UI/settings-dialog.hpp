@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 
 #include <QDialog>
+#include <QGraphicsScene>
 
 #include "ui_settings-dialog.h"
 #include "../api-client.hpp"
@@ -28,13 +29,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
+    Ui::SettingsDialog *ui;
+
     SourceLinkApiClient* apiClient;
 
     void setClientActive(bool active);
-
-public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
 
 private slots:
     void onConnect();
@@ -42,16 +41,20 @@ private slots:
     void onAccept();
 
     void onLinkingFailed();
-    void onAccountInfoReady(const AccountInfo *accountInfo);
-    void onPartiesReady(const QList<Party *> &parties);
-    void onPartyEventsReady(const QList<PartyEvent *> &partyEvents);
+    void onAccountInfoReady(const AccountInfo &accountInfo);
+    void onPartiesReady(const QList<Party> &parties);
+    void onPartyEventsReady(const QList<PartyEvent> &partyEvents);
     void saveSettings();
     void loadSettings();
     void onActivePartyChanged(int index);
+    void onActivePartyEventChanged(int index);
+    void onPictureReady(const QString &pictureId, const QImage &picture);
 
 protected:
     void showEvent(QShowEvent *event) override;
 
-private:
-    Ui::SettingsDialog *ui;
+public:
+    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
+    ~SettingsDialog();
+
 };

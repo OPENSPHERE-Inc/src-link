@@ -48,6 +48,7 @@ target_sources(
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.cpp
           src/sources/linked-source.cpp
+          src/sources/audio-capture.cpp
           src/outputs/linked-output.cpp)
 
 set(o2_SRCS

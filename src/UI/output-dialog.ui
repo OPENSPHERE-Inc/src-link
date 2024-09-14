@@ -15,13 +15,6 @@
   </property>
   <layout class="QVBoxLayout" name="outputDialogLayout">
    <item>
-    <widget class="QCheckBox" name="enableCheckBox">
-     <property name="text">
-      <string>Enable Output</string>
-     </property>
-    </widget>
-   </item>
-   <item>
     <layout class="QVBoxLayout" name="propertiesLayout"/>
    </item>
    <item>

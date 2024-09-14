@@ -29,13 +29,13 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
     ui->setupUi(this);
 
     // Create dedicated data instance
-    auto settings = obs_data_create();
+    OBSDataAutoRelease settings = obs_data_create();
     output->getDefault(settings);
     obs_data_apply(settings, output->getSettings());
 
     // First arg must has non-null reference    
     propsView = new OBSPropertiesView(
-        settings, output,
+        settings.Get(), output,
         [](void *data) {
             auto output = static_cast<LinkedOutput *>(data);
             auto properties = output->getProperties();
@@ -46,8 +46,6 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
         nullptr, nullptr
     );
 
-    obs_data_release(settings);
-
     propsView->setMinimumHeight(150);
     propsView->SetDeferrable(true); // Always deferrable
 
@@ -56,8 +54,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
     connect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo *)), this,
-        SLOT(onSeatAllocationReady(const StageSeatInfo *))
+        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo &)), this,
+        SLOT(onSeatAllocationReady(const StageSeatInfo &))
     );
 
     obs_log(LOG_DEBUG, "OutputDialog created");
@@ -65,10 +63,7 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 
 OutputDialog::~OutputDialog()
 {
-    disconnect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo *)), this,
-        SLOT(onSeatAllocationReady(const StageSeatInfo *))
-    );
+    disconnect(this);
 
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
 }
@@ -79,17 +74,9 @@ void OutputDialog::onAccept()
     propsView->UpdateSettings();
 
     output->update(propsView->GetSettings());
-
-    if (ui->enableCheckBox->isChecked()) {
-        // Start output
-        output->startOutput(obs_get_video(), obs_get_audio());
-    } else {
-        // Stop output
-        output->stopOutput();
-    }
 }
 
-void OutputDialog::onSeatAllocationReady(const StageSeatInfo *seat)
+void OutputDialog::onSeatAllocationReady(const StageSeatInfo &seat)
 {
     // Refresh properties view
     propsView->ReloadProperties();

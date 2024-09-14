@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <obs-module.h>
+#include <obs.hpp>
 
 #include <QNetworkAccessManager>
 #include <QByteArray>
@@ -31,38 +32,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "schema.hpp"
 
-#define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
-#define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
-
-//#define LOCAL_DEBUG
-
-#ifdef LOCAL_DEBUG
-#define API_SERVER "http://localhost:3000"
-#else
-#define API_SERVER "https://source-link-test.opensphere.co.jp"
-#endif
-
-#define CLIENT_ID "testClientId"
-#define CLIENT_SECRET "testClientSecret"
-#define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
-#define TOKEN_URL (API_SERVER "/oauth2/token")
-#define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
-#define PARTIES_URL (API_SERVER "/api/v1/parties/my")
-#define PARTY_EVENTS_URL (API_SERVER "/api/v1/events/my")
-#define STAGES_URL (API_SERVER "/api/v1/stages")
-#define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections")
-#define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations")
-#define ACCOUNT_SCREENSHOTS_URL (API_SERVER "/api/v1/accounts/screenshots")
-#define PING_URL (API_SERVER "/api/v1/ping")
-#define SCOPE "read write"
-#define SETTINGS_JSON_NAME "settings.json"
-#define POLLING_INTERVAL_MSECS 30000
-#define DEFAULT_TIMEOUT_MSECS (10 * 1000)
-
 class SourceLinkApiClientSettingsStore : public O0AbstractStore {
     Q_OBJECT
 
-    obs_data_t *settingsData;
+    OBSDataAutoRelease settingsData;
 
 public:
     explicit SourceLinkApiClientSettingsStore(QObject *parent = nullptr);
@@ -87,12 +60,11 @@ class SourceLinkApiClient : public QObject {
     QTimer *pollingTimer;
 
     // Online rsources
-    AccountInfo *accountInfo;
-    QList<Party *> parties;
-    QList<PartyEvent *> partyEvents;  // Contains all events of all parties
-    QList<Stage *> stages;
-    StageSeatInfo *seat;
-    int seatAllocationRefs;
+    AccountInfo accountInfo;
+    QList<Party> parties;
+    QList<PartyEvent> partyEvents;  // Contains all events of all parties
+    QList<Stage> stages;
+    StageSeatInfo seat;
 
 protected:
     inline O2 *getO2Client() { return client; }
@@ -102,21 +74,21 @@ protected:
 signals:
     void linkingFailed();
     void linkingSucceeded();
-    void accountInfoReady(const AccountInfo *accountInfo);
+    void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
-    void partiesReady(const QList<Party *> &parties);
+    void partiesReady(const QList<Party> &parties);
     void partiesFailed();
-    void partyEventsReady(const QList<PartyEvent *> &partyEvents);
+    void partyEventsReady(const QList<PartyEvent> &partyEvents);
     void partyEventsFailed();
-    void stagesReady(const QList<Stage *> &stages);
+    void stagesReady(const QList<Stage> &stages);
     void stagesFailed();
-    void seatAllocationReady(const StageSeatInfo *setPartyEventId);
+    void seatAllocationReady(const StageSeatInfo &setPartyEventId);
     void seatAllocationFailed();
-    void connectionPutSucceeded(const StageConnection *connection);
+    void connectionPutSucceeded(const StageConnection &connection);
     void connectionPutFailed();
     void connectionDeleteSucceeded(const QString &uuid);
     void connectionDeleteFailed();
-    void seatAllocationPutSucceeded(const StageSeatInfo *seat);
+    void seatAllocationPutSucceeded(const StageSeatInfo &seat);
     void seatAllocationPutFailed();
     void seatAllocationDeleteSucceeded(const QString &uuid);
     void seatAllocationDeleteFailed();
@@ -124,6 +96,15 @@ signals:
     void pingFailed();
     void screenshotPutSucceeded(const QString &sourceName);
     void screenshotPutFailed();
+    void pictureGetSucceeded(const QString &pictureId, const QImage &picture);
+    void pictureGetFailed();
+
+private slots:
+    void onO2LinkedChanged();
+    void onO2LinkingSucceeded();
+    void onO2OpenBrowser(const QUrl &url);
+    void onO2RefreshFinished(QNetworkReply::NetworkError);
+    void onPollingTimerTimeout();
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
@@ -146,10 +127,11 @@ public slots:
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height
     );
-    bool deleteConnection(const QString &sourceUuid);
+    bool deleteConnection(const QString &sourceUuid, const bool noSignal = false);
     bool putSeatAllocation(const bool force = false);
-    bool deleteSeatAllocation();
+    bool deleteSeatAllocation(const bool noSignal = false);
     bool putScreenshot(const QString &sourceName, const QImage& image);
+    bool getPicture(const QString &pitureId);
 
     const int getFreePort();
     void releasePort(const int port);
@@ -170,16 +152,9 @@ public:
     }
     inline const bool getForceConnection() { return settings->value("forceConnection", "false") == "true"; }
 
-    inline const AccountInfo *getAccountInfo() const { return accountInfo; }
-    inline const QList<Party *> &getParties() const { return parties; }
-    inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
-    inline const QList<Stage *> &getStages() const { return stages; }
-    inline const StageSeatInfo *getSeat() const { return seat; }
-
-private slots:
-    void onO2LinkedChanged();
-    void onO2LinkingSucceeded();
-    void onO2OpenBrowser(const QUrl &url);
-    void onO2RefreshFinished(QNetworkReply::NetworkError);
-    void onPollingTimerTimeout();
+    inline const AccountInfo getAccountInfo() const { return accountInfo; }
+    inline const QList<Party> &getParties() const { return parties; }
+    inline const QList<PartyEvent> &getPartyEvents() const { return partyEvents; }
+    inline const QList<Stage> &getStages() const { return stages; }
+    inline const StageSeatInfo getSeat() const { return seat; }
 };

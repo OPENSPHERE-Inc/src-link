@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMutex>
 
 #include "../api-client.hpp"
+#include "audio-capture.hpp"
 
 #define MAX_AUDIO_BUFFER_FRAMES 131071
 
@@ -55,9 +56,9 @@ class LinkedSource : public QObject {
     bool clearOnMediaEnd;
 
     SourceLinkApiClient *apiClient;
-    obs_source_t *source;
-    obs_source_t *decoderSource;
-    uint32_t channels;
+    obs_source_t *source;  // Don't increse reference because couldn't finalize by OBS
+    OBSSourceAutoRelease decoderSource;
+    speaker_layout speakers;
     uint32_t samplesPerSec;
     bool connected;
     LinkedSourceAudioThread *audioThread;
@@ -68,7 +69,10 @@ class LinkedSource : public QObject {
     // Unregister connection if no stage/seat/source selected.
     void handleConnection();
 
-    static void audioCaptureCallback(void *param, obs_source_t* source, const audio_data *audioData, bool muted);
+private slots:
+    void onConnectionPutSucceeded(const StageConnection &connection);
+    void onConnectionPutFailed();
+    void onConnectionDeleteSucceeded(const QString &uuid);
 
 public:
     explicit LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
@@ -83,37 +87,17 @@ public:
     void update(obs_data_t *settings);
 
     void videoRenderCallback();
-
-private slots:
-    void onConnectionPutSucceeded(StageConnection *connection);
-    void onConnectionPutFailed();
-    void onConnectionDeleteSucceeded(const QString &uuid);
 };
 
 
-class LinkedSourceAudioThread : public QThread {
+class LinkedSourceAudioThread : public QThread, SourceAudioCapture {
     Q_OBJECT
 
     LinkedSource *linkedSource;
-    deque audioBuffer;
-    size_t audioBufferFrames;
-    uint8_t *audioConvBuffer;
-    size_t audioConvBufferSize;
-    QMutex audioBufferMutex;
-
-    struct AudioBufferHeader {
-        size_t data_idx[MAX_AV_PLANES]; // Zero means unused channel
-        uint32_t frames;
-        enum speaker_layout speakers;
-        enum audio_format format;
-        uint32_t samples_per_sec;
-        uint64_t timestamp;
-    };    
 
 public:
     explicit LinkedSourceAudioThread(LinkedSource* _linkedSource);
     ~LinkedSourceAudioThread();
 
     void run() override;
-    void pushAudio(const audio_data *audioData);
 };
