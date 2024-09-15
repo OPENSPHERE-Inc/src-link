@@ -45,8 +45,12 @@ target_sources(
           src/request-invoker.cpp
           src/schema.hpp
           src/UI/common.cpp
+          src/UI/settings-dialog.ui
           src/UI/settings-dialog.cpp
+          src/UI/output-dialog.ui
           src/UI/output-dialog.cpp
+          src/UI/source-link-dock.ui
+          src/UI/source-link-connection-widget.ui
           src/UI/source-link-dock.cpp
           src/UI/resources.qrc
           src/sources/linked-source.cpp
@@ -67,7 +71,8 @@ set(o2_SRCS
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
 target_include_directories(
-  ${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2 ${CMAKE_SOURCE_DIR}/shared/properties-view
-                                ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area)
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2 ${CMAKE_SOURCE_DIR}/shared/properties-view
+          ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

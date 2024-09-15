@@ -41,13 +41,8 @@ private slots:
 
     void onLinkingFailed();
     void onAccountInfoReady(const AccountInfo &accountInfo);
-    void onPartiesReady(const QList<Party> &parties);
-    void onPartyEventsReady(const QList<PartyEvent> &partyEvents);
     void saveSettings();
     void loadSettings();
-    void onActivePartyChanged(int index);
-    void onActivePartyEventChanged(int index);
-    void onPictureReady(const QString &pictureId, const QImage &picture);
 
 protected:
     void showEvent(QShowEvent *event) override;

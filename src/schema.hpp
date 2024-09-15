@@ -78,8 +78,7 @@ public:
     inline QList<StageSource> getSources() const
     {
         QList<StageSource> sources;
-        foreach(const QJsonValue sourceItem, value("sources").toArray())
-        {
+        foreach (const QJsonValue sourceItem, value("sources").toArray()) {
             sources.append(sourceItem.toObject());
         }
         return sources;
@@ -87,8 +86,7 @@ public:
     inline void setSources(const QList<StageSource> &value)
     {
         QJsonArray sourcesArray;
-        foreach(const StageSource &source, value)
-        {
+        foreach (const StageSource &source, value) {
             sourcesArray.append(source);
         }
         insert("sources", sourcesArray);
@@ -96,8 +94,7 @@ public:
     inline QList<StageSeat> getSeats() const
     {
         QList<StageSeat> seats;
-        foreach(const QJsonValue seatItem, value("seats").toArray())
-        {
+        foreach (const QJsonValue seatItem, value("seats").toArray()) {
             seats.append(seatItem.toObject());
         }
         return seats;
@@ -105,8 +102,7 @@ public:
     inline void setSeats(const QList<StageSeat> &value)
     {
         QJsonArray seatsArray;
-        foreach(const StageSeat &seat, value)
-        {
+        foreach (const StageSeat &seat, value) {
             seatsArray.append(seat);
         }
         insert("seats", seatsArray);
@@ -149,7 +145,10 @@ public:
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
     inline QString getStatus() const { return value("status").toString(); }
     inline void setStatus(const QString &value) { insert("status", value); }
-    inline QDateTime getStatusChangedAt() const { return QDateTime::fromString(value("status_changed_at").toString(), Qt::ISODate); }
+    inline QDateTime getStatusChangedAt() const
+    {
+        return QDateTime::fromString(value("status_changed_at").toString(), Qt::ISODate);
+    }
     inline void setStatusChangedAt(const QDateTime &value) { insert("status_changed_at", value.toString(Qt::ISODate)); }
     inline Party getParty() const { return value("party").toObject(); }
     inline void setParty(const Party &value) { insert("party", value); }
@@ -225,8 +224,7 @@ public:
     inline QList<StageConnection> getConnections() const
     {
         QList<StageConnection> connections;
-        foreach(const QJsonValue connectionItem, value("connections").toArray())
-        {
+        foreach (const QJsonValue connectionItem, value("connections").toArray()) {
             connections.append(connectionItem.toObject());
         }
         return connections;
@@ -234,8 +232,7 @@ public:
     inline void setConnections(const QList<StageConnection> &value)
     {
         QJsonArray connectionsArray;
-        foreach(const StageConnection &connection, value)
-        {
+        foreach (const StageConnection &connection, value) {
             connectionsArray.append(connection);
         }
         insert("connections", connectionsArray);

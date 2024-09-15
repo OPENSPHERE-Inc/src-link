@@ -37,7 +37,7 @@ SourceAudioCapture::SourceAudioCapture(
       audioConvBuffer(nullptr),
       audioConvBufferSize(0)
 {
-    obs_source_add_audio_capture_callback(source, onSourceAudio, this);    
+    obs_source_add_audio_capture_callback(source, onSourceAudio, this);
     obs_log(LOG_DEBUG, "%s: Source audio capture created.", obs_source_get_name(source));
 }
 
@@ -45,7 +45,7 @@ SourceAudioCapture::~SourceAudioCapture()
 {
     OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
     obs_source_remove_audio_capture_callback(source, onSourceAudio, this);
-    
+
     deque_free(&audioBuffer);
     bfree(audioConvBuffer);
 
@@ -96,8 +96,8 @@ void SourceAudioCapture::pushAudio(const audio_data *audioData, obs_source_t *so
         auto dataSize = sizeof(AudioBufferHeader) + header.speakers * header.frames * 4;
         if (dataSize > audioConvBufferSize) {
             obs_log(
-                LOG_DEBUG, "%s: Expand audioConvBuffer from %zu to %zu bytes",
-                obs_source_get_name(source), audioConvBufferSize, dataSize
+                LOG_DEBUG, "%s: Expand audioConvBuffer from %zu to %zu bytes", obs_source_get_name(source),
+                audioConvBufferSize, dataSize
             );
             audioConvBuffer = (uint8_t *)brealloc(audioConvBuffer, dataSize);
             audioConvBufferSize = dataSize;
@@ -111,7 +111,7 @@ void SourceAudioCapture::pushAudio(const audio_data *audioData, obs_source_t *so
 // Callback from obs_source_add_audio_capture_callback
 void SourceAudioCapture::onSourceAudio(void *param, obs_source_t *source, const audio_data *audioData, bool muted)
 {
-     if (muted) {
+    if (muted) {
         return;
     }
 

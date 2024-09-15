@@ -34,11 +34,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 class LinkedOutputAudioSource;
 
+enum LinkedOutputStatus {
+    LINKED_OUTPUT_STATUS_INACTIVE,
+    LINKED_OUTPUT_STATUS_STAND_BY,
+    LINKED_OUTPUT_STATUS_ACTIVE,
+    LINKED_OUTPUT_STATUS_ERROR,
+    LINKED_OUTPUT_STATUS_DISABLED
+};
+
 class LinkedOutput : public QObject {
     Q_OBJECT
 
     QString name;
-    QString sourceUuid; // Empty means capture program out.
 
     SourceLinkApiClient *apiClient;
     OBSDataAutoRelease settings;
@@ -51,7 +58,7 @@ class LinkedOutput : public QObject {
     OBSWeakSourceAutoRelease weakSource;
     LinkedOutputAudioSource *audioSource;
 
-    bool outputActive;
+    LinkedOutputStatus status;
     uint64_t connectionAttemptingAt;
     QTimer *pollingTimer;
     QTimer *monitoringTimer;
@@ -62,6 +69,17 @@ class LinkedOutput : public QObject {
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
+
+    inline void setStatus(LinkedOutputStatus value)
+    {
+        if (status != value) {
+            status = value;
+            emit statusChanged(status);
+        }
+    }
+
+signals:
+    void statusChanged(LinkedOutputStatus status);
 
 public:
     explicit LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
@@ -76,14 +94,18 @@ public:
     inline const QString &getName() const { return name; }
     inline void setName(const QString &value) { name = value; }
     inline obs_data_t *getSettings() const { return settings; }
-    inline const QString getSourceUuid() const { return sourceUuid; }
-    inline void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE) { sourceUuid = value; }
+    inline const QString getSourceUuid() const { return obs_data_get_string(settings, "source_uuid"); }
+    inline void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE)
+    {
+        obs_data_set_string(settings, "source_uuid", qPrintable(value));
+        saveSettings();
+    }
+    inline bool getStatus() const { return status; }
 
 private slots:
     void onPollingTimerTimeout();
     void onMonitoringTimerTimeout();
 };
-
 
 class LinkedOutputAudioSource : public SourceAudioCapture {
     Q_OBJECT

@@ -83,7 +83,7 @@ signals:
     void partyEventsFailed();
     void stagesReady(const QList<Stage> &stages);
     void stagesFailed();
-    void seatAllocationReady(const StageSeatInfo &setPartyEventId);
+    void seatAllocationReady(const StageSeatInfo &seat);
     void seatAllocationFailed();
     void connectionPutSucceeded(const StageConnection &connection);
     void connectionPutFailed();
@@ -139,7 +139,7 @@ public slots:
     void releasePort(const int port);
 
 public:
-    inline const QString getUuid() const { return uuid; }
+    inline const QString &getUuid() const { return uuid; }
     inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
     inline const QString getPartyId() const { return settings->value("partyId"); }
     inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }

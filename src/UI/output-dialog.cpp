@@ -33,7 +33,7 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
     output->getDefault(settings);
     obs_data_apply(settings, output->getSettings());
 
-    // First arg must has non-null reference    
+    // First arg must has non-null reference
     propsView = new OBSPropertiesView(
         settings.Get(), output,
         [](void *data) {
@@ -53,10 +53,10 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
     propsView->show();
 
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
-    connect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo &)), this,
-        SLOT(onSeatAllocationReady(const StageSeatInfo &))
-    );
+
+    auto signalHandler = obs_get_signal_handler();
+    signal_handler_connect(signalHandler, "source_create", onOBSSourcesChanged, this);
+    signal_handler_connect(signalHandler, "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "OutputDialog created");
 }
@@ -64,6 +64,10 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
 OutputDialog::~OutputDialog()
 {
     disconnect(this);
+
+    auto signalHandler = obs_get_signal_handler();
+    signal_handler_disconnect(signalHandler, "source_create", onOBSSourcesChanged, this);
+    signal_handler_disconnect(signalHandler, "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
 }
@@ -76,15 +80,15 @@ void OutputDialog::onAccept()
     output->update(propsView->GetSettings());
 }
 
-void OutputDialog::onSeatAllocationReady(const StageSeatInfo &seat)
-{
-    // Refresh properties view
-    propsView->ReloadProperties();
-}
-
 void OutputDialog::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
 
-    apiClient->putSeatAllocation();
+    propsView->ReloadProperties();
+}
+
+void OutputDialog::onOBSSourcesChanged(void *data, calldata_t *cd)
+{
+    auto dialog = (OutputDialog *)data;
+    dialog->propsView->ReloadProperties();
 }

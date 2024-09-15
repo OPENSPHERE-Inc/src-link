@@ -24,7 +24,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGraphicsScene>
 
 #include "ui_source-link-dock.h"
+#include "ui_source-link-connection-widget.h"
 #include "../api-client.hpp"
+#include "output-dialog.hpp"
+
+class SourceLinkConnectionWidget;
 
 class SourceLinkDock : public QFrame {
     Q_OBJECT
@@ -38,6 +42,9 @@ class SourceLinkDock : public QFrame {
 
     QGraphicsScene *partyPictureScene;
     QGraphicsScene *partyEventPictureScene;
+    QList<SourceLinkConnectionWidget *> connectionWidgets;
+
+    void updateConnections(const Stage &stage);
 
 private slots:
     void onPartiesReady(const QList<Party> &parties);
@@ -46,9 +53,40 @@ private slots:
     void onActivePartyEventChanged(int index);
     void onPictureReady(const QString &pictureId, const QImage &picture);
     void onPictureFailed(const QString &pictureId);
+    void onSeatAllocationReady(const StageSeatInfo &seat);
+    void onSeatAllocationFailed();
 
 public:
     explicit SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~SourceLinkDock();
+};
 
+class SourceLinkConnectionWidget : public QWidget {
+    Q_OBJECT
+
+    friend class SourceLinkDock;
+
+    Ui::SourceLinkConnectionWidget *ui;
+
+    StageSource source;
+
+    SourceLinkApiClient *apiClient;
+    LinkedOutput *output;
+    OutputDialog *outputDialog;
+
+    static void onOBSSourcesChanged(void *data, calldata_t *cd);
+
+private slots:
+    void onSettingsButtonClick();
+    void onVideoSourceChanged(int index);
+    void onOutputStatusChanged(LinkedOutputStatus status);
+    void updateSourceList();
+
+public:
+    explicit SourceLinkConnectionWidget(
+        const StageSource &_source, SourceLinkApiClient *_apiClient, QWidget *parent = nullptr
+    );
+    ~SourceLinkConnectionWidget();
+
+    void setSource(const StageSource &_source);
 };

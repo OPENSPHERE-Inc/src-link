@@ -23,9 +23,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QString>
 #include <QRandomGenerator>
-
+#include <QWidget>
 
 using OBSString = OBSPtr<char *, (void (*)(char *))bfree>;
+using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
 
 inline QString
 generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$", const QString &exclude = "lIO")

@@ -30,21 +30,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 class OutputDialog : public QDialog {
     Q_OBJECT
 
+    Ui::OutputDialog *ui;
+
     SourceLinkApiClient *apiClient;
     LinkedOutput *output;
     OBSPropertiesView *propsView;
+
+    static void onOBSSourcesChanged(void *data, calldata_t *cd);
+
+private slots:
+    void onAccept();
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 public:
     explicit OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent = nullptr);
     ~OutputDialog();
 
-private slots:
-    void onAccept();
-    void onSeatAllocationReady(const StageSeatInfo &seat);
-
-protected:
-    void showEvent(QShowEvent *event) override;
-
-private:
-    Ui::OutputDialog *ui;
 };

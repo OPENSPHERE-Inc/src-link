@@ -36,12 +36,9 @@ extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
 SourceLinkApiClient *apiClient = nullptr;
-OutputDialog *outputDialog = nullptr;
-LinkedOutput *mainOutput = nullptr;
 SourceLinkDock *sourceLinkDock = nullptr;
 
 obs_source_info linkedSourceInfo;
-
 
 void registerLinkedSourceDock()
 {
@@ -71,40 +68,22 @@ bool obs_module_load(void)
     linkedSourceInfo = createLinkedSourceInfo();
     obs_register_source(&linkedSourceInfo);
 
-    // Create main output
-    mainOutput = new LinkedOutput(QString("main"), apiClient);
-
     // Register menu action
     auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
         // Settings menu item
         settingsDialog = new SettingsDialog(apiClient, mainWindow);
         QAction *settingsMenuAction =
-            (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
-        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
-            settingsDialog->setVisible(!settingsDialog->isVisible());
-        });
-
-        // Output menu item
-        outputDialog = new OutputDialog(apiClient, mainOutput, mainWindow);
-        QAction *outputMenuAction =
-            (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Output"));
-        outputMenuAction->connect(outputMenuAction, &QAction::triggered, [] {
-            outputDialog->setVisible(!outputDialog->isVisible());
-        });
+            (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("SourceLinkSettings"));
+        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] { settingsDialog->show(); });
 
         // Dock
         if (apiClient->isLoggedIn()) {
             registerLinkedSourceDock();
         }
-        
-        QObject::connect(apiClient, &SourceLinkApiClient::loginSucceeded, []() {
-            registerLinkedSourceDock();
-        });
 
-        QObject::connect(apiClient, &SourceLinkApiClient::logoutSucceeded, []() {
-            unregisterLinkedSourceDock();
-        });
+        QObject::connect(apiClient, &SourceLinkApiClient::loginSucceeded, []() { registerLinkedSourceDock(); });
+        QObject::connect(apiClient, &SourceLinkApiClient::logoutSucceeded, []() { unregisterLinkedSourceDock(); });
     }
 
     obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
@@ -113,7 +92,6 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
-    delete mainOutput;
     delete apiClient;
     obs_log(LOG_INFO, "plugin unloaded");
 }

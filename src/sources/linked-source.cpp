@@ -192,8 +192,7 @@ obs_properties_t *LinkedSource::getProperties()
     auto stageList = obs_properties_add_list(
         props, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
-    foreach(auto &stage, apiClient->getStages())
-    {
+    foreach (auto &stage, apiClient->getStages()) {
         obs_property_list_add_string(stageList, qPrintable(stage.getName()), qPrintable(stage.getId()));
     }
 
@@ -239,8 +238,7 @@ obs_properties_t *LinkedSource::getProperties()
                 return true;
             }
 
-            foreach(auto &stage, apiClient->getStages())
-            {
+            foreach (auto &stage, apiClient->getStages()) {
                 if (stageId != stage.getId()) {
                     continue;
                 }
@@ -252,13 +250,15 @@ obs_properties_t *LinkedSource::getProperties()
                     obs_property_list_add_string(sourceList, obs_module_text("ChooseStageFirst"), "");
                 }
 
-                foreach(auto &seat, stage.getSeats())
-                {
-                    obs_property_list_add_string(seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName()));
+                foreach (auto &seat, stage.getSeats()) {
+                    obs_property_list_add_string(
+                        seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName())
+                    );
                 }
-                foreach(auto &source, stage.getSources())
-                {
-                    obs_property_list_add_string(sourceList, qPrintable(source.getDisplayName()), qPrintable(source.getName()));
+                foreach (auto &source, stage.getSources()) {
+                    obs_property_list_add_string(
+                        sourceList, qPrintable(source.getDisplayName()), qPrintable(source.getName())
+                    );
                 }
 
                 break;
@@ -420,7 +420,9 @@ void LinkedSource::onConnectionDeleteSucceeded(const QString &)
 LinkedSourceAudioThread::LinkedSourceAudioThread(LinkedSource *_linkedSource)
     : linkedSource(_linkedSource),
       QThread(_linkedSource),
-      SourceAudioCapture(_linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers, _linkedSource)
+      SourceAudioCapture(
+          _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers, _linkedSource
+      )
 {
     obs_log(LOG_DEBUG, "%s: Audio thread creating.", obs_source_get_name(linkedSource->source));
 }
