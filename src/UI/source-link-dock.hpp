@@ -20,40 +20,35 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
-#include <QDialog>
+#include <QFrame>
 #include <QGraphicsScene>
 
-#include "ui_settings-dialog.h"
+#include "ui_source-link-dock.h"
 #include "../api-client.hpp"
 
-class SettingsDialog : public QDialog {
+class SourceLinkDock : public QFrame {
     Q_OBJECT
 
-    Ui::SettingsDialog *ui;
+    Ui::SourceLinkDock *ui;
 
-    SourceLinkApiClient* apiClient;
+    SourceLinkApiClient *apiClient;
 
-    void setClientActive(bool active);
+    QImage defaultPartyPicture = QImage(":/source-link/images/unknownparty.png");
+    QImage defaultPartyEventPicture = QImage(":/source-link/images/unknownevent.png");
+
+    QGraphicsScene *partyPictureScene;
+    QGraphicsScene *partyEventPictureScene;
 
 private slots:
-    void onConnectionButtonClick();
-    void onAccept();
-
-    void onLinkingFailed();
-    void onAccountInfoReady(const AccountInfo &accountInfo);
     void onPartiesReady(const QList<Party> &parties);
     void onPartyEventsReady(const QList<PartyEvent> &partyEvents);
-    void saveSettings();
-    void loadSettings();
     void onActivePartyChanged(int index);
     void onActivePartyEventChanged(int index);
     void onPictureReady(const QString &pictureId, const QImage &picture);
-
-protected:
-    void showEvent(QShowEvent *event) override;
+    void onPictureFailed(const QString &pictureId);
 
 public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
+    explicit SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
+    ~SourceLinkDock();
 
 };

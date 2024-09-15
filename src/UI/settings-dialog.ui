@@ -17,7 +17,7 @@
    <item>
     <layout class="QHBoxLayout" name="connectionLayout">
      <item>
-      <widget class="QPushButton" name="connectButton">
+      <widget class="QPushButton" name="connectionButton">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
          <horstretch>0</horstretch>

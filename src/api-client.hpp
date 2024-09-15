@@ -72,8 +72,9 @@ protected:
     inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
 
 signals:
-    void linkingFailed();
-    void linkingSucceeded();
+    void loginSucceeded();
+    void loginFailed();
+    void logoutSucceeded();
     void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
     void partiesReady(const QList<Party> &parties);
@@ -97,11 +98,12 @@ signals:
     void screenshotPutSucceeded(const QString &sourceName);
     void screenshotPutFailed();
     void pictureGetSucceeded(const QString &pictureId, const QImage &picture);
-    void pictureGetFailed();
+    void pictureGetFailed(const QString &pictureId);
 
 private slots:
     void onO2LinkedChanged();
     void onO2LinkingSucceeded();
+    void onO2LinkingFailed();
     void onO2OpenBrowser(const QUrl &url);
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onPollingTimerTimeout();

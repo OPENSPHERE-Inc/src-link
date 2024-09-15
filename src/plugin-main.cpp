@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
+#include "UI/source-link-dock.hpp"
 #include "outputs/linked-output.hpp"
 
 OBS_DECLARE_MODULE()
@@ -37,8 +38,30 @@ SettingsDialog *settingsDialog = nullptr;
 SourceLinkApiClient *apiClient = nullptr;
 OutputDialog *outputDialog = nullptr;
 LinkedOutput *mainOutput = nullptr;
+SourceLinkDock *sourceLinkDock = nullptr;
 
 obs_source_info linkedSourceInfo;
+
+
+void registerLinkedSourceDock()
+{
+    QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
+        if (!sourceLinkDock) {
+            sourceLinkDock = new SourceLinkDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id("SourceLinkDock", obs_module_text("SourceLinkDock"), sourceLinkDock);
+        }
+    }
+}
+
+void unregisterLinkedSourceDock()
+{
+    if (sourceLinkDock) {
+        obs_frontend_remove_dock("SourceLinkDock");
+        delete sourceLinkDock;
+        sourceLinkDock = nullptr;
+    }
+}
 
 bool obs_module_load(void)
 {
@@ -68,6 +91,19 @@ bool obs_module_load(void)
             (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Output"));
         outputMenuAction->connect(outputMenuAction, &QAction::triggered, [] {
             outputDialog->setVisible(!outputDialog->isVisible());
+        });
+
+        // Dock
+        if (apiClient->isLoggedIn()) {
+            registerLinkedSourceDock();
+        }
+        
+        QObject::connect(apiClient, &SourceLinkApiClient::loginSucceeded, []() {
+            registerLinkedSourceDock();
+        });
+
+        QObject::connect(apiClient, &SourceLinkApiClient::logoutSucceeded, []() {
+            unregisterLinkedSourceDock();
         });
     }
 

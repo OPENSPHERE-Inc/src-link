@@ -39,13 +39,15 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(apiClient, SIGNAL(partiesReady(const QList<Party> &)), this, SLOT(onPartiesReady(const QList<Party> &)));
     connect(
-        apiClient, SIGNAL(partyEventsReady(const QList<PartyEvent> &)), this, SLOT(onPartyEventsReady(const QList<PartyEvent> &))
+        apiClient, SIGNAL(partyEventsReady(const QList<PartyEvent> &)), this,
+        SLOT(onPartyEventsReady(const QList<PartyEvent> &))
     );
     connect(
         apiClient, SIGNAL(pictureGetSucceeded(const QString &, const QImage &)), this,
         SLOT(onPictureReady(const QString &, const QImage &))
     );
 
+    connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClick()));
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
     connect(ui->activePartyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
     connect(ui->activePartyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
@@ -68,35 +70,26 @@ SettingsDialog::~SettingsDialog()
 void SettingsDialog::setClientActive(bool active)
 {
     if (!active) {
-        ui->connectButton->setText(QTStr("Connect"));
+        ui->connectionButton->setText(QTStr("Connect"));
         ui->accountName->setText(QTStr("Disconnected"));
-        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
-        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
     } else {
-        ui->connectButton->setText(QTStr("Disconnect"));
-        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
-        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
+        ui->connectionButton->setText(QTStr("Disconnect"));
     }
 }
 
-void SettingsDialog::onConnect()
+void SettingsDialog::onConnectionButtonClick()
 {
-    ui->connectButton->setEnabled(false);
+    ui->connectionButton->setEnabled(false);
 
-    connect(apiClient, SIGNAL(linkingFailed()), this, SLOT(onLinkingFailed()));
-
-    apiClient->login();
-}
-
-void SettingsDialog::onDisconnect()
-{
-    apiClient->logout();
-
-    ui->activePartyComboBox->clear();
-    ui->activePartyEventComboBox->clear();
-    ui->connectButton->setEnabled(true);
-
-    setClientActive(false);
+    if (!apiClient->isLoggedIn()) {
+        apiClient->login();
+    } else {
+        apiClient->logout();
+        ui->activePartyComboBox->clear();
+        ui->activePartyEventComboBox->clear();
+        ui->connectionButton->setEnabled(true);
+        setClientActive(false);
+    }
 }
 
 void SettingsDialog::onAccept()
@@ -106,19 +99,15 @@ void SettingsDialog::onAccept()
 
 void SettingsDialog::onLinkingFailed()
 {
-    ui->connectButton->setEnabled(true);
+    ui->connectionButton->setEnabled(true);
     setClientActive(false);
 }
 
 void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
 {
-    if (accountInfo.isEmpty()) {
-        return;
-    }
-
     setClientActive(true);
     ui->accountName->setText(QString("Connected: %1").arg(accountInfo.getDisplayName()));
-    ui->connectButton->setEnabled(true);
+    ui->connectionButton->setEnabled(true);
 }
 
 void SettingsDialog::onPartiesReady(const QList<Party> &parties)
@@ -181,7 +170,7 @@ void SettingsDialog::loadSettings()
 void SettingsDialog::onActivePartyChanged(int index)
 {
     auto partyId = ui->activePartyComboBox->currentData().toString();
-    foreach (const auto &party, apiClient->getParties())
+    foreach(const auto &party, apiClient->getParties())
     {
         if (party.getId() == partyId) {
             if (!party.getPictureId().isEmpty()) {
@@ -201,7 +190,7 @@ void SettingsDialog::onActivePartyChanged(int index)
 void SettingsDialog::onActivePartyEventChanged(int index)
 {
     auto partyEventId = ui->activePartyEventComboBox->currentData().toString();
-    foreach (const auto &partyEvent, apiClient->getPartyEvents())
+    foreach(const auto &partyEvent, apiClient->getPartyEvents())
     {
         if (partyEvent.getId() == partyEventId) {
             if (!partyEvent.getPictureId().isEmpty()) {
@@ -240,4 +229,4 @@ void SettingsDialog::onPictureReady(const QString &pictureId, const QImage &pict
         // Update party event picture
         ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(scaled));
     }
-} 
+}

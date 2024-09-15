@@ -123,8 +123,8 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     client->setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
 
     connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
-    connect(client, SIGNAL(linkingFailed()), this, SIGNAL(linkingFailed()));
     connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));
+    connect(client, SIGNAL(linkingFailed()), this, SLOT(onO2LinkingFailed()));
     connect(client, SIGNAL(openBrowser(QUrl)), this, SLOT(onO2OpenBrowser(QUrl)));
     connect(
         client, SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
@@ -215,13 +215,25 @@ void SourceLinkApiClient::onO2LinkedChanged()
 
 void SourceLinkApiClient::onO2LinkingSucceeded()
 {
-    CHECK_CLIENT_TOKEN();
+    if (client->linked()) {
+        CHECK_CLIENT_TOKEN();
+        obs_log(LOG_DEBUG, "The API client has linked up.");
 
-    obs_log(LOG_DEBUG, "The API client has linked up.");
+        requestOnlineResources();
 
-    requestOnlineResources();
+        emit loginSucceeded();
+    } else {
+        obs_log(LOG_DEBUG, "The API client has unlinked.");
+        
+        emit logoutSucceeded();
+    }
+}
 
-    emit linkingSucceeded();
+void SourceLinkApiClient::onO2LinkingFailed()
+{
+    obs_log(LOG_ERROR, "The API client linking failed.");
+
+    emit loginFailed();
 }
 
 void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
@@ -513,8 +525,11 @@ bool SourceLinkApiClient::getPicture(const QString &pictureId)
 {
     auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL) + "/" + pictureId)));
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
-        auto error = reply->error();
-        CHECK_RESPONSE_NOERROR(pictureGetFailed, "Getting picture of %s failed: %d", qPrintable(pictureId), error);
+        if (reply->error() != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "Getting picture of %s failed: %d", qPrintable(pictureId), reply->error());
+            emit pictureGetFailed(pictureId);
+            return;
+        }
 
         auto picture = QImage::fromData(reply->readAll());
 

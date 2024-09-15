@@ -47,6 +47,8 @@ target_sources(
           src/UI/common.cpp
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.cpp
+          src/UI/source-link-dock.cpp
+          src/UI/resources.qrc
           src/sources/linked-source.cpp
           src/sources/audio-capture.cpp
           src/outputs/linked-output.cpp)

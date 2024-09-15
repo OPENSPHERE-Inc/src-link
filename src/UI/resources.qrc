@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/source-link">
+    <file>images/unknownclient.png</file>
+    <file>images/unknownevent.png</file>
+    <file>images/unknownman.png</file>
+    <file>images/unknownparty.png</file>
+    <file>images/unknownstage.png</file>
+  </qresource>
+</RCC>
