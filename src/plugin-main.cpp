@@ -45,7 +45,7 @@ obs_source_info linkedSourceInfo;
 
 void registerLinkedSourceDock()
 {
-    QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
         if (!sourceLinkDock) {
             sourceLinkDock = new SourceLinkDock(apiClient, mainWindow);
@@ -58,7 +58,7 @@ void unregisterLinkedSourceDock()
 {
     if (sourceLinkDock) {
         obs_frontend_remove_dock("SourceLinkDock");
-        delete sourceLinkDock;
+        sourceLinkDock->deleteLater();
         sourceLinkDock = nullptr;
     }
 }
@@ -75,7 +75,7 @@ bool obs_module_load(void)
     mainOutput = new LinkedOutput(QString("main"), apiClient);
 
     // Register menu action
-    QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
         // Settings menu item
         settingsDialog = new SettingsDialog(apiClient, mainWindow);

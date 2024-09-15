@@ -43,7 +43,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
-#define LOCAL_DEBUG
+//#define LOCAL_DEBUG
 
 #ifdef LOCAL_DEBUG
 #define API_SERVER "http://localhost:3000"
