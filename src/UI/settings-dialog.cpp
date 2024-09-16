@@ -21,9 +21,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGraphicsPixmapItem>
 #include <QImageReader>
 
-#include "common.hpp"
-#include "settings-dialog.hpp"
+#include "../utils.hpp"
 #include "../plugin-support.h"
+#include "settings-dialog.hpp"
+
 
 SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),

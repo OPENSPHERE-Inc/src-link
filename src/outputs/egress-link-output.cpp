@@ -20,9 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-frontend-api.h>
 #include <util/config-file.h>
 
-#include "linked-output.hpp"
-#include "../utils.hpp"
-#include "../UI/common.hpp"
+#include "egress-link-output.hpp"
 
 #define OUTPUT_MAX_RETRIES 7
 #define OUTPUT_RETRY_DELAY_SECS 1
@@ -31,9 +29,59 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
 #define OUTPUT_RETRY_TIMEOUT_MSECS 15000
 
-//--- LinkedOutput class ---//
+inline audio_t *createSilenceAudio()
+{
+    obs_audio_info ai = {0};
+    if (!obs_get_audio_info(&ai)) {
+        return nullptr;
+    }
 
-LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent)
+    audio_output_info aoi = {0};
+    aoi.name = "Silence";
+    aoi.samples_per_sec = ai.samples_per_sec;
+    aoi.speakers = ai.speakers;
+    aoi.format = AUDIO_FORMAT_FLOAT_PLANAR;
+    aoi.input_param = nullptr;
+    aoi.input_callback = [](void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers,
+                            audio_output_data *mixes) {
+        *outTs = startTsIn;
+        return true;
+    };
+
+    audio_t *audio = nullptr;
+    audio_output_open(&audio, &aoi);
+    return audio;
+}
+
+inline bool isSourceAvailable(obs_source_t *source)
+{
+    auto width = obs_source_get_width(source);
+    auto height = obs_source_get_height(source);
+    if (width == 0 || height == 0) {
+        return false;
+    }
+
+    auto found = !!obs_scene_from_source(source);
+    if (found) {
+        return true;
+    }
+
+    obs_frontend_source_list scenes = {0};
+    obs_frontend_get_scenes(&scenes);
+
+    for (size_t i = 0; i < scenes.sources.num && !found; i++) {
+        obs_scene_t *scene = obs_scene_from_source(scenes.sources.array[i]);
+        found = !!obs_scene_find_source_recursive(scene, obs_source_get_name(source));
+    }
+
+    obs_frontend_source_list_free(&scenes);
+
+    return found;
+}
+
+//--- EgressLinkOutput class ---//
+
+EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
       name(_name),
       apiClient(_apiClient),
@@ -44,8 +92,10 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
       audioSource(nullptr),
       sourceView(nullptr),
       sourceVideo(nullptr),
-      weakSource(nullptr),
+      source(nullptr),
       settings(nullptr),
+      storedSettingsRev(0),
+      activeSettingsRev(0),
       status(LINKED_OUTPUT_STATUS_INACTIVE)
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qPrintable(name));
@@ -65,7 +115,7 @@ LinkedOutput::LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
 
-LinkedOutput::~LinkedOutput()
+EgressLinkOutput::~EgressLinkOutput()
 {
     obs_log(LOG_DEBUG, "%s: Output destroying", qPrintable(name));
 
@@ -76,7 +126,7 @@ LinkedOutput::~LinkedOutput()
     obs_log(LOG_INFO, "%s: Output destroyed", qPrintable(name));
 }
 
-obs_properties_t *LinkedOutput::getProperties()
+obs_properties_t *EgressLinkOutput::getProperties()
 {
     obs_log(LOG_DEBUG, "%s: Properties creating", qPrintable(name));
 
@@ -177,8 +227,8 @@ obs_properties_t *LinkedOutput::getProperties()
     obs_property_set_modified_callback2(
         audioEncoderList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            auto linkedOutput = static_cast<LinkedOutput *>(param);
-            obs_log(LOG_DEBUG, "%s: Audio encoder chainging", qPrintable(linkedOutput->getName()));
+            auto output = static_cast<EgressLinkOutput *>(param);
+            obs_log(LOG_DEBUG, "%s: Audio encoder chainging", qPrintable(output->getName()));
 
             const auto encoderId = obs_data_get_string(settings, "audio_encoder");
             const OBSProperties encoderProps = obs_get_encoder_properties(encoderId);
@@ -209,8 +259,8 @@ obs_properties_t *LinkedOutput::getProperties()
                 const auto format = obs_property_list_format(encoderBitrateProp);
                 if (format != OBS_COMBO_FORMAT_INT) {
                     obs_log(
-                        LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s",
-                        qPrintable(linkedOutput->getName()), encoderId
+                        LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s", qPrintable(output->getName()),
+                        encoderId
                     );
                     result = false;
                     break;
@@ -233,7 +283,7 @@ obs_properties_t *LinkedOutput::getProperties()
                 break;
             }
 
-            obs_log(LOG_INFO, "%s: Audio encoder changed", qPrintable(linkedOutput->getName()));
+            obs_log(LOG_INFO, "%s: Audio encoder changed", qPrintable(output->getName()));
             return result;
         },
         this
@@ -242,8 +292,8 @@ obs_properties_t *LinkedOutput::getProperties()
     obs_property_set_modified_callback2(
         videoEncoderList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            auto linkedOutput = static_cast<LinkedOutput *>(param);
-            obs_log(LOG_DEBUG, "%s: Video encoder chainging", qPrintable(linkedOutput->getName()));
+            auto output = static_cast<EgressLinkOutput *>(param);
+            obs_log(LOG_DEBUG, "%s: Video encoder chainging", qPrintable(output->getName()));
 
             auto videoEncoderGroup = obs_property_group_content(obs_properties_get(props, "video_encoder_group"));
             auto encoderId = obs_data_get_string(settings, "video_encoder");
@@ -262,7 +312,7 @@ obs_properties_t *LinkedOutput::getProperties()
             OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(encoderId);
             applyDefaults(settings, encoderDefaults);
 
-            obs_log(LOG_INFO, "%s: Video encoder changed", qPrintable(linkedOutput->getName()));
+            obs_log(LOG_INFO, "%s: Video encoder changed", qPrintable(output->getName()));
             return true;
         },
         this
@@ -272,7 +322,7 @@ obs_properties_t *LinkedOutput::getProperties()
     return props;
 }
 
-void LinkedOutput::getDefault(obs_data_t *defaults)
+void EgressLinkOutput::getDefault(obs_data_t *defaults)
 {
     obs_log(LOG_DEBUG, "%s: Default settings applying", qPrintable(name));
 
@@ -302,11 +352,12 @@ void LinkedOutput::getDefault(obs_data_t *defaults)
 
     obs_data_set_default_string(defaults, "trigger", "streaming");
     obs_data_set_default_string(defaults, "audio_source", "default");
+    obs_data_set_default_bool(defaults, "visible", true);
 
     obs_log(LOG_INFO, "%s: Default settings applied", qPrintable(name));
 }
 
-void LinkedOutput::update(obs_data_t *newSettings)
+void EgressLinkOutput::update(obs_data_t *newSettings)
 {
     obs_log(LOG_DEBUG, "%s: Output updating", qPrintable(name));
 
@@ -318,10 +369,22 @@ void LinkedOutput::update(obs_data_t *newSettings)
     // Save settings to permanent storage
     saveSettings();
 
+    // Increment revision to restart output
+    storedSettingsRev++;
+
     obs_log(LOG_INFO, "%s: Output updated", qPrintable(name));
 }
 
-void LinkedOutput::loadSettings()
+void EgressLinkOutput::setSourceUuid(const QString &value)
+{
+    obs_data_set_string(settings, "source_uuid", qPrintable(value));
+    saveSettings();
+
+    // Increment revision to restart output
+    storedSettingsRev++;
+}
+
+void EgressLinkOutput::loadSettings()
 {
     settings = obs_data_create();
 
@@ -334,17 +397,20 @@ void LinkedOutput::loadSettings()
 
     if (data) {
         obs_data_apply(settings, data);
+
+        // Increment revision to restart output
+        storedSettingsRev++;
     }
 }
 
-void LinkedOutput::saveSettings()
+void EgressLinkOutput::saveSettings()
 {
     // Save settings to json file
     OBSString path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
     obs_data_save_json_safe(settings, path, "tmp", "bak");
 }
 
-obs_data_t *LinkedOutput::createEgressSettings(const StageConnection &connection)
+obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connection)
 {
     obs_data_t *egressSettings = obs_data_create();
     obs_data_apply(egressSettings, settings);
@@ -370,13 +436,14 @@ obs_data_t *LinkedOutput::createEgressSettings(const StageConnection &connection
     return egressSettings;
 }
 
-void LinkedOutput::startOutput()
+void EgressLinkOutput::startOutput()
 {
     // Force free resources
     stopOutput();
 
-    QString sourceUuid = obs_data_get_string(settings, "source_uuid");
-    if (sourceUuid == "disabled") {
+    activeSettingsRev = storedSettingsRev;
+    activeSourceUuid = obs_data_get_string(settings, "source_uuid");
+    if (activeSourceUuid == "disabled" || !obs_data_get_bool(settings, "visible")) {
         setStatus(LINKED_OUTPUT_STATUS_DISABLED);
         return;
     }
@@ -433,15 +500,14 @@ void LinkedOutput::startOutput()
     auto video = obs_get_video();
     auto audio = obs_get_audio();
 
-    if (!sourceUuid.isEmpty()) {
+    if (!activeSourceUuid.isEmpty()) {
         // Specific source
-        OBSSourceAutoRelease source = obs_get_source_by_uuid(qPrintable(sourceUuid));
+        source = obs_get_source_by_uuid(qPrintable(activeSourceUuid));
         if (!source) {
-            obs_log(LOG_ERROR, "%s: Source not found: %s", qPrintable(name), qPrintable(sourceUuid));
+            obs_log(LOG_ERROR, "%s: Source not found: %s", qPrintable(name), qPrintable(activeSourceUuid));
             setStatus(LINKED_OUTPUT_STATUS_ERROR);
             return;
         }
-        weakSource = obs_source_get_weak_source(source);
         obs_source_inc_showing(source);
 
         // Video setup
@@ -474,11 +540,17 @@ void LinkedOutput::startOutput()
     QString audioSourceUuid = obs_data_get_string(egressSettings, "audio_source");
     if (audioSourceUuid.isEmpty()) {
         // Use source embeded audio
-        audioSourceUuid = sourceUuid;
+        audioSourceUuid = activeSourceUuid;
     }
     if (audioSourceUuid == "no_audio") {
         // Silence
-        audio = nullptr;
+        audioSilence = createSilenceAudio();
+        if (!audioSilence) {
+            obs_log(LOG_ERROR, "%s: Failed to create silence audio", qPrintable(name));
+            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            return;
+        }
+        audio = audioSilence;
     } else if (!audioSourceUuid.isEmpty() && !audioSourceUuid.startsWith("master_track_")) {
         // Not master audio
         OBSSourceAutoRelease source = obs_get_source_by_uuid(qPrintable(audioSourceUuid));
@@ -490,7 +562,7 @@ void LinkedOutput::startOutput()
                 return;
             }
 
-            audioSource = new LinkedOutputAudioSource(source, ai.samples_per_sec, ai.speakers, this);
+            audioSource = new OutputAudioSource(source, ai.samples_per_sec, ai.speakers, this);
             audio = audioSource->getAudio();
             if (!audio) {
                 obs_log(LOG_ERROR, "%s: Failed to create audio source", qPrintable(name));
@@ -519,34 +591,31 @@ void LinkedOutput::startOutput()
     obs_encoder_set_video(videoEncoder, video);
     obs_output_set_video_encoder(output, videoEncoder);
 
-    if (audio) {
-        // Setup audio encoder
-        auto audioEncoderId = obs_data_get_string(egressSettings, "audio_encoder");
-        obs_log(LOG_DEBUG, "%s: Audio encoder: %s", qPrintable(name), audioEncoderId);
-        auto audioBitrate = obs_data_get_int(egressSettings, "audio_bitrate");
-        OBSDataAutoRelease audioEncoderSettings = obs_encoder_defaults(audioEncoderId);
-        obs_data_set_int(audioEncoderSettings, "bitrate", audioBitrate);
+    // Setup audio encoder
+    auto audioEncoderId = obs_data_get_string(egressSettings, "audio_encoder");
+    obs_log(LOG_DEBUG, "%s: Audio encoder: %s", qPrintable(name), audioEncoderId);
+    auto audioBitrate = obs_data_get_int(egressSettings, "audio_bitrate");
+    OBSDataAutoRelease audioEncoderSettings = obs_encoder_defaults(audioEncoderId);
+    obs_data_set_int(audioEncoderSettings, "bitrate", audioBitrate);
 
-        // Determine audio track
-        size_t audioTrack = 0;
-        QString audioSourceUuid = obs_data_get_string(egressSettings, "audio_source");
-        if (audioSourceUuid.startsWith("master_track_")) {
-            size_t trackNo = 0;
-            sscanf(qPrintable(audioSourceUuid), "master_track_%zu", &trackNo);
-            audioTrack = trackNo - 1;
-        }
-
-        audioEncoder =
-            obs_audio_encoder_create(audioEncoderId, qPrintable(name), audioEncoderSettings, audioTrack, nullptr);
-        if (!audioEncoder) {
-            obs_log(LOG_ERROR, "%s: Failed to create audio encoder: %s", qPrintable(name), audioEncoderId);
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
-            return;
-        }
-
-        obs_encoder_set_audio(audioEncoder, audio);
-        obs_output_set_audio_encoder(output, audioEncoder, 0); // Don't support multiple audio outputs
+    // Determine audio track
+    size_t audioTrack = 0;
+    if (audioSourceUuid.startsWith("master_track_")) {
+        size_t value = 0;
+        sscanf(qPrintable(audioSourceUuid), "master_track_%zu", &value);
+        audioTrack = value - 1;
     }
+
+    audioEncoder =
+        obs_audio_encoder_create(audioEncoderId, qPrintable(name), audioEncoderSettings, audioTrack, nullptr);
+    if (!audioEncoder) {
+        obs_log(LOG_ERROR, "%s: Failed to create audio encoder: %s", qPrintable(name), audioEncoderId);
+        setStatus(LINKED_OUTPUT_STATUS_ERROR);
+        return;
+    }
+
+    obs_encoder_set_audio(audioEncoder, audio);
+    obs_output_set_audio_encoder(output, audioEncoder, 0); // Don't support multiple audio outputs
 
     // Start output
     if (!obs_output_start(output)) {
@@ -560,45 +629,38 @@ void LinkedOutput::startOutput()
     emit statusChanged(status);
 }
 
-void LinkedOutput::stopOutput()
+void EgressLinkOutput::stopOutput()
 {
-    if (weakSource) {
-        OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
-        if (source) {
-            obs_source_dec_showing(source);
-        }
-        weakSource = nullptr;
+    if (source) {
+        obs_source_dec_showing(source);
     }
+
+    source = nullptr;
 
     if (output) {
         if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
             obs_output_stop(output);
         }
-        output = nullptr;
     }
 
-    if (service) {
-        service = nullptr;
-    }
-
-    if (audioEncoder) {
-        audioEncoder = nullptr;
-    }
-
-    if (videoEncoder) {
-        videoEncoder = nullptr;
-    }
+    output = nullptr;
+    service = nullptr;
+    audioEncoder = nullptr;
+    videoEncoder = nullptr;
 
     if (audioSource) {
         delete audioSource;
         audioSource = nullptr;
     }
 
+    audioSilence = nullptr;
+
     if (sourceView) {
         obs_view_set_source(sourceView, 0, nullptr);
         obs_view_remove(sourceView);
-        sourceView = nullptr;
     }
+
+    sourceView = nullptr;
 
     if (status != LINKED_OUTPUT_STATUS_INACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
         obs_log(LOG_INFO, "%s: Inactivated output", qPrintable(name));
@@ -608,7 +670,7 @@ void LinkedOutput::stopOutput()
 }
 
 // Called every OUTPUT_POLLING_INTERVAL_MSECS
-void LinkedOutput::onPollingTimerTimeout()
+void EgressLinkOutput::onPollingTimerTimeout()
 {
     if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
         return;
@@ -625,7 +687,7 @@ void LinkedOutput::onPollingTimerTimeout()
 }
 
 // Called every OUTPUT_MONITORING_INTERVAL_MSECS
-void LinkedOutput::onMonitoringTimerTimeout()
+void EgressLinkOutput::onMonitoringTimerTimeout()
 {
     QString trigger = obs_data_get_string(settings, "trigger");
     if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
@@ -672,13 +734,43 @@ void LinkedOutput::onMonitoringTimerTimeout()
         if (!outputOnLive) {
             obs_log(LOG_INFO, "%s: Attempting reactivate output", qPrintable(name));
             startOutput();
+            return;
+        }
+
+        if (activeSettingsRev != storedSettingsRev) {
+            obs_log(LOG_INFO, "%s: Attempting change settings", qPrintable(name));
+            startOutput();
+            return;
+        }
+
+        if (!isSourceAvailable(source)) {
+            obs_log(LOG_INFO, "%s: Source removed", qPrintable(name));
+            stopOutput();
+            return;
         }
     }
 }
 
-//--- LinkedOutputAudioSource class ---//
+void EgressLinkOutput::setStatus(EgressLinkOutputStatus value)
+{
+    if (status != value) {
+        status = value;
+        emit statusChanged(status);
+    }
+}
 
-LinkedOutputAudioSource::LinkedOutputAudioSource(
+void EgressLinkOutput::setVisible(bool value)
+{
+    obs_data_set_bool(settings, "visible", value);
+    saveSettings();
+
+    // Increment revision to restart output
+    storedSettingsRev++;
+}
+
+//--- OutputAudioSource class ---//
+
+OutputAudioSource::OutputAudioSource(
     obs_source_t *source, uint32_t _samplesPerSec, speaker_layout _speakers, QObject *parent
 )
     : SourceAudioCapture(source, _samplesPerSec, _speakers, parent),
@@ -690,7 +782,7 @@ LinkedOutputAudioSource::LinkedOutputAudioSource(
     aoi.speakers = _speakers;
     aoi.format = AUDIO_FORMAT_FLOAT_PLANAR;
     aoi.input_param = this;
-    aoi.input_callback = LinkedOutputAudioSource::onOutputAudio;
+    aoi.input_callback = OutputAudioSource::onOutputAudio;
 
     if (audio_output_open(&audio, &aoi) < 0) {
         audio = nullptr;
@@ -700,7 +792,7 @@ LinkedOutputAudioSource::LinkedOutputAudioSource(
     active = true;
 }
 
-LinkedOutputAudioSource::~LinkedOutputAudioSource()
+OutputAudioSource::~OutputAudioSource()
 {
     active = false;
 
@@ -709,7 +801,7 @@ LinkedOutputAudioSource::~LinkedOutputAudioSource()
     }
 }
 
-uint64_t LinkedOutputAudioSource::popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData)
+uint64_t OutputAudioSource::popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData)
 {
     audioBufferMutex.lock();
     {
@@ -780,11 +872,11 @@ uint64_t LinkedOutputAudioSource::popAudio(uint64_t startTsIn, uint32_t mixers, 
 }
 
 // Callback from audio_output_open
-bool LinkedOutputAudioSource::onOutputAudio(
+bool OutputAudioSource::onOutputAudio(
     void *param, uint64_t start_ts_in, uint64_t, uint64_t *out_ts, uint32_t mixers, audio_output_data *mixes
 )
 {
-    auto *audioSource = static_cast<LinkedOutputAudioSource *>(param);
+    auto *audioSource = static_cast<OutputAudioSource *>(param);
     *out_ts = audioSource->popAudio(start_ts_in, mixers, mixes);
     return true;
 }

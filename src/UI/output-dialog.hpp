@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "ui_output-dialog.h"
 #include "../api-client.hpp"
-#include "../outputs/linked-output.hpp"
+#include "../outputs/egress-link-output.hpp"
 
 class OutputDialog : public QDialog {
     Q_OBJECT
@@ -33,7 +33,7 @@ class OutputDialog : public QDialog {
     Ui::OutputDialog *ui;
 
     SourceLinkApiClient *apiClient;
-    LinkedOutput *output;
+    EgressLinkOutput *output;
     OBSPropertiesView *propsView;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
@@ -45,7 +45,7 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 public:
-    explicit OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent = nullptr);
+    explicit OutputDialog(SourceLinkApiClient *_apiClient, EgressLinkOutput *_output, QWidget *parent = nullptr);
     ~OutputDialog();
 
 };

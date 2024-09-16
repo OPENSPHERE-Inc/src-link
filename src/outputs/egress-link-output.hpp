@@ -29,12 +29,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../api-client.hpp"
 #include "../schema.hpp"
 #include "../sources/audio-capture.hpp"
+#include "../utils.hpp"
 
 #define PROGRAM_OUT_SOURCE QString()
 
-class LinkedOutputAudioSource;
+class OutputAudioSource;
 
-enum LinkedOutputStatus {
+enum EgressLinkOutputStatus {
     LINKED_OUTPUT_STATUS_INACTIVE,
     LINKED_OUTPUT_STATUS_STAND_BY,
     LINKED_OUTPUT_STATUS_ACTIVE,
@@ -42,7 +43,7 @@ enum LinkedOutputStatus {
     LINKED_OUTPUT_STATUS_DISABLED
 };
 
-class LinkedOutput : public QObject {
+class EgressLinkOutput : public QObject {
     Q_OBJECT
 
     QString name;
@@ -53,77 +54,71 @@ class LinkedOutput : public QObject {
     OBSOutputAutoRelease output;
     OBSEncoderAutoRelease videoEncoder;
     OBSEncoderAutoRelease audioEncoder;
+    OBSSourceAutoRelease source;
     OBSView sourceView;
     video_t *sourceVideo;
-    OBSWeakSourceAutoRelease weakSource;
-    LinkedOutputAudioSource *audioSource;
+    OBSAudio audioSilence;
+    OutputAudioSource *audioSource;
 
-    LinkedOutputStatus status;
+    EgressLinkOutputStatus status;
+    QString activeSourceUuid;
+    int storedSettingsRev;
+    int activeSettingsRev;
     uint64_t connectionAttemptingAt;
     QTimer *pollingTimer;
     QTimer *monitoringTimer;
-    QString sourceName;
     int width;
     int height;
 
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
-
-    inline void setStatus(LinkedOutputStatus value)
-    {
-        if (status != value) {
-            status = value;
-            emit statusChanged(status);
-        }
-    }
+    void setStatus(EgressLinkOutputStatus value);
 
 signals:
-    void statusChanged(LinkedOutputStatus status);
+    void statusChanged(EgressLinkOutputStatus status);
 
 public:
-    explicit LinkedOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
-    ~LinkedOutput();
+    explicit EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
+    ~EgressLinkOutput();
 
     obs_properties_t *getProperties();
     void getDefault(obs_data_t *defaults);
     void update(obs_data_t *newSettings);
     void startOutput();
     void stopOutput();
+    void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE);
+    void setVisible(bool value);
 
     inline const QString &getName() const { return name; }
     inline void setName(const QString &value) { name = value; }
     inline obs_data_t *getSettings() const { return settings; }
     inline const QString getSourceUuid() const { return obs_data_get_string(settings, "source_uuid"); }
-    inline void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE)
-    {
-        obs_data_set_string(settings, "source_uuid", qPrintable(value));
-        saveSettings();
-    }
     inline bool getStatus() const { return status; }
+    inline bool getVisible() const { return obs_data_get_bool(settings, "visible"); }
 
 private slots:
     void onPollingTimerTimeout();
     void onMonitoringTimerTimeout();
 };
 
-class LinkedOutputAudioSource : public SourceAudioCapture {
+class OutputAudioSource : public SourceAudioCapture {
     Q_OBJECT
 
     audio_t *audio;
 
+    static bool onOutputAudio(
+        void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers, audio_output_data *audioData
+    );
+
 public:
-    explicit LinkedOutputAudioSource(
+    explicit OutputAudioSource(
         obs_source_t *source, uint32_t _samplesPerSec, speaker_layout _speakers, QObject *parent = nullptr
     );
-    ~LinkedOutputAudioSource();
+    ~OutputAudioSource();
 
     inline audio_t *getAudio() { return audio; }
 
     uint64_t popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData);
-
-private:
-    static bool onOutputAudio(
-        void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers, audio_output_data *audioData
-    );
 };
+

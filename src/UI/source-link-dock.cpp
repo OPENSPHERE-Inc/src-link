@@ -19,7 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <qt-wrappers.hpp>
 
-#include "../outputs/linked-output.hpp"
+#include "../outputs/egress-link-output.hpp"
 #include "source-link-dock.hpp"
 
 //--- SouceLinkDock class ---//
@@ -235,20 +235,23 @@ SourceLinkConnectionWidget::SourceLinkConnectionWidget(
 {
     ui->setupUi(this);
 
-    output = new LinkedOutput(_source.getName(), _apiClient, this);
+    output = new EgressLinkOutput(_source.getName(), _apiClient, _apiClient);
     outputDialog = new OutputDialog(_apiClient, output, this);
 
     // Must be called after output and outputDialog initialization
     setSource(_source);
 
     ui->settingsButton->setProperty("themeID", "cogsIcon");
+    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);
+    ui->visibilityCheckBox->setChecked(output->getVisible());
 
     onOutputStatusChanged(LINKED_OUTPUT_STATUS_INACTIVE);
     updateSourceList();
 
-    connect(output, SIGNAL(statusChanged(LinkedOutputStatus)), this, SLOT(onOutputStatusChanged(LinkedOutputStatus)));
+    connect(output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus)));
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
+    connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
     
     auto signalHandler = obs_get_signal_handler();
     signal_handler_connect(signalHandler, "source_create", onOBSSourcesChanged, this);
@@ -278,7 +281,7 @@ void SourceLinkConnectionWidget::onVideoSourceChanged(int)
     output->setSourceUuid(ui->videoSourceComboBox->currentData().toString());
 }
 
-void SourceLinkConnectionWidget::onOutputStatusChanged(LinkedOutputStatus status)
+void SourceLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
 {
     switch (status) {
     case LINKED_OUTPUT_STATUS_ACTIVE:
@@ -353,4 +356,9 @@ void SourceLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
 {
     auto widget = (SourceLinkConnectionWidget *)data;
     widget->updateSourceList();
+}
+
+void SourceLinkConnectionWidget::onVisibilityChanged(bool value)
+{
+    output->setVisible(value);
 }

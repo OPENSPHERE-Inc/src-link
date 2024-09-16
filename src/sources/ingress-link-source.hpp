@@ -31,10 +31,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define MAX_AUDIO_BUFFER_FRAMES 131071
 
 
-class LinkedSource : public QObject {
+class IngressLinkSource : public QObject {
     Q_OBJECT
 
-    friend class LinkedSourceAudioThread;
+    friend class SourceAudioThread;
 
     QString uuid;
     int port;
@@ -61,7 +61,7 @@ class LinkedSource : public QObject {
     speaker_layout speakers;
     uint32_t samplesPerSec;
     bool connected;
-    LinkedSourceAudioThread *audioThread;
+    SourceAudioThread *audioThread;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
@@ -75,8 +75,8 @@ private slots:
     void onConnectionDeleteSucceeded(const QString &uuid);
 
 public:
-    explicit LinkedSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
-    ~LinkedSource();
+    explicit IngressLinkSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
+    ~IngressLinkSource();
 
     obs_properties_t *getProperties();
     void getDefault(obs_data_t *settings);
@@ -90,14 +90,14 @@ public:
 };
 
 
-class LinkedSourceAudioThread : public QThread, SourceAudioCapture {
+class SourceAudioThread : public QThread, SourceAudioCapture {
     Q_OBJECT
 
-    LinkedSource *linkedSource;
+    IngressLinkSource *linkedSource;
 
 public:
-    explicit LinkedSourceAudioThread(LinkedSource* _linkedSource);
-    ~LinkedSourceAudioThread();
+    explicit SourceAudioThread(IngressLinkSource* _linkedSource);
+    ~SourceAudioThread();
 
     void run() override;
 };

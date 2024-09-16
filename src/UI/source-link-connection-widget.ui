@@ -23,6 +23,19 @@
    <item>
     <layout class="QHBoxLayout" name="headerLayout">
      <item>
+      <widget class="QCheckBox" name="visibilityCheckBox">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="headerLabel">
        <property name="font">
         <font>

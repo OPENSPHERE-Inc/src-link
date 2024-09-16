@@ -37,7 +37,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "api-client.hpp"
 #include "request-invoker.hpp"
-#include "UI/common.hpp"
 #include "utils.hpp"
 
 //#define LOCAL_DEBUG

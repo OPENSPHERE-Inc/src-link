@@ -44,7 +44,7 @@ target_sources(
           src/api-client.cpp
           src/request-invoker.cpp
           src/schema.hpp
-          src/UI/common.cpp
+          src/utils.cpp
           src/UI/settings-dialog.ui
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.ui
@@ -53,9 +53,9 @@ target_sources(
           src/UI/source-link-connection-widget.ui
           src/UI/source-link-dock.cpp
           src/UI/resources.qrc
-          src/sources/linked-source.cpp
+          src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp
-          src/outputs/linked-output.cpp)
+          src/outputs/egress-link-output.cpp)
 
 set(o2_SRCS
     lib/o2/o2.cpp

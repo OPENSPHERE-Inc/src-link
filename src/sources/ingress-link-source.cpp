@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../plugin-support.h"
 #include "../utils.hpp"
-#include "linked-source.hpp"
+#include "ingress-link-source.hpp"
 
 inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QString &streamId, bool remote = false)
 {
@@ -50,9 +50,9 @@ inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QS
     return parameters;
 }
 
-//--- LinkedSource class ---//
+//--- IngressLinkSource class ---//
 
-LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent)
+IngressLinkSource::IngressLinkSource(obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
       source(_source),
       apiClient(_apiClient),
@@ -84,7 +84,7 @@ LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *_source, SourceLi
     samplesPerSec = ai.samples_per_sec;
 
     // Audio handling
-    audioThread = new LinkedSourceAudioThread(this);
+    audioThread = new SourceAudioThread(this);
     audioThread->start();
 
     connect(
@@ -100,7 +100,7 @@ LinkedSource::LinkedSource(obs_data_t *settings, obs_source_t *_source, SourceLi
     obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
 }
 
-LinkedSource::~LinkedSource()
+IngressLinkSource::~IngressLinkSource()
 {
     obs_log(LOG_INFO, "%s: Source destroying", obs_source_get_name(source));
 
@@ -120,7 +120,7 @@ LinkedSource::~LinkedSource()
     obs_log(LOG_INFO, "%s: Source destroyed", obs_source_get_name(source));
 }
 
-void LinkedSource::captureSettings(obs_data_t *settings)
+void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
     stageId = obs_data_get_string(settings, "stage_id");
     seatName = obs_data_get_string(settings, "seat_name");
@@ -141,7 +141,7 @@ void LinkedSource::captureSettings(obs_data_t *settings)
     remoteParameters = compositeParameters(settings, passphrase, streamId, true);
 }
 
-obs_data_t *LinkedSource::createDecoderSettings()
+obs_data_t *IngressLinkSource::createDecoderSettings()
 {
     auto decoderSettings = obs_data_create();
 
@@ -164,7 +164,7 @@ obs_data_t *LinkedSource::createDecoderSettings()
     return decoderSettings;
 }
 
-void LinkedSource::handleConnection()
+void IngressLinkSource::handleConnection()
 {
     if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
@@ -181,7 +181,7 @@ void LinkedSource::handleConnection()
     }
 }
 
-obs_properties_t *LinkedSource::getProperties()
+obs_properties_t *IngressLinkSource::getProperties()
 {
     auto props = obs_properties_create();
     obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
@@ -345,7 +345,7 @@ obs_properties_t *LinkedSource::getProperties()
     return props;
 }
 
-void LinkedSource::getDefault(obs_data_t *settings)
+void IngressLinkSource::getDefault(obs_data_t *settings)
 {
     obs_log(LOG_DEBUG, "Default settings applying.");
 
@@ -370,23 +370,23 @@ void LinkedSource::getDefault(obs_data_t *settings)
     obs_log(LOG_INFO, "Default settings applied.");
 }
 
-uint32_t LinkedSource::getWidth()
+uint32_t IngressLinkSource::getWidth()
 {
     return obs_source_get_width(decoderSource);
 }
 
-uint32_t LinkedSource::getHeight()
+uint32_t IngressLinkSource::getHeight()
 {
     return obs_source_get_height(decoderSource);
 }
 
-void LinkedSource::videoRenderCallback()
+void IngressLinkSource::videoRenderCallback()
 {
     // Just pass through the video
     obs_source_video_render(decoderSource);
 }
 
-void LinkedSource::update(obs_data_t *settings)
+void IngressLinkSource::update(obs_data_t *settings)
 {
     obs_log(LOG_DEBUG, "%s: Source updating", obs_source_get_name(source));
 
@@ -400,24 +400,24 @@ void LinkedSource::update(obs_data_t *settings)
     obs_log(LOG_INFO, "%s: Source updated", obs_source_get_name(source));
 }
 
-void LinkedSource::onConnectionPutSucceeded(const StageConnection &connection)
+void IngressLinkSource::onConnectionPutSucceeded(const StageConnection &connection)
 {
     connected = true;
 }
 
-void LinkedSource::onConnectionPutFailed()
+void IngressLinkSource::onConnectionPutFailed()
 {
     connected = false;
 }
 
-void LinkedSource::onConnectionDeleteSucceeded(const QString &)
+void IngressLinkSource::onConnectionDeleteSucceeded(const QString &)
 {
     connected = false;
 }
 
 //--- SourceLinkAudioThread class ---//
 
-LinkedSourceAudioThread::LinkedSourceAudioThread(LinkedSource *_linkedSource)
+SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource)
     : linkedSource(_linkedSource),
       QThread(_linkedSource),
       SourceAudioCapture(
@@ -427,7 +427,7 @@ LinkedSourceAudioThread::LinkedSourceAudioThread(LinkedSource *_linkedSource)
     obs_log(LOG_DEBUG, "%s: Audio thread creating.", obs_source_get_name(linkedSource->source));
 }
 
-LinkedSourceAudioThread::~LinkedSourceAudioThread()
+SourceAudioThread::~SourceAudioThread()
 {
     if (isRunning()) {
         requestInterruption();
@@ -437,7 +437,7 @@ LinkedSourceAudioThread::~LinkedSourceAudioThread()
     obs_log(LOG_DEBUG, "%s: Audio thread destroyed.", obs_source_get_name(linkedSource->source));
 }
 
-void LinkedSourceAudioThread::run()
+void SourceAudioThread::run()
 {
     obs_log(LOG_DEBUG, "%s: Audio thread started.", obs_source_get_name(linkedSource->source));
     active = true;
@@ -494,48 +494,48 @@ extern SourceLinkApiClient *apiClient;
 
 void *createSource(obs_data_t *settings, obs_source_t *source)
 {
-    return new LinkedSource(settings, source, apiClient);
+    return new IngressLinkSource(settings, source, apiClient);
 }
 
 void destroySource(void *data)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     delete linkedSource;
 }
 
 obs_properties_t *getProperties(void *data)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     return linkedSource->getProperties();
 }
 
 void getDefault(void *data, obs_data_t *settings)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     linkedSource->getDefault(settings);
 }
 
 uint32_t getWidth(void *data)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     return linkedSource->getWidth();
 }
 
 uint32_t getHeight(void *data)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     return linkedSource->getHeight();
 }
 
 void videoRender(void *data, gs_effect_t *)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     linkedSource->videoRenderCallback();
 }
 
 void update(void *data, obs_data_t *settings)
 {
-    auto linkedSource = static_cast<LinkedSource *>(data);
+    auto linkedSource = static_cast<IngressLinkSource *>(data);
     linkedSource->update(settings);
 }
 

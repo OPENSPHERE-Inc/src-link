@@ -23,10 +23,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QFrame>
 #include <QGraphicsScene>
 
-#include "ui_source-link-dock.h"
-#include "ui_source-link-connection-widget.h"
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
+#include "ui_source-link-dock.h"
+#include "ui_source-link-connection-widget.h"
 
 class SourceLinkConnectionWidget;
 
@@ -71,7 +71,7 @@ class SourceLinkConnectionWidget : public QWidget {
     StageSource source;
 
     SourceLinkApiClient *apiClient;
-    LinkedOutput *output;
+    EgressLinkOutput *output;
     OutputDialog *outputDialog;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
@@ -79,8 +79,9 @@ class SourceLinkConnectionWidget : public QWidget {
 private slots:
     void onSettingsButtonClick();
     void onVideoSourceChanged(int index);
-    void onOutputStatusChanged(LinkedOutputStatus status);
+    void onOutputStatusChanged(EgressLinkOutputStatus status);
     void updateSourceList();
+    void onVisibilityChanged(bool value);
 
 public:
     explicit SourceLinkConnectionWidget(

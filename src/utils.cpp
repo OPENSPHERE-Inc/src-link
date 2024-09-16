@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include "common.hpp"
+#include "utils.hpp"
 
 // The code from obs-websocket plugin
 // https://github.com/obsproject/obs-websocket/blob/a73c92788d70f08f91b8c0477b74f99c999beb09/src/requesthandler/RequestHandler_Sources.cpp#L28

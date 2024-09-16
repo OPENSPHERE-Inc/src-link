@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 using OBSString = OBSPtr<char *, (void (*)(char *))bfree>;
 using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
+using OBSAudio = OBSPtr<audio_t *, audio_output_close>;
 
 inline QString
 generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$", const QString &exclude = "lIO")
@@ -151,3 +152,11 @@ inline const char *getSimpleAudioEncoder(const char *encoder)
         return "ffmpeg_aac";
     }
 }
+
+inline QString QTStr(const char *lookupVal)
+{
+    return QString::fromUtf8(obs_module_text(lookupVal));
+}
+
+QImage
+TakeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth = 0, uint32_t requestedHeight = 0);

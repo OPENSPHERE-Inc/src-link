@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- OutputDialog class ---//
 
-OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent)
+OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, EgressLinkOutput *_output, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::OutputDialog),
       apiClient(_apiClient),
@@ -37,7 +37,7 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_outpu
     propsView = new OBSPropertiesView(
         settings.Get(), output,
         [](void *data) {
-            auto output = static_cast<LinkedOutput *>(data);
+            auto output = static_cast<EgressLinkOutput *>(data);
             auto properties = output->getProperties();
             // Neccessary to apply default settings
             obs_properties_apply_settings(properties, output->getSettings());

@@ -27,7 +27,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
 #include "UI/source-link-dock.hpp"
-#include "outputs/linked-output.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
