@@ -37,8 +37,8 @@ class SourceLinkDock : public QFrame {
 
     SourceLinkApiClient *apiClient;
 
-    QImage defaultPartyPicture = QImage(":/source-link/images/unknownparty.png");
-    QImage defaultPartyEventPicture = QImage(":/source-link/images/unknownevent.png");
+    QImage defaultPartyPicture;
+    QImage defaultPartyEventPicture;
 
     QGraphicsScene *partyPictureScene;
     QGraphicsScene *partyEventPictureScene;
@@ -70,9 +70,10 @@ class SourceLinkConnectionWidget : public QWidget {
 
     StageSource source;
 
-    SourceLinkApiClient *apiClient;
     EgressLinkOutput *output;
     OutputDialog *outputDialog;
+    OBSSignal sourceCreateSignal;
+    OBSSignal sourceRemoveSignal;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
 
@@ -85,7 +86,7 @@ private slots:
 
 public:
     explicit SourceLinkConnectionWidget(
-        const StageSource &_source, SourceLinkApiClient *_apiClient, QWidget *parent = nullptr
+        const StageSource &_source, SourceLinkApiClient *_client, QWidget *parent = nullptr
     );
     ~SourceLinkConnectionWidget();
 

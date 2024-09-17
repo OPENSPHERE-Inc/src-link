@@ -49,16 +49,18 @@ class EgressLinkOutput : public QObject {
     QString name;
 
     SourceLinkApiClient *apiClient;
+    StageConnection connection;
     OBSDataAutoRelease settings;
     OBSServiceAutoRelease service;
     OBSOutputAutoRelease output;
     OBSEncoderAutoRelease videoEncoder;
     OBSEncoderAutoRelease audioEncoder;
-    OBSSourceAutoRelease source;
+    OBSSourceAutoRelease source;  // NULL if main output is used.
     OBSView sourceView;
     video_t *sourceVideo;
     OBSAudio audioSilence;
     OutputAudioSource *audioSource;
+    QMutex outputMutex;
 
     EgressLinkOutputStatus status;
     QString activeSourceUuid;
@@ -74,19 +76,25 @@ class EgressLinkOutput : public QObject {
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
     void setStatus(EgressLinkOutputStatus value);
+    void releaseResources(bool stopStatus = false);
 
 signals:
     void statusChanged(EgressLinkOutputStatus status);
 
+private slots:
+    void onPollingTimerTimeout();
+    void onMonitoringTimerTimeout();
+    void onSeatAllocationReady(const StageSeatInfo &seat);
+
 public:
-    explicit EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
+    explicit EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient);
     ~EgressLinkOutput();
 
     obs_properties_t *getProperties();
     void getDefault(obs_data_t *defaults);
     void update(obs_data_t *newSettings);
-    void startOutput();
-    void stopOutput();
+    void start();
+    void stop();
     void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE);
     void setVisible(bool value);
 
@@ -96,10 +104,6 @@ public:
     inline const QString getSourceUuid() const { return obs_data_get_string(settings, "source_uuid"); }
     inline bool getStatus() const { return status; }
     inline bool getVisible() const { return obs_data_get_bool(settings, "visible"); }
-
-private slots:
-    void onPollingTimerTimeout();
-    void onMonitoringTimerTimeout();
 };
 
 class OutputAudioSource : public SourceAudioCapture {

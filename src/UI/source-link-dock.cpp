@@ -27,7 +27,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
       ui(new Ui::SourceLinkDock),
-      apiClient(_apiClient)
+      apiClient(_apiClient),
+      defaultPartyPicture(":/source-link/images/unknownparty.png"),
+      defaultPartyEventPicture(":/source-link/images/unknownevent.png")
 {
     ui->setupUi(this);
 
@@ -86,6 +88,12 @@ void SourceLinkDock::onPartiesReady(const QList<Party> &parties)
     } else {
         ui->partyComboBox->setCurrentIndex(0);
     }
+
+    // Reset picture for no parties
+    if (!parties.size()) {
+        ui->partyPictureView->setProperty("pictureId", "");
+        partyPictureScene->addPixmap(QPixmap::fromImage(defaultPartyPicture));
+    }
 }
 
 void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
@@ -110,6 +118,12 @@ void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
         ui->partyEventComboBox->setCurrentIndex(ui->partyEventComboBox->findData(selected));
     } else {
         ui->partyEventComboBox->setCurrentIndex(0);
+    }
+
+    // Reset picture for no party events
+    if (!partyEvents.size()) {
+        ui->partyEventPictureView->setProperty("pictureId", "");
+        partyEventPictureScene->addPixmap(QPixmap::fromImage(defaultPartyEventPicture));
     }
 }
 
@@ -231,12 +245,12 @@ SourceLinkConnectionWidget::SourceLinkConnectionWidget(
 )
     : QWidget(parent),
       ui(new Ui::SourceLinkConnectionWidget),
-      apiClient(_apiClient)
+      source(_source)
 {
     ui->setupUi(this);
 
-    output = new EgressLinkOutput(_source.getName(), _apiClient, _apiClient);
-    outputDialog = new OutputDialog(_apiClient, output, this);
+    output = new EgressLinkOutput(source.getName(), _apiClient);
+    outputDialog = new OutputDialog(output, this);
 
     // Must be called after output and outputDialog initialization
     setSource(_source);
@@ -248,14 +262,19 @@ SourceLinkConnectionWidget::SourceLinkConnectionWidget(
     onOutputStatusChanged(LINKED_OUTPUT_STATUS_INACTIVE);
     updateSourceList();
 
+    if (output->getSourceUuid().isEmpty()) {
+        ui->videoSourceComboBox->setCurrentIndex(1);
+    } else {
+        ui->videoSourceComboBox->setCurrentIndex(ui->videoSourceComboBox->findData(output->getSourceUuid()));
+    }
+
     connect(output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus)));
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
     connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
     
-    auto signalHandler = obs_get_signal_handler();
-    signal_handler_connect(signalHandler, "source_create", onOBSSourcesChanged, this);
-    signal_handler_connect(signalHandler, "source_remove", onOBSSourcesChanged, this);
+    sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "SourceLinkConnectionWidget created");
 }
@@ -264,9 +283,10 @@ SourceLinkConnectionWidget::~SourceLinkConnectionWidget()
 {
     disconnect(this);
 
-    auto signalHandler = obs_get_signal_handler();
-    signal_handler_disconnect(signalHandler, "source_create", onOBSSourcesChanged, this);
-    signal_handler_disconnect(signalHandler, "source_remove", onOBSSourcesChanged, this);
+    sourceCreateSignal.Disconnect();
+    sourceRemoveSignal.Disconnect();
+
+    delete output;
 
     obs_log(LOG_DEBUG, "SourceLinkConnectionWidget destroyed");
 }

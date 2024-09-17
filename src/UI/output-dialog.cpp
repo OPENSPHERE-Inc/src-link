@@ -20,10 +20,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- OutputDialog class ---//
 
-OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, EgressLinkOutput *_output, QWidget *parent)
+OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::OutputDialog),
-      apiClient(_apiClient),
       output(_output)
 {
     ui->setupUi(this);
@@ -54,9 +53,8 @@ OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, EgressLinkOutput *_o
 
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
 
-    auto signalHandler = obs_get_signal_handler();
-    signal_handler_connect(signalHandler, "source_create", onOBSSourcesChanged, this);
-    signal_handler_connect(signalHandler, "source_remove", onOBSSourcesChanged, this);
+    sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "OutputDialog created");
 }
@@ -65,9 +63,8 @@ OutputDialog::~OutputDialog()
 {
     disconnect(this);
 
-    auto signalHandler = obs_get_signal_handler();
-    signal_handler_disconnect(signalHandler, "source_create", onOBSSourcesChanged, this);
-    signal_handler_disconnect(signalHandler, "source_remove", onOBSSourcesChanged, this);
+    sourceCreateSignal.Disconnect();
+    sourceRemoveSignal.Disconnect();
 
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
 }

@@ -53,8 +53,8 @@ void registerLinkedSourceDock()
 void unregisterLinkedSourceDock()
 {
     if (sourceLinkDock) {
+        // The instance will be deleted by OBS (Do not call delete manually!)
         obs_frontend_remove_dock("SourceLinkDock");
-        sourceLinkDock->deleteLater();
         sourceLinkDock = nullptr;
     }
 }

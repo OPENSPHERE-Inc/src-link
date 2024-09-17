@@ -32,9 +32,10 @@ class OutputDialog : public QDialog {
 
     Ui::OutputDialog *ui;
 
-    SourceLinkApiClient *apiClient;
     EgressLinkOutput *output;
     OBSPropertiesView *propsView;
+    OBSSignal sourceCreateSignal;
+    OBSSignal sourceRemoveSignal;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
 
@@ -45,7 +46,7 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 public:
-    explicit OutputDialog(SourceLinkApiClient *_apiClient, EgressLinkOutput *_output, QWidget *parent = nullptr);
+    explicit OutputDialog(EgressLinkOutput *_output, QWidget *parent = nullptr);
     ~OutputDialog();
 
 };
