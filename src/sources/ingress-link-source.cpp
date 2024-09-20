@@ -52,7 +52,9 @@ inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QS
 
 //--- IngressLinkSource class ---//
 
-IngressLinkSource::IngressLinkSource(obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent)
+IngressLinkSource::IngressLinkSource(
+    obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent
+)
     : QObject(parent),
       source(_source),
       apiClient(_apiClient),
@@ -345,7 +347,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     return props;
 }
 
-void IngressLinkSource::getDefault(obs_data_t *settings)
+void IngressLinkSource::getDefaults(obs_data_t *settings)
 {
     obs_log(LOG_DEBUG, "Default settings applying.");
 
@@ -509,10 +511,9 @@ obs_properties_t *getProperties(void *data)
     return linkedSource->getProperties();
 }
 
-void getDefault(void *data, obs_data_t *settings)
+void getDefaults(obs_data_t *settings)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    linkedSource->getDefault(settings);
+    IngressLinkSource::getDefaults(settings);
 }
 
 uint32_t getWidth(void *data)
@@ -547,13 +548,13 @@ obs_source_info createLinkedSourceInfo()
     sourceInfo.type = OBS_SOURCE_TYPE_INPUT;
     sourceInfo.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO;
 
-    sourceInfo.get_name = [](void *unused) {
+    sourceInfo.get_name = [](void *) {
         return "Source Linked Source";
     };
     sourceInfo.create = createSource;
     sourceInfo.destroy = destroySource;
     sourceInfo.get_properties = getProperties;
-    sourceInfo.get_defaults2 = getDefault;
+    sourceInfo.get_defaults = getDefaults;
     sourceInfo.get_width = getWidth;
     sourceInfo.get_height = getHeight;
     sourceInfo.video_render = videoRender;

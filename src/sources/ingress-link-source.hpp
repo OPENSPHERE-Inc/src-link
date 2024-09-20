@@ -30,7 +30,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define MAX_AUDIO_BUFFER_FRAMES 131071
 
-
 class IngressLinkSource : public QObject {
     Q_OBJECT
 
@@ -56,7 +55,7 @@ class IngressLinkSource : public QObject {
     bool clearOnMediaEnd;
 
     SourceLinkApiClient *apiClient;
-    obs_source_t *source;  // Don't increse reference because couldn't finalize by OBS
+    obs_source_t *source; // Don't increse reference because couldn't finalize by OBS
     OBSSourceAutoRelease decoderSource;
     speaker_layout speakers;
     uint32_t samplesPerSec;
@@ -75,11 +74,12 @@ private slots:
     void onConnectionDeleteSucceeded(const QString &uuid);
 
 public:
-    explicit IngressLinkSource(obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr);
+    explicit IngressLinkSource(
+        obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr
+    );
     ~IngressLinkSource();
 
     obs_properties_t *getProperties();
-    void getDefault(obs_data_t *settings);
     // Returns source's actual width
     uint32_t getWidth();
     // Returns source's actual height
@@ -87,8 +87,9 @@ public:
     void update(obs_data_t *settings);
 
     void videoRenderCallback();
-};
 
+    static void getDefaults(obs_data_t *settings);
+};
 
 class SourceAudioThread : public QThread, SourceAudioCapture {
     Q_OBJECT
@@ -96,7 +97,7 @@ class SourceAudioThread : public QThread, SourceAudioCapture {
     IngressLinkSource *linkedSource;
 
 public:
-    explicit SourceAudioThread(IngressLinkSource* _linkedSource);
+    explicit SourceAudioThread(IngressLinkSource *_linkedSource);
     ~SourceAudioThread();
 
     void run() override;

@@ -25,7 +25,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../plugin-support.h"
 #include "settings-dialog.hpp"
 
-
 SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::SettingsDialog),
@@ -94,7 +93,6 @@ void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
     ui->accountName->setText(QString("Connected: %1").arg(accountInfo.getDisplayName()));
     ui->connectionButton->setEnabled(true);
 }
-
 
 void SettingsDialog::saveSettings()
 {

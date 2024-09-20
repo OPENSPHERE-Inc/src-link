@@ -268,18 +268,20 @@ SourceLinkConnectionWidget::SourceLinkConnectionWidget(
         ui->videoSourceComboBox->setCurrentIndex(ui->videoSourceComboBox->findData(output->getSourceUuid()));
     }
 
-    connect(output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus)));
+    connect(
+        output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus))
+    );
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
     connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
-    
+
     sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
     sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "SourceLinkConnectionWidget created");
 }
 
-SourceLinkConnectionWidget::~SourceLinkConnectionWidget() 
+SourceLinkConnectionWidget::~SourceLinkConnectionWidget()
 {
     disconnect(this);
 
@@ -361,7 +363,7 @@ void SourceLinkConnectionWidget::setSource(const StageSource &_source)
     source = _source;
 
     ui->headerLabel->setText(source.getDisplayName());
-    ui->descriptionLabel->setText(source.getDescription());    
+    ui->descriptionLabel->setText(source.getDescription());
     if (source.getDescription().isEmpty()) {
         ui->descriptionLabel->hide();
     } else {

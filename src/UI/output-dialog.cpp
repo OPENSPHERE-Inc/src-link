@@ -29,7 +29,7 @@ OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
 
     // Create dedicated data instance
     OBSDataAutoRelease settings = obs_data_create();
-    output->getDefault(settings);
+    output->getDefaults(settings);
     obs_data_apply(settings, output->getSettings());
 
     // First arg must has non-null reference

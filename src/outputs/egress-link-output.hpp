@@ -55,7 +55,7 @@ class EgressLinkOutput : public QObject {
     OBSOutputAutoRelease output;
     OBSEncoderAutoRelease videoEncoder;
     OBSEncoderAutoRelease audioEncoder;
-    OBSSourceAutoRelease source;  // NULL if main output is used.
+    OBSSourceAutoRelease source; // NULL if main output is used.
     OBSView sourceView;
     video_t *sourceVideo;
     OBSAudio audioSilence;
@@ -91,7 +91,7 @@ public:
     ~EgressLinkOutput();
 
     obs_properties_t *getProperties();
-    void getDefault(obs_data_t *defaults);
+    void getDefaults(obs_data_t *defaults);
     void update(obs_data_t *newSettings);
     void start();
     void stop();
@@ -125,4 +125,3 @@ public:
 
     uint64_t popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData);
 };
-

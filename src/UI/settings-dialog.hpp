@@ -31,7 +31,7 @@ class SettingsDialog : public QDialog {
 
     Ui::SettingsDialog *ui;
 
-    SourceLinkApiClient* apiClient;
+    SourceLinkApiClient *apiClient;
 
     void setClientActive(bool active);
 
@@ -48,7 +48,6 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
+    SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~SettingsDialog();
-
 };

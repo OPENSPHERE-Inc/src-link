@@ -327,7 +327,7 @@ obs_properties_t *EgressLinkOutput::getProperties()
     return props;
 }
 
-void EgressLinkOutput::getDefault(obs_data_t *defaults)
+void EgressLinkOutput::getDefaults(obs_data_t *defaults)
 {
     obs_log(LOG_DEBUG, "%s: Default settings applying", qPrintable(name));
 
@@ -394,7 +394,7 @@ void EgressLinkOutput::loadSettings()
     settings = obs_data_create();
 
     // Apply defaults
-    getDefault(settings);
+    getDefaults(settings);
 
     // Load settings from json
     OBSString path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
@@ -731,12 +731,16 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
     if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
         if (trigger == "always") {
             start();
-        } else if (trigger == "streaming" || trigger == "streaming_recording") {
+        } else if (trigger == "streaming") {
             if (obs_frontend_streaming_active()) {
                 start();
             }
-        } else if (trigger == "recording" || trigger == "streaming_recording") {
+        } else if (trigger == "recording") {
             if (obs_frontend_recording_active()) {
+                start();
+            }
+        } else if (trigger == "streaming_recording") {
+            if (obs_frontend_streaming_active() || obs_frontend_recording_active()) {
                 start();
             }
         } else if (trigger == "virtual_cam") {
@@ -751,13 +755,18 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
         if (trigger == "disabled") {
             stop();
             return;
-        } else if (trigger == "streaming" || trigger == "streaming_recording") {
+        } else if (trigger == "streaming") {
             if (!obs_frontend_streaming_active()) {
                 stop();
                 return;
             }
-        } else if (trigger == "recording" || trigger == "streaming_recording") {
+        } else if (trigger == "recording") {
             if (!obs_frontend_recording_active()) {
+                stop();
+                return;
+            }
+        } else if (trigger == "streaming_recording") {
+            if (!obs_frontend_streaming_active() && !obs_frontend_recording_active()) {
                 stop();
                 return;
             }
