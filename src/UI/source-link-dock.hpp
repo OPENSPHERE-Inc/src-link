@@ -36,12 +36,8 @@ class SourceLinkDock : public QFrame {
     Ui::SourceLinkDock *ui;
 
     SourceLinkApiClient *apiClient;
-
     QImage defaultPartyPicture;
     QImage defaultPartyEventPicture;
-
-    QGraphicsScene *partyPictureScene;
-    QGraphicsScene *partyEventPictureScene;
     QList<SourceLinkConnectionWidget *> connectionWidgets;
 
     void updateConnections(const Stage &stage);
@@ -55,6 +51,7 @@ private slots:
     void onPictureFailed(const QString &pictureId);
     void onSeatAllocationReady(const StageSeatInfo &seat);
     void onSeatAllocationFailed();
+    void onInterlockTypeChanged(int index);
 
 public:
     explicit SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
@@ -86,7 +83,8 @@ private slots:
 
 public:
     explicit SourceLinkConnectionWidget(
-        const StageSource &_source, SourceLinkApiClient *_client, QWidget *parent = nullptr
+        const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_client,
+        QWidget *parent = nullptr
     );
     ~SourceLinkConnectionWidget();
 

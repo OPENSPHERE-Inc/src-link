@@ -41,7 +41,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //#define LOCAL_DEBUG
 #define SCOPE "read write"
-#define SETTINGS_JSON_NAME "settings.json"
 #define POLLING_INTERVAL_MSECS 20000
 #define SCREENSHOT_QUALITY 75
 
@@ -92,8 +91,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     : QObject(parent),
-      // Create a store object for writing the received tokens (It will be child of O2 instance)
-      settings(new SourceLinkApiClientSettingsStore()),
+      // Create store object for writing the received tokens (It will be child of O2 instance)
+      settings(new SourceLinkSettingsStore()),
       pollingTimer(nullptr),
       networkManager(nullptr),
       client(nullptr),
@@ -124,6 +123,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
     client->setScope(QString::fromLatin1(SCOPE));
     client->setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
+    client->setReplyContent("<html><body><h2>Authorization complete. You can close this window and return to OBS Studio</h2></body></html>");
 
     connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
     connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));
@@ -196,7 +196,7 @@ bool SourceLinkApiClient::ping()
 
         accountInfo = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_INFO, "client: Pong from API server: %s", qPrintable(accountInfo.getDisplayName()));
+        obs_log(LOG_DEBUG, "client: Pong from API server: %s", qPrintable(accountInfo.getDisplayName()));
         emit pingSucceeded();
     });
     invoker->get(QNetworkRequest(QUrl(QString(PING_URL))));
@@ -273,7 +273,7 @@ bool SourceLinkApiClient::requestAccountInfo()
 
         accountInfo = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_INFO, "client: Received account: %s", qPrintable(accountInfo.getDisplayName()));
+        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getDisplayName()));
         emit accountInfoReady(accountInfo);
     });
     invoker->get(QNetworkRequest(QUrl(QString(ACCOUNT_INFO_URL))));
@@ -299,7 +299,7 @@ bool SourceLinkApiClient::requestParties()
             setPartyId(parties[0].getId());
         }
 
-        obs_log(LOG_INFO, "client: Received %d parties", parties.size());
+        obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
         emit partiesReady(parties);
     });
     invoker->get(QNetworkRequest(QUrl(QString(PARTIES_URL))));
@@ -325,7 +325,7 @@ bool SourceLinkApiClient::requestPartyEvents()
             setPartyEventId(partyEvents[0].getId());
         }
 
-        obs_log(LOG_INFO, "client: Received %d party events", partyEvents.size());
+        obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
         emit partyEventsReady(partyEvents);
     });
     invoker->get(QNetworkRequest(QUrl(QString(PARTY_EVENTS_URL))));
@@ -347,7 +347,7 @@ bool SourceLinkApiClient::requestStages()
             stages.append(stageItem.toObject());
         }
 
-        obs_log(LOG_INFO, "client: Received %d stages", stages.size());
+        obs_log(LOG_DEBUG, "client: Received %d stages", stages.size());
         emit stagesReady(stages);
     });
     invoker->get(QNetworkRequest(QUrl(QString(STAGES_URL))));
@@ -368,7 +368,7 @@ bool SourceLinkApiClient::requestSeatAllocation()
 
         seat = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_INFO, "client: Received seat allocation for %s", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Received seat allocation for %s", qPrintable(uuid));
         emit seatAllocationReady(seat);
     });
     invoker->get(QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL).arg(uuid))));
@@ -410,7 +410,7 @@ bool SourceLinkApiClient::putConnection(
 
             StageConnection connection = QJsonDocument::fromJson(replyData).object();
 
-            obs_log(LOG_INFO, "client: Put stage connection %s succeeded", qPrintable(connection.getId()));
+            obs_log(LOG_DEBUG, "client: Put stage connection %s succeeded", qPrintable(connection.getId()));
             emit connectionPutSucceeded(connection);
         }
     );
@@ -433,7 +433,7 @@ bool SourceLinkApiClient::deleteConnection(const QString &sourceUuid, const bool
                 connectionDeleteFailed, "clinet: Deleting stage connection of %s failed: %d", qPrintable(sourceUuid), error
             );
 
-            obs_log(LOG_INFO, "client: Delete stage connection of %s succeeded", qPrintable(sourceUuid));
+            obs_log(LOG_DEBUG, "client: Delete stage connection of %s succeeded", qPrintable(sourceUuid));
             emit connectionDeleteSucceeded(sourceUuid);
         });
     }
@@ -467,7 +467,7 @@ bool SourceLinkApiClient::putSeatAllocation(const bool force)
 
         seat = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_INFO, "client: Put stage seat allocation of %s succeeded", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Put stage seat allocation of %s succeeded", qPrintable(uuid));
         emit seatAllocationPutSucceeded(seat);
         emit seatAllocationReady(seat);
     });
@@ -490,7 +490,7 @@ bool SourceLinkApiClient::deleteSeatAllocation(const bool noSignal)
                 seatAllocationDeleteFailed, "clinet: Deleting stage seat allocation of %s failed: %d", qPrintable(uuid), error
             );
 
-            obs_log(LOG_INFO, "client: Delete stage seat allocation %s succeeded", qPrintable(uuid));
+            obs_log(LOG_DEBUG, "client: Delete stage seat allocation %s succeeded", qPrintable(uuid));
             emit seatAllocationDeleteSucceeded(uuid);
         });
     }
@@ -524,7 +524,7 @@ bool SourceLinkApiClient::putScreenshot(const QString &sourceName, const QImage 
             screenshotPutFailed, "client: Putting screenshot of %s failed: %d", qPrintable(sourceName), error
         );
 
-        obs_log(LOG_INFO, "client: Put screenshot of %s succeeded", qPrintable(sourceName));
+        obs_log(LOG_DEBUG, "client: Put screenshot of %s succeeded", qPrintable(sourceName));
         emit screenshotPutSucceeded(sourceName);
     });
     invoker->put(req, imageBytes);
@@ -544,7 +544,7 @@ bool SourceLinkApiClient::getPicture(const QString &pictureId)
 
         auto picture = QImage::fromData(reply->readAll());
 
-        obs_log(LOG_INFO, "client: Get picture of %s succeeded", qPrintable(pictureId));
+        obs_log(LOG_DEBUG, "client: Get picture of %s succeeded", qPrintable(pictureId));
         emit pictureGetSucceeded(pictureId, picture);
         reply->deleteLater();
     });
@@ -577,40 +577,3 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     requestSeatAllocation();
 }
 
-//--- SourceLinkSettingsStore class ---//
-
-SourceLinkApiClientSettingsStore::SourceLinkApiClientSettingsStore(QObject *parent) : O0AbstractStore(parent)
-{
-    OBSString config_dir_path = obs_module_get_config_path(obs_current_module(), "");
-    os_mkdirs(config_dir_path);
-
-    OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);
-    settingsData = obs_data_create_from_json_file(path);
-    if (!settingsData) {
-        settingsData = obs_data_create();
-    }
-
-    obs_log(LOG_DEBUG, "client: SourceLinkApiClientSettingsStore created");
-}
-
-SourceLinkApiClientSettingsStore::~SourceLinkApiClientSettingsStore()
-{
-    obs_log(LOG_DEBUG, "client: SourceLinkApiClientSettingsStore destroyed");
-}
-
-QString SourceLinkApiClientSettingsStore::value(const QString &key, const QString &defaultValue)
-{
-    auto value = QString(obs_data_get_string(settingsData, qPrintable(key)));
-    if (!value.isEmpty()) {
-        return value;
-    } else {
-        return defaultValue;
-    }
-}
-
-void SourceLinkApiClientSettingsStore::setValue(const QString &key, const QString &value)
-{
-    obs_data_set_string(settingsData, qPrintable(key), qPrintable(value));
-    OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);
-    obs_data_save_json_safe(settingsData, path, "tmp", "bak");
-}

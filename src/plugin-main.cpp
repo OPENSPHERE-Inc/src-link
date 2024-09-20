@@ -34,6 +34,7 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
+SourceLinkSettingsStore *settingsStore = nullptr;
 SourceLinkApiClient *apiClient = nullptr;
 SourceLinkDock *sourceLinkDock = nullptr;
 

@@ -104,7 +104,7 @@ IngressLinkSource::IngressLinkSource(
 
 IngressLinkSource::~IngressLinkSource()
 {
-    obs_log(LOG_INFO, "%s: Source destroying", obs_source_get_name(source));
+    obs_log(LOG_DEBUG, "%s: Source destroying", obs_source_get_name(source));
 
     disconnect(this);
 
@@ -369,7 +369,7 @@ void IngressLinkSource::getDefaults(obs_data_t *settings)
         obs_data_set_default_int(settings, "height", ovi.base_height);
     }
 
-    obs_log(LOG_INFO, "Default settings applied.");
+    obs_log(LOG_DEBUG, "Default settings applied.");
 }
 
 uint32_t IngressLinkSource::getWidth()
@@ -445,12 +445,13 @@ void SourceAudioThread::run()
     active = true;
 
     while (!isInterruptionRequested()) {
-        audioBufferMutex.lock();
+        msleep(10);
+        
+        QMutexLocker locker(&audioBufferMutex);
         {
             if (!audioBufferFrames) {
                 // No data at this time
-                audioBufferMutex.unlock();
-                msleep(10);
+                locker.unlock();
                 continue;
             }
 
@@ -482,8 +483,7 @@ void SourceAudioThread::run()
 
             audioBufferFrames -= header->frames;
         }
-        audioBufferMutex.unlock();
-        msleep(10);
+        locker.unlock();
     }
 
     active = false;

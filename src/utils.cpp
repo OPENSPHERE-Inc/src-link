@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 // The code from obs-websocket plugin
 // https://github.com/obsproject/obs-websocket/blob/a73c92788d70f08f91b8c0477b74f99c999beb09/src/requesthandler/RequestHandler_Sources.cpp#L28
-QImage TakeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth, uint32_t requestedHeight)
+QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth, uint32_t requestedHeight)
 {
     // Get info about the requested source
     const uint32_t sourceWidth = obs_source_get_width(source);

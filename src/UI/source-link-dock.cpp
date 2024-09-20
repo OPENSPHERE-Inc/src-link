@@ -33,13 +33,18 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
 {
     ui->setupUi(this);
 
-    partyPictureScene = new QGraphicsScene(this);
-    partyPictureScene->addPixmap(QPixmap::fromImage(defaultPartyPicture));
-    ui->partyPictureView->setScene(partyPictureScene);
+    ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
+    ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
 
-    partyEventPictureScene = new QGraphicsScene(this);
-    partyEventPictureScene->addPixmap(QPixmap::fromImage(defaultPartyEventPicture));
-    ui->partyEventPictureView->setScene(partyEventPictureScene);
+    ui->interlockTypeComboBox->addItem("Streaming", "streaming");
+    ui->interlockTypeComboBox->addItem("Recording", "recording");
+    ui->interlockTypeComboBox->addItem("Streaming or Recording", "streaming_recording");
+    ui->interlockTypeComboBox->addItem("Virtual Cam", "virtual_cam");
+    ui->interlockTypeComboBox->addItem("Always ON", "always_on");
+
+    ui->interlockTypeComboBox->setCurrentIndex(
+        ui->interlockTypeComboBox->findData(apiClient->getSettings()->value("interlock_type", "streaming"))
+    );
 
     connect(apiClient, SIGNAL(partiesReady(const QList<Party> &)), this, SLOT(onPartiesReady(const QList<Party> &)));
     connect(
@@ -59,6 +64,7 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
 
     connect(ui->partyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
     connect(ui->partyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
+    connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
 
     obs_log(LOG_DEBUG, "SourceLinkDock created");
 }
@@ -91,8 +97,8 @@ void SourceLinkDock::onPartiesReady(const QList<Party> &parties)
 
     // Reset picture for no parties
     if (!parties.size()) {
-        ui->partyPictureView->setProperty("pictureId", "");
-        partyPictureScene->addPixmap(QPixmap::fromImage(defaultPartyPicture));
+        ui->partyPictureLabel->setProperty("pictureId", "");
+        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
     }
 }
 
@@ -122,8 +128,8 @@ void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
 
     // Reset picture for no party events
     if (!partyEvents.size()) {
-        ui->partyEventPictureView->setProperty("pictureId", "");
-        partyEventPictureScene->addPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+        ui->partyEventPictureLabel->setProperty("pictureId", "");
+        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
     }
 }
 
@@ -133,7 +139,7 @@ void SourceLinkDock::onActivePartyChanged(int index)
     foreach (const auto &party, apiClient->getParties()) {
         if (party.getId() == partyId) {
             if (!party.getPictureId().isEmpty()) {
-                ui->partyPictureView->setProperty("pictureId", party.getPictureId());
+                ui->partyPictureLabel->setProperty("pictureId", party.getPictureId());
                 apiClient->getPicture(party.getPictureId());
             }
             break;
@@ -150,7 +156,7 @@ void SourceLinkDock::onActivePartyEventChanged(int index)
     foreach (const auto &partyEvent, apiClient->getPartyEvents()) {
         if (partyEvent.getId() == partyEventId) {
             if (!partyEvent.getPictureId().isEmpty()) {
-                ui->partyEventPictureView->setProperty("pictureId", partyEvent.getPictureId());
+                ui->partyEventPictureLabel->setProperty("pictureId", partyEvent.getPictureId());
                 apiClient->getPicture(partyEvent.getPictureId());
             }
             break;
@@ -164,23 +170,23 @@ void SourceLinkDock::onActivePartyEventChanged(int index)
 
 void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
 {
-    if (pictureId == ui->partyPictureView->property("pictureId").toString()) {
+    if (pictureId == ui->partyPictureLabel->property("pictureId").toString()) {
         // Update party picture with received image
-        partyPictureScene->addPixmap(QPixmap::fromImage(picture));
-    } else if (pictureId == ui->partyEventPictureView->property("pictureId").toString()) {
+        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(picture));
+    } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Update party event picture received image
-        partyEventPictureScene->addPixmap(QPixmap::fromImage(picture));
+        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(picture));
     }
 }
 
 void SourceLinkDock::onPictureFailed(const QString &pictureId)
 {
-    if (pictureId == ui->partyPictureView->property("pictureId").toString()) {
+    if (pictureId == ui->partyPictureLabel->property("pictureId").toString()) {
         // Reset party picture to default
-        partyPictureScene->addPixmap(QPixmap::fromImage(defaultPartyPicture));
-    } else if (pictureId == ui->partyEventPictureView->property("pictureId").toString()) {
+        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
+    } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Reset party event picture to default
-        partyEventPictureScene->addPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
     }
 }
 
@@ -231,17 +237,24 @@ void SourceLinkDock::updateConnections(const Stage &stage)
             }
         }
         if (newcommer) {
-            auto widget = new SourceLinkConnectionWidget(source, apiClient, this);
+            auto interlockType = ui->interlockTypeComboBox->currentData().toString();
+            auto widget = new SourceLinkConnectionWidget(source, interlockType, apiClient, this);
             connectionWidgets.append(widget);
             ui->connectionsLayout->addWidget(widget);
         }
     }
 }
 
+void SourceLinkDock::onInterlockTypeChanged(int)
+{
+    auto interlockType = ui->interlockTypeComboBox->currentData().toString();
+    apiClient->getSettings()->setValue("interlock_type", interlockType);
+}
+
 //--- SourceLinkConnectionWidget class ---//
 
 SourceLinkConnectionWidget::SourceLinkConnectionWidget(
-    const StageSource &_source, SourceLinkApiClient *_apiClient, QWidget *parent
+    const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_apiClient, QWidget *parent
 )
     : QWidget(parent),
       ui(new Ui::SourceLinkConnectionWidget),

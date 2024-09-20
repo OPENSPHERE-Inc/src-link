@@ -58,7 +58,7 @@ void SourceAudioCapture::pushAudio(const audio_data *audioData, obs_source_t *so
         return;
     }
 
-    audioBufferMutex.lock();
+    QMutexLocker locker(&audioBufferMutex);
     {
         // Push audio data to buffer
         if (audioBufferFrames + audioData->frames > MAX_AUDIO_BUFFER_FRAMES) {
@@ -105,7 +105,7 @@ void SourceAudioCapture::pushAudio(const audio_data *audioData, obs_source_t *so
 
         audioBufferFrames += audioData->frames;
     }
-    audioBufferMutex.unlock();
+    locker.unlock();
 }
 
 // Callback from obs_source_add_audio_capture_callback

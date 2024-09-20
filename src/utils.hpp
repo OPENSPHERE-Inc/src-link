@@ -20,16 +20,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs.hpp>
+#include <util/threading.h>
 
 #include <QString>
 #include <QRandomGenerator>
 #include <QWidget>
 #include <QMutex>
 
-using OBSString = OBSPtr<char *, (void (*)(char *))bfree>;
 using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
 using OBSAudio = OBSPtr<audio_t *, audio_output_close>;
 
+inline void strFree(char *ptr)
+{
+    bfree(ptr);
+}
+using OBSString = OBSPtr<char *, strFree>;
 
 inline QString
 generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$", const QString &exclude = "lIO")
@@ -161,4 +166,4 @@ inline QString QTStr(const char *lookupVal)
 }
 
 QImage
-TakeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth = 0, uint32_t requestedHeight = 0);
+takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth = 0, uint32_t requestedHeight = 0);

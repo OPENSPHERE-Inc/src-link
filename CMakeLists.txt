@@ -45,6 +45,7 @@ target_sources(
           src/request-invoker.cpp
           src/schema.hpp
           src/utils.cpp
+          src/settings.cpp
           src/UI/settings-dialog.ui
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.ui

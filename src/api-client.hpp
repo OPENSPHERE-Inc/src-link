@@ -31,19 +31,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "plugin-support.h"
 #include "schema.hpp"
-
-class SourceLinkApiClientSettingsStore : public O0AbstractStore {
-    Q_OBJECT
-
-    OBSDataAutoRelease settingsData;
-
-public:
-    explicit SourceLinkApiClientSettingsStore(QObject *parent = nullptr);
-    ~SourceLinkApiClientSettingsStore();
-
-    QString value(const QString &key, const QString &defaultValue = QString());
-    void setValue(const QString &key, const QString &value);
-};
+#include "settings.hpp"
 
 class SourceLinkApiClient : public QObject {
     Q_OBJECT
@@ -51,7 +39,7 @@ class SourceLinkApiClient : public QObject {
     friend class RequestInvoker;
 
     QString uuid;
-    SourceLinkApiClientSettingsStore *settings;
+    SourceLinkSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
     O2Requestor *requestor;
@@ -65,11 +53,6 @@ class SourceLinkApiClient : public QObject {
     QList<PartyEvent> partyEvents;  // Contains all events of all parties
     QList<Stage> stages;
     StageSeatInfo seat;
-
-protected:
-    inline O2 *getO2Client() { return client; }
-    inline O2Requestor *getRequestor() { return requestor; }
-    inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
 
 signals:
     void loginSucceeded();
@@ -108,9 +91,36 @@ private slots:
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onPollingTimerTimeout();
 
+protected:
+    inline O2 *getO2Client() { return client; }
+    inline O2Requestor *getRequestor() { return requestor; }
+    inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
+
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
     ~SourceLinkApiClient();
+
+    inline const QString &getUuid() const { return uuid; }
+    inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
+    inline const QString getPartyId() const { return settings->value("partyId"); }
+    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
+    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
+    inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
+    inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
+    inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
+    inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
+    inline void setForceConnection(const bool forceConnection)
+    {
+        settings->setValue("forceConnection", forceConnection ? "true" : "false");
+    }
+    inline const bool getForceConnection() { return settings->value("forceConnection", "false") == "true"; }
+
+    inline const AccountInfo getAccountInfo() const { return accountInfo; }
+    inline const QList<Party> &getParties() const { return parties; }
+    inline const QList<PartyEvent> &getPartyEvents() const { return partyEvents; }
+    inline const QList<Stage> &getStages() const { return stages; }
+    inline const StageSeatInfo getSeat() const { return seat; }
+    inline SourceLinkSettingsStore *getSettings() const { return settings; }  
 
 public slots:
     void login();
@@ -136,27 +146,5 @@ public slots:
     bool getPicture(const QString &pitureId);
 
     const int getFreePort();
-    void releasePort(const int port);
-
-public:
-    inline const QString &getUuid() const { return uuid; }
-    inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
-    inline const QString getPartyId() const { return settings->value("partyId"); }
-    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
-    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
-    inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
-    inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
-    inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
-    inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
-    inline void setForceConnection(const bool forceConnection)
-    {
-        settings->setValue("forceConnection", forceConnection ? "true" : "false");
-    }
-    inline const bool getForceConnection() { return settings->value("forceConnection", "false") == "true"; }
-
-    inline const AccountInfo getAccountInfo() const { return accountInfo; }
-    inline const QList<Party> &getParties() const { return parties; }
-    inline const QList<PartyEvent> &getPartyEvents() const { return partyEvents; }
-    inline const QList<Stage> &getStages() const { return stages; }
-    inline const StageSeatInfo getSeat() const { return seat; }
+    void releasePort(const int port);    
 };

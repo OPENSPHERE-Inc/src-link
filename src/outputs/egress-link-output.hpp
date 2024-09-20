@@ -32,6 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../utils.hpp"
 
 #define PROGRAM_OUT_SOURCE QString()
+#define INTERLOCK_TYPE_NONE QString()
 
 class OutputAudioSource;
 
