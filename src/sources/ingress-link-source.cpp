@@ -395,9 +395,8 @@ void IngressLinkSource::update(obs_data_t *settings)
     captureSettings(settings);
     handleConnection();
 
-    auto decoderSettings = createDecoderSettings();
+    OBSDataAutoRelease decoderSettings = createDecoderSettings();
     obs_source_update(decoderSource, decoderSettings);
-    obs_data_release(decoderSettings);
 
     obs_log(LOG_INFO, "%s: Source updated", obs_source_get_name(source));
 }
