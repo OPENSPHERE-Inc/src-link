@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDesktopServices>
 #include <QGraphicsPixmapItem>
 #include <QImageReader>
+#include <QMessageBox>
 
 #include "../utils.hpp"
 #include "../plugin-support.h"
@@ -56,23 +57,25 @@ SettingsDialog::~SettingsDialog()
 void SettingsDialog::setClientActive(bool active)
 {
     if (!active) {
-        ui->connectionButton->setText(QTStr("Connect"));
-        ui->accountName->setText(QTStr("Disconnected"));
+        ui->connectionButton->setText(QTStr("Login"));
+        ui->accountName->setText(QTStr("Not logged in yet"));
     } else {
-        ui->connectionButton->setText(QTStr("Disconnect"));
+        ui->connectionButton->setText(QTStr("Logout"));
     }
 }
 
 void SettingsDialog::onConnectionButtonClick()
 {
-    ui->connectionButton->setEnabled(false);
-
     if (!apiClient->isLoggedIn()) {
         apiClient->login();
     } else {
-        apiClient->logout();
-        ui->connectionButton->setEnabled(true);
-        setClientActive(false);
+        int ret = QMessageBox::warning(
+            this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel
+        );
+        if (ret == QMessageBox::Yes) {
+            apiClient->logout();
+            setClientActive(false);
+        }
     }
 }
 
@@ -83,15 +86,13 @@ void SettingsDialog::onAccept()
 
 void SettingsDialog::onLinkingFailed()
 {
-    ui->connectionButton->setEnabled(true);
     setClientActive(false);
 }
 
 void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
 {
     setClientActive(true);
-    ui->accountName->setText(QString("Connected: %1").arg(accountInfo.getDisplayName()));
-    ui->connectionButton->setEnabled(true);
+    ui->accountName->setText(QString("Logged in: %1").arg(accountInfo.getDisplayName()));
 }
 
 void SettingsDialog::saveSettings()

@@ -13,9 +13,15 @@
   <property name="windowTitle">
    <string>Source Link Settinbgs</string>
   </property>
+  <property name="modal">
+   <bool>true</bool>
+  </property>
   <layout class="QVBoxLayout" name="settingsDialogLayout">
    <item>
     <layout class="QHBoxLayout" name="connectionLayout">
+     <property name="spacing">
+      <number>20</number>
+     </property>
      <item>
       <widget class="QPushButton" name="connectionButton">
        <property name="sizePolicy">
@@ -31,7 +37,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Connect</string>
+        <string>Login</string>
        </property>
       </widget>
      </item>
@@ -46,7 +52,7 @@
         <string>Not logged in yet.</string>
        </property>
        <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
+        <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
        </property>
       </widget>
      </item>

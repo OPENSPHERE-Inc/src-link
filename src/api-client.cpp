@@ -185,6 +185,25 @@ void SourceLinkApiClient::refresh()
     client->refresh();
 }
 
+const int SourceLinkApiClient::getFreePort()
+{
+    auto min = settings->value("portRange.min", "10000").toInt();
+    auto max = settings->value("portRange.max", "10099").toInt();
+
+    for (auto i = min; i <= max; i++) {
+        if (!usedPorts[i]) {
+            usedPorts[i] = true;
+            return i;
+        }
+    }
+    return 0;
+}
+
+void SourceLinkApiClient::releasePort(const int port)
+{
+    usedPorts[port] = false;
+}
+
 bool SourceLinkApiClient::ping()
 {
     CHECK_CLIENT_TOKEN(false);
@@ -202,52 +221,6 @@ bool SourceLinkApiClient::ping()
     invoker->get(QNetworkRequest(QUrl(QString(PING_URL))));
 
     return true;
-}
-
-void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
-{
-    QDesktopServices::openUrl(url);
-}
-
-void SourceLinkApiClient::onO2LinkedChanged()
-{
-    CHECK_CLIENT_TOKEN();
-
-    obs_log(LOG_DEBUG, "client: The API client link has been changed.");
-}
-
-void SourceLinkApiClient::onO2LinkingSucceeded()
-{
-    if (client->linked()) {
-        CHECK_CLIENT_TOKEN();
-        obs_log(LOG_DEBUG, "client: The API client has linked up.");
-
-        requestOnlineResources();
-
-        emit loginSucceeded();
-    } else {
-        obs_log(LOG_DEBUG, "client: The API client has unlinked.");
-
-        emit logoutSucceeded();
-    }
-}
-
-void SourceLinkApiClient::onO2LinkingFailed()
-{
-    obs_log(LOG_ERROR, "client: The API client linking failed.");
-
-    emit loginFailed();
-}
-
-void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
-{
-    if (error != QNetworkReply::NoError) {
-        return;
-    }
-    CHECK_CLIENT_TOKEN();
-
-    // Schedule next refresh
-    QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
 }
 
 bool SourceLinkApiClient::requestOnlineResources()
@@ -552,27 +525,58 @@ bool SourceLinkApiClient::getPicture(const QString &pictureId)
     return true;
 }
 
-const int SourceLinkApiClient::getFreePort()
+void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
 {
-    auto min = settings->value("portRange.min", "10000").toInt();
-    auto max = settings->value("portRange.max", "10099").toInt();
-
-    for (auto i = min; i <= max; i++) {
-        if (!usedPorts[i]) {
-            usedPorts[i] = true;
-            return i;
-        }
-    }
-    return 0;
+    QDesktopServices::openUrl(url);
 }
 
-void SourceLinkApiClient::releasePort(const int port)
+void SourceLinkApiClient::onO2LinkedChanged()
 {
-    usedPorts[port] = false;
+    CHECK_CLIENT_TOKEN();
+
+    obs_log(LOG_DEBUG, "client: The API client link has been changed.");
+}
+
+void SourceLinkApiClient::onO2LinkingSucceeded()
+{
+    if (client->linked()) {
+        CHECK_CLIENT_TOKEN();
+        obs_log(LOG_DEBUG, "client: The API client has linked up.");
+
+        requestOnlineResources();
+
+        emit loginSucceeded();
+    } else {
+        obs_log(LOG_DEBUG, "client: The API client has unlinked.");
+
+        emit logoutSucceeded();
+    }
+}
+
+void SourceLinkApiClient::onO2LinkingFailed()
+{
+    obs_log(LOG_ERROR, "client: The API client linking failed.");
+
+    emit loginFailed();
+}
+
+void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
+{
+    if (error != QNetworkReply::NoError) {
+        return;
+    }
+    CHECK_CLIENT_TOKEN();
+
+    // Schedule next refresh
+    QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
 }
 
 void SourceLinkApiClient::onPollingTimerTimeout()
 {
+    if (!isLoggedIn()) {
+        return;
+    }
+
     // Polling seat allocation
     requestSeatAllocation();
 }

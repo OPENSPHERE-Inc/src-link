@@ -19,8 +19,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <qt-wrappers.hpp>
 
+#include <QmessageBox>
+
 #include "../outputs/egress-link-output.hpp"
 #include "source-link-dock.hpp"
+#include "source-link-connection-widget.hpp"
 
 //--- SouceLinkDock class ---//
 
@@ -28,11 +31,13 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
       ui(new Ui::SourceLinkDock),
       apiClient(_apiClient),
+      defaultAccountPicture(":/source-link/images/unknownaccount.png"),
       defaultPartyPicture(":/source-link/images/unknownparty.png"),
       defaultPartyEventPicture(":/source-link/images/unknownevent.png")
 {
     ui->setupUi(this);
 
+    ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
     ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
 
@@ -46,6 +51,9 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
         ui->interlockTypeComboBox->findData(apiClient->getSettings()->value("interlock_type", "streaming"))
     );
 
+    connect(
+        apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
+    );
     connect(apiClient, SIGNAL(partiesReady(const QList<Party> &)), this, SLOT(onPartiesReady(const QList<Party> &)));
     connect(
         apiClient, SIGNAL(partyEventsReady(const QList<PartyEvent> &)), this,
@@ -65,6 +73,17 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->partyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
     connect(ui->partyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
+    connect(ui->logoutButton, SIGNAL(clicked()), this, SLOT(onLogoutButtonClicked()));
+
+    if (!apiClient->getAccountInfo().isEmpty()) {
+        onAccountInfoReady(apiClient->getAccountInfo());
+    }
+    if (!apiClient->getParties().isEmpty()) {
+        onPartiesReady(apiClient->getParties());
+    }
+    if (!apiClient->getPartyEvents().isEmpty()) {
+        onPartyEventsReady(apiClient->getPartyEvents());
+    }
 
     obs_log(LOG_DEBUG, "SourceLinkDock created");
 }
@@ -74,6 +93,18 @@ SourceLinkDock::~SourceLinkDock()
     disconnect(this);
 
     obs_log(LOG_DEBUG, "SourceLinkDock destroyed");
+}
+
+void SourceLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
+{
+    ui->accountNameLabel->setText(accountInfo.getDisplayName());
+    ui->accountPictureLabel->setProperty("pictureId", accountInfo.getPictureId());
+
+    if (!accountInfo.getPictureId().isEmpty()) {
+        apiClient->getPicture(accountInfo.getPictureId());
+    } else {
+        ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
+    }
 }
 
 void SourceLinkDock::onPartiesReady(const QList<Party> &parties)
@@ -176,6 +207,9 @@ void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &pict
     } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Update party event picture received image
         ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(picture));
+    } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
+        // Update account picture with received image
+        ui->accountPictureLabel->setPixmap(QPixmap::fromImage(picture));
     }
 }
 
@@ -187,6 +221,9 @@ void SourceLinkDock::onPictureFailed(const QString &pictureId)
     } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Reset party event picture to default
         ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+    } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
+        // Reset account picture to default
+        ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     }
 }
 
@@ -251,149 +288,12 @@ void SourceLinkDock::onInterlockTypeChanged(int)
     apiClient->getSettings()->setValue("interlock_type", interlockType);
 }
 
-//--- SourceLinkConnectionWidget class ---//
-
-SourceLinkConnectionWidget::SourceLinkConnectionWidget(
-    const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_apiClient, QWidget *parent
-)
-    : QWidget(parent),
-      ui(new Ui::SourceLinkConnectionWidget),
-      source(_source)
+void SourceLinkDock::onLogoutButtonClicked()
 {
-    ui->setupUi(this);
+    int ret =
+        QMessageBox::warning(this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel);
 
-    output = new EgressLinkOutput(source.getName(), _apiClient);
-    outputDialog = new OutputDialog(output, this);
-
-    // Must be called after output and outputDialog initialization
-    setSource(_source);
-
-    ui->settingsButton->setProperty("themeID", "cogsIcon");
-    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);
-    ui->visibilityCheckBox->setChecked(output->getVisible());
-
-    onOutputStatusChanged(LINKED_OUTPUT_STATUS_INACTIVE);
-    updateSourceList();
-
-    if (output->getSourceUuid().isEmpty()) {
-        ui->videoSourceComboBox->setCurrentIndex(1);
-    } else {
-        ui->videoSourceComboBox->setCurrentIndex(ui->videoSourceComboBox->findData(output->getSourceUuid()));
+    if (ret == QMessageBox::Yes) {
+        apiClient->logout();
     }
-
-    connect(
-        output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus))
-    );
-    connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
-    connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
-    connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
-
-    sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
-    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
-
-    obs_log(LOG_DEBUG, "SourceLinkConnectionWidget created");
-}
-
-SourceLinkConnectionWidget::~SourceLinkConnectionWidget()
-{
-    disconnect(this);
-
-    sourceCreateSignal.Disconnect();
-    sourceRemoveSignal.Disconnect();
-
-    delete output;
-
-    obs_log(LOG_DEBUG, "SourceLinkConnectionWidget destroyed");
-}
-
-void SourceLinkConnectionWidget::onSettingsButtonClick()
-{
-    outputDialog->show();
-}
-
-void SourceLinkConnectionWidget::onVideoSourceChanged(int)
-{
-    output->setSourceUuid(ui->videoSourceComboBox->currentData().toString());
-}
-
-void SourceLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
-{
-    switch (status) {
-    case LINKED_OUTPUT_STATUS_ACTIVE:
-        ui->statusValueLabel->setText(obs_module_text("Active"));
-        setThemeID(ui->statusValueLabel, "good");
-        break;
-    case LINKED_OUTPUT_STATUS_STAND_BY:
-        ui->statusValueLabel->setText(obs_module_text("StandBy"));
-        setThemeID(ui->statusValueLabel, "warning");
-        break;
-    case LINKED_OUTPUT_STATUS_ERROR:
-        ui->statusValueLabel->setText(obs_module_text("Error"));
-        setThemeID(ui->statusValueLabel, "error");
-        break;
-    case LINKED_OUTPUT_STATUS_INACTIVE:
-        ui->statusValueLabel->setText(obs_module_text("Inactive"));
-        setThemeID(ui->statusValueLabel, "");
-        break;
-    case LINKED_OUTPUT_STATUS_DISABLED:
-        ui->statusValueLabel->setText(obs_module_text("Disabled"));
-        setThemeID(ui->statusValueLabel, "");
-        break;
-    }
-}
-
-void SourceLinkConnectionWidget::updateSourceList()
-{
-    auto selected = ui->videoSourceComboBox->currentData().toString();
-    ui->videoSourceComboBox->clear();
-    ui->videoSourceComboBox->addItem(obs_module_text("None"), "disabled");
-    ui->videoSourceComboBox->addItem(obs_module_text("ProgramOut"), "");
-
-    obs_enum_sources(
-        [](void *param, obs_source_t *source) {
-            auto widget = (SourceLinkConnectionWidget *)param;
-            auto type = obs_source_get_type(source);
-            auto flags = obs_source_get_output_flags(source);
-
-            if (flags & OBS_SOURCE_VIDEO && (type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE)) {
-                widget->ui->videoSourceComboBox->addItem(obs_source_get_name(source), obs_source_get_uuid(source));
-            }
-            return true;
-        },
-        this
-    );
-
-    if (!selected.isEmpty()) {
-        ui->videoSourceComboBox->setCurrentIndex(ui->videoSourceComboBox->findData(selected));
-    } else {
-        // Select "Program out" defaultly
-        ui->videoSourceComboBox->setCurrentIndex(1);
-    }
-}
-
-void SourceLinkConnectionWidget::setSource(const StageSource &_source)
-{
-    source = _source;
-
-    ui->headerLabel->setText(source.getDisplayName());
-    ui->descriptionLabel->setText(source.getDescription());
-    if (source.getDescription().isEmpty()) {
-        ui->descriptionLabel->hide();
-    } else {
-        ui->descriptionLabel->show();
-    }
-
-    outputDialog->setWindowTitle(source.getDisplayName());
-    output->setName(source.getName());
-}
-
-void SourceLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
-{
-    auto widget = (SourceLinkConnectionWidget *)data;
-    widget->updateSourceList();
-}
-
-void SourceLinkConnectionWidget::onVisibilityChanged(bool value)
-{
-    output->setVisible(value);
 }

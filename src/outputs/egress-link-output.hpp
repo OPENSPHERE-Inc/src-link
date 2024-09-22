@@ -28,7 +28,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../api-client.hpp"
 #include "../schema.hpp"
-#include "../sources/audio-capture.hpp"
 #include "../utils.hpp"
 
 #define PROGRAM_OUT_SOURCE QString()
@@ -105,24 +104,4 @@ public:
     inline const QString getSourceUuid() const { return obs_data_get_string(settings, "source_uuid"); }
     inline bool getStatus() const { return status; }
     inline bool getVisible() const { return obs_data_get_bool(settings, "visible"); }
-};
-
-class OutputAudioSource : public SourceAudioCapture {
-    Q_OBJECT
-
-    audio_t *audio;
-
-    static bool onOutputAudio(
-        void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers, audio_output_data *audioData
-    );
-
-public:
-    explicit OutputAudioSource(
-        obs_source_t *source, uint32_t _samplesPerSec, speaker_layout _speakers, QObject *parent = nullptr
-    );
-    ~OutputAudioSource();
-
-    inline audio_t *getAudio() { return audio; }
-
-    uint64_t popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData);
 };

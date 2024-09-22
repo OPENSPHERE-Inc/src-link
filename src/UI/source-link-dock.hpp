@@ -26,7 +26,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
 #include "ui_source-link-dock.h"
-#include "ui_source-link-connection-widget.h"
 
 class SourceLinkConnectionWidget;
 
@@ -36,6 +35,7 @@ class SourceLinkDock : public QFrame {
     Ui::SourceLinkDock *ui;
 
     SourceLinkApiClient *apiClient;
+    QImage defaultAccountPicture;
     QImage defaultPartyPicture;
     QImage defaultPartyEventPicture;
     QList<SourceLinkConnectionWidget *> connectionWidgets;
@@ -43,6 +43,7 @@ class SourceLinkDock : public QFrame {
     void updateConnections(const Stage &stage);
 
 private slots:
+    void onAccountInfoReady(const AccountInfo &accountInfo);
     void onPartiesReady(const QList<Party> &parties);
     void onPartyEventsReady(const QList<PartyEvent> &partyEvents);
     void onActivePartyChanged(int index);
@@ -52,41 +53,10 @@ private slots:
     void onSeatAllocationReady(const StageSeatInfo &seat);
     void onSeatAllocationFailed();
     void onInterlockTypeChanged(int index);
+    void onLogoutButtonClicked();
 
 public:
     explicit SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~SourceLinkDock();
 };
 
-class SourceLinkConnectionWidget : public QWidget {
-    Q_OBJECT
-
-    friend class SourceLinkDock;
-
-    Ui::SourceLinkConnectionWidget *ui;
-
-    StageSource source;
-
-    EgressLinkOutput *output;
-    OutputDialog *outputDialog;
-    OBSSignal sourceCreateSignal;
-    OBSSignal sourceRemoveSignal;
-
-    static void onOBSSourcesChanged(void *data, calldata_t *cd);
-
-private slots:
-    void onSettingsButtonClick();
-    void onVideoSourceChanged(int index);
-    void onOutputStatusChanged(EgressLinkOutputStatus status);
-    void updateSourceList();
-    void onVisibilityChanged(bool value);
-
-public:
-    explicit SourceLinkConnectionWidget(
-        const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_client,
-        QWidget *parent = nullptr
-    );
-    ~SourceLinkConnectionWidget();
-
-    void setSource(const StageSource &_source);
-};

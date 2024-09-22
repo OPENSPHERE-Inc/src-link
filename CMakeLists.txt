@@ -52,11 +52,13 @@ target_sources(
           src/UI/output-dialog.cpp
           src/UI/source-link-dock.ui
           src/UI/source-link-connection-widget.ui
+          src/UI/source-link-connection-widget.cpp
           src/UI/source-link-dock.cpp
           src/UI/resources.qrc
           src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp
-          src/outputs/egress-link-output.cpp)
+          src/outputs/egress-link-output.cpp
+          src/outputs/audio-source.cpp)
 
 set(o2_SRCS
     lib/o2/o2.cpp
