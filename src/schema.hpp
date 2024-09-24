@@ -185,6 +185,8 @@ public:
     inline void setWidth(int value) { insert("width", value); }
     inline int getHeight() const { return value("height").toInt(); }
     inline void setHeight(int value) { insert("height", value); }
+    inline int getRevision() const { return value("revision").toInt(); }
+    inline void setRevision(int value) { insert("revision", value); }
 };
 
 class StageSeatAllocation : public QJsonObject {

@@ -68,6 +68,8 @@ signals:
     void stagesFailed();
     void seatAllocationReady(const StageSeatInfo &seat);
     void seatAllocationFailed();
+    void stageConnectionReady(const StageConnection &connection);
+    void stageConnectionFailed();
     void connectionPutSucceeded(const StageConnection &connection);
     void connectionPutFailed();
     void connectionDeleteSucceeded(const QString &uuid);
@@ -134,10 +136,11 @@ public slots:
     bool requestPartyEvents();
     bool requestStages();
     bool requestSeatAllocation();
+    bool requestStageConnection(const QString &sourceUuid);
     bool putConnection(
         const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
-        const int width, const int height
+        const int width, const int height, const int revision = 0
     );
     bool deleteConnection(const QString &sourceUuid, const bool noSignal = false);
     bool putSeatAllocation(const bool force = false);

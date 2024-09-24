@@ -18,9 +18,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
+#include <QUrlQuery>
+
 #include "../plugin-support.h"
 #include "../utils.hpp"
 #include "ingress-link-source.hpp"
+
+#define POLLING_INTERVAL_MSECS 10000
 
 inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QString &streamId, bool remote = false)
 {
@@ -39,7 +43,7 @@ inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QS
             }
         }
 
-        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&stream_id=%5")
+        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
                          .arg(mode)
                          .arg(obs_data_get_int(settings, "latency") * 1000) // Convert to microseconds
                          .arg(obs_data_get_int(settings, "pbkeylen"))
@@ -61,7 +65,9 @@ IngressLinkSource::IngressLinkSource(
       connected(false),
       uuid(QString(obs_source_get_uuid(_source))),
       port(0),
-      audioThread(nullptr)
+      revision(0),
+      audioThread(nullptr),
+      intervalTimer(nullptr)
 {
     obs_log(LOG_DEBUG, "%s: Source creating", obs_source_get_name(source));
 
@@ -88,6 +94,13 @@ IngressLinkSource::IngressLinkSource(
     // Audio handling
     audioThread = new SourceAudioThread(this);
     audioThread->start();
+
+    // API server polling
+    intervalTimer = new QTimer(this);
+    intervalTimer->setInterval(POLLING_INTERVAL_MSECS);
+    intervalTimer->start();
+
+    connect(intervalTimer, &QTimer::timeout, [this]() { apiClient->requestStageConnection(uuid); });
 
     connect(
         apiClient, SIGNAL(connectionPutSucceeded(const StageConnection &)), this,
@@ -128,8 +141,6 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     seatName = obs_data_get_string(settings, "seat_name");
     sourceName = obs_data_get_string(settings, "source_name");
     protocol = obs_data_get_string(settings, "protocol");
-    passphrase = generatePassword(16, "");
-    streamId = generatePassword(32, "");
     maxBitrate = obs_data_get_int(settings, "max_bitrate");
     minBitrate = obs_data_get_int(settings, "min_bitrate");
     width = obs_data_get_int(settings, "width");
@@ -139,8 +150,15 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
 
+    // Generate new passphrase and stream ID here
+    passphrase = generatePassword(16, "");
+    streamId = generatePassword(32, "");
+
     localParameters = compositeParameters(settings, passphrase, streamId);
     remoteParameters = compositeParameters(settings, passphrase, streamId, true);
+
+    // Increment connection revision
+    revision++;
 }
 
 obs_data_t *IngressLinkSource::createDecoderSettings()
@@ -174,7 +192,7 @@ void IngressLinkSource::handleConnection()
         QMetaObject::invokeMethod(
             apiClient, "putConnection", Q_ARG(QString, uuid), Q_ARG(QString, stageId), Q_ARG(QString, seatName),
             Q_ARG(QString, sourceName), Q_ARG(QString, protocol), Q_ARG(int, port), Q_ARG(QString, remoteParameters),
-            Q_ARG(int, maxBitrate), Q_ARG(int, minBitrate), Q_ARG(int, width), Q_ARG(int, height)
+            Q_ARG(int, maxBitrate), Q_ARG(int, minBitrate), Q_ARG(int, width), Q_ARG(int, height), Q_ARG(int, revision)
         );
     } else {
         // Unregister connection if no stage/seat/source selected.
@@ -330,13 +348,6 @@ obs_properties_t *IngressLinkSource::getProperties()
                 obs_property_list_add_int(pbkeylenList, "16", 16);
                 obs_property_list_add_int(pbkeylenList, "24", 24);
                 obs_property_list_add_int(pbkeylenList, "32", 32);
-
-                obs_properties_add_text(
-                    protocolSettingsGroup, "passphrase", obs_module_text("PassphraseWillBeGenerated"), OBS_TEXT_INFO
-                );
-                obs_properties_add_text(
-                    protocolSettingsGroup, "stream_id", obs_module_text("StreamIdWillBeGenerated"), OBS_TEXT_INFO
-                );
             }
 
             return true;
@@ -372,16 +383,6 @@ void IngressLinkSource::getDefaults(obs_data_t *settings)
     obs_log(LOG_DEBUG, "Default settings applied.");
 }
 
-uint32_t IngressLinkSource::getWidth()
-{
-    return obs_source_get_width(decoderSource);
-}
-
-uint32_t IngressLinkSource::getHeight()
-{
-    return obs_source_get_height(decoderSource);
-}
-
 void IngressLinkSource::videoRenderCallback()
 {
     // Just pass through the video
@@ -414,6 +415,21 @@ void IngressLinkSource::onConnectionPutFailed()
 void IngressLinkSource::onConnectionDeleteSucceeded(const QString &)
 {
     connected = false;
+}
+
+void IngressLinkSource::onStageConnectionReady(const StageConnection &connection)
+{
+    if (connection.getId() != uuid) {
+        return;
+    }
+
+    if (revision != connection.getRevision()) {
+        revision = connection.getRevision();
+
+        // Reconnect occurres
+        OBSDataAutoRelease settings = obs_source_get_settings(source);
+        update(settings);
+    }
 }
 
 //--- SourceLinkAudioThread class ---//

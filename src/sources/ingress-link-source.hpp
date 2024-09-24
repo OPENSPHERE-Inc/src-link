@@ -53,6 +53,7 @@ class IngressLinkSource : public QObject {
     int bufferingMb;
     bool hwDecode;
     bool clearOnMediaEnd;
+    int revision; // Connection revision
 
     SourceLinkApiClient *apiClient;
     obs_source_t *source; // Don't increse reference because couldn't finalize by OBS
@@ -61,6 +62,7 @@ class IngressLinkSource : public QObject {
     uint32_t samplesPerSec;
     bool connected;
     SourceAudioThread *audioThread;
+    QTimer *intervalTimer;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
@@ -72,6 +74,7 @@ private slots:
     void onConnectionPutSucceeded(const StageConnection &connection);
     void onConnectionPutFailed();
     void onConnectionDeleteSucceeded(const QString &uuid);
+    void onStageConnectionReady(const StageConnection &connection);
 
 public:
     explicit IngressLinkSource(
@@ -80,10 +83,8 @@ public:
     ~IngressLinkSource();
 
     obs_properties_t *getProperties();
-    // Returns source's actual width
-    uint32_t getWidth();
-    // Returns source's actual height
-    uint32_t getHeight();
+    inline uint32_t getWidth() { return width; }
+    inline uint32_t getHeight() { return height; }
     void update(obs_data_t *settings);
 
     void videoRenderCallback();

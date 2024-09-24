@@ -164,12 +164,16 @@ obs_properties_t *EgressLinkOutput::getProperties()
     );
     obs_property_set_modified_callback2(
         audioSourceList,
-        [](void *, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
+            auto output = static_cast<EgressLinkOutput *>(param);
             auto audioSource = obs_data_get_string(settings, "audio_source");
-            obs_property_set_enabled(obs_properties_get(_props, "audio_track"), !strcmp(audioSource, "master_track"));
+            obs_property_set_enabled(
+                obs_properties_get(_props, "audio_track"),
+                (!strlen(audioSource) && output->getSourceUuid().isEmpty()) || !strcmp(audioSource, "master_track")
+            );
             return true;
         },
-        nullptr
+        this
     );
 
     // Audio tracks have separate combo box
@@ -521,7 +525,7 @@ void EgressLinkOutput::start()
                 setStatus(LINKED_OUTPUT_STATUS_ERROR);
                 return;
             }
-           // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
+            // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
             obs_source_inc_showing(source);
 
             // Video setup
@@ -830,4 +834,3 @@ void EgressLinkOutput::onSeatAllocationReady(const StageSeatInfo &seat)
         storedSettingsRev++;
     }
 }
-

@@ -41,7 +41,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //#define LOCAL_DEBUG
 #define SCOPE "read write"
-#define POLLING_INTERVAL_MSECS 20000
+#define POLLING_INTERVAL_MSECS 10000
 #define SCREENSHOT_QUALITY 75
 
 // REST Endpoints
@@ -349,10 +349,31 @@ bool SourceLinkApiClient::requestSeatAllocation()
     return true;
 }
 
+bool SourceLinkApiClient::requestStageConnection(const QString &sourceUuid)
+{
+    CHECK_CLIENT_TOKEN(false);
+
+    obs_log(LOG_DEBUG, "client: Requesting stage connection for %s", qPrintable(sourceUuid));
+    auto invoker = new RequestInvoker(this);
+    connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(
+            stageConnectionFailed, "clinet: Requesting stage connection for %s failed: %d", qPrintable(sourceUuid), error
+        );
+
+        StageConnection connection = QJsonDocument::fromJson(replyData).object();
+
+        obs_log(LOG_DEBUG, "client: Received stage connection for %s", qPrintable(sourceUuid));
+        emit stageConnectionReady(connection);
+    });
+    invoker->get(QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL).arg(sourceUuid))));
+
+    return true;
+}
+
 bool SourceLinkApiClient::putConnection(
     const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
     const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
-    const int width, const int height
+    const int width, const int height, const int revision
 )
 {
     CHECK_CLIENT_TOKEN(false);
@@ -371,6 +392,7 @@ bool SourceLinkApiClient::putConnection(
     body["min_bitrate"] = minBitrate;
     body["width"] = width;
     body["height"] = height;
+    body["revision"] = revision;
 
     obs_log(LOG_DEBUG, "client: Putting stage connection: %s", qPrintable(sourceUuid));
     auto invoker = new RequestInvoker(this);
