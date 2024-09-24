@@ -521,6 +521,7 @@ void EgressLinkOutput::start()
                 setStatus(LINKED_OUTPUT_STATUS_ERROR);
                 return;
             }
+           // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
             obs_source_inc_showing(source);
 
             // Video setup
@@ -539,6 +540,12 @@ void EgressLinkOutput::start()
             ovi.base_height = obs_source_get_height(source);
             ovi.output_width = width;
             ovi.output_height = height;
+
+            if (ovi.base_width == 0 || ovi.base_height == 0 || ovi.output_width == 0 || ovi.output_height == 0) {
+                obs_log(LOG_ERROR, "%s: Invalid video spec", qPrintable(name));
+                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                return;
+            }
 
             sourceVideo = obs_view_add2(sourceView, &ovi);
             if (!sourceVideo) {
@@ -778,7 +785,7 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
         }
 
         if (source && !isSourceAvailable(source)) {
-            obs_log(LOG_DEBUG, "%s: Source removed", qPrintable(name));
+            obs_log(LOG_DEBUG, "%s: Source removed or inactive", qPrintable(name));
             stop();
             return;
         }

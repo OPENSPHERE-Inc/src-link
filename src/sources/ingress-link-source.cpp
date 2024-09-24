@@ -443,14 +443,13 @@ void SourceAudioThread::run()
     obs_log(LOG_DEBUG, "%s: Audio thread started.", obs_source_get_name(linkedSource->source));
     active = true;
 
-    while (!isInterruptionRequested()) {
-        msleep(10);
-        
+    while (!isInterruptionRequested()) {        
         QMutexLocker locker(&audioBufferMutex);
         {
             if (!audioBufferFrames) {
                 // No data at this time
                 locker.unlock();
+                msleep(10);
                 continue;
             }
 
@@ -545,7 +544,7 @@ obs_source_info createLinkedSourceInfo()
 
     sourceInfo.id = "linked_source";
     sourceInfo.type = OBS_SOURCE_TYPE_INPUT;
-    sourceInfo.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO;
+    sourceInfo.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE;
 
     sourceInfo.get_name = [](void *) {
         return "Source Linked Source";
