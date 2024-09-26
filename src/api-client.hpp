@@ -50,7 +50,7 @@ class SourceLinkApiClient : public QObject {
     // Online rsources
     AccountInfo accountInfo;
     QList<Party> parties;
-    QList<PartyEvent> partyEvents;  // Contains all events of all parties
+    QList<PartyEvent> partyEvents; // Contains all events of all parties
     QList<Stage> stages;
     StageSeatInfo seat;
 
@@ -84,6 +84,7 @@ signals:
     void screenshotPutFailed();
     void pictureGetSucceeded(const QString &pictureId, const QImage &picture);
     void pictureGetFailed(const QString &pictureId);
+    void ingressRestartNeeded();
 
 private slots:
     void onO2LinkedChanged();
@@ -103,26 +104,12 @@ public:
     ~SourceLinkApiClient();
 
     inline const QString &getUuid() const { return uuid; }
-    inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
-    inline const QString getPartyId() const { return settings->value("partyId"); }
-    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
-    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
-    inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
-    inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
-    inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
-    inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
-    inline void setForceConnection(const bool forceConnection)
-    {
-        settings->setValue("forceConnection", forceConnection ? "true" : "false");
-    }
-    inline const bool getForceConnection() { return settings->value("forceConnection", "false") == "true"; }
-
     inline const AccountInfo getAccountInfo() const { return accountInfo; }
     inline const QList<Party> &getParties() const { return parties; }
     inline const QList<PartyEvent> &getPartyEvents() const { return partyEvents; }
     inline const QList<Stage> &getStages() const { return stages; }
     inline const StageSeatInfo getSeat() const { return seat; }
-    inline SourceLinkSettingsStore *getSettings() const { return settings; }  
+    inline SourceLinkSettingsStore *getSettings() const { return settings; }
 
 public slots:
     void login();
@@ -145,9 +132,12 @@ public slots:
     bool deleteConnection(const QString &sourceUuid, const bool noSignal = false);
     bool putSeatAllocation(const bool force = false);
     bool deleteSeatAllocation(const bool noSignal = false);
-    bool putScreenshot(const QString &sourceName, const QImage& image);
+    bool putScreenshot(const QString &sourceName, const QImage &image);
     bool getPicture(const QString &pitureId);
+    void restartIngress() { emit ingressRestartNeeded(); }
+    void terminate();
+    void openStageCreationForm(); // Just open web browser
 
     const int getFreePort();
-    void releasePort(const int port);    
+    void releasePort(const int port);
 };

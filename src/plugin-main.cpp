@@ -60,9 +60,21 @@ void unregisterLinkedSourceDock()
     }
 }
 
+void frontendEventCallback(enum obs_frontend_event event, void *)
+{
+    switch (event) {
+    case OBS_FRONTEND_EVENT_EXIT:
+        if (apiClient) {
+            apiClient->terminate();
+        }
+    }
+}
+
 bool obs_module_load(void)
 {
     apiClient = new SourceLinkApiClient();
+
+    obs_frontend_add_event_callback(frontendEventCallback, nullptr);
 
     // Register "linked_source" source
     linkedSourceInfo = createLinkedSourceInfo();
@@ -93,5 +105,6 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
     delete apiClient;
+    apiClient = nullptr;
     obs_log(LOG_INFO, "plugin unloaded");
 }

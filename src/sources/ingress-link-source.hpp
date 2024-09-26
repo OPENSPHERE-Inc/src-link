@@ -36,6 +36,7 @@ class IngressLinkSource : public QObject {
     friend class SourceAudioThread;
 
     QString uuid;
+    QString name;
     int port;
     QString stageId;
     QString seatName;
@@ -56,19 +57,21 @@ class IngressLinkSource : public QObject {
     int revision; // Connection revision
 
     SourceLinkApiClient *apiClient;
-    obs_source_t *source; // Don't increse reference because couldn't finalize by OBS
+    OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
     OBSSourceAutoRelease decoderSource;
     speaker_layout speakers;
     uint32_t samplesPerSec;
     bool connected;
     SourceAudioThread *audioThread;
     QTimer *intervalTimer;
+    OBSSignal renameSignal;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
     void handleConnection();
+    QString compositeParameters(obs_data_t* settings, bool remote = false);
 
 private slots:
     void onConnectionPutSucceeded(const StageConnection &connection);
@@ -86,16 +89,17 @@ public:
     inline uint32_t getWidth() { return width; }
     inline uint32_t getHeight() { return height; }
     void update(obs_data_t *settings);
+    void reconnect();
 
     void videoRenderCallback();
 
-    static void getDefaults(obs_data_t *settings);
+    static void getDefaults(obs_data_t *settings, SourceLinkApiClient *apiClient);
 };
 
 class SourceAudioThread : public QThread, SourceAudioCapture {
     Q_OBJECT
 
-    IngressLinkSource *linkedSource;
+    IngressLinkSource *ingressLinkSource;
 
 public:
     explicit SourceAudioThread(IngressLinkSource *_linkedSource);

@@ -26,50 +26,23 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define POLLING_INTERVAL_MSECS 10000
 
-inline QString compositeParameters(obs_data_t *settings, QString &passphrase, QString &streamId, bool remote = false)
-{
-    auto protocol = QString(obs_data_get_string(settings, "protocol"));
-    QString parameters;
-
-    if (protocol == QString("srt")) {
-        // Generate SRT parameters
-        auto mode = QString(obs_data_get_string(settings, "mode"));
-        if (remote) {
-            // Invert mode for remote
-            if (mode == QString("listener")) {
-                mode = QString("caller");
-            } else if (mode == QString("caller")) {
-                mode = QString("listener");
-            }
-        }
-
-        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
-                         .arg(mode)
-                         .arg(obs_data_get_int(settings, "latency") * 1000) // Convert to microseconds
-                         .arg(obs_data_get_int(settings, "pbkeylen"))
-                         .arg(passphrase)
-                         .arg(streamId);
-    }
-
-    return parameters;
-}
-
 //--- IngressLinkSource class ---//
 
 IngressLinkSource::IngressLinkSource(
     obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent
 )
     : QObject(parent),
-      source(_source),
+      weakSource(obs_source_get_weak_source(_source)),
       apiClient(_apiClient),
       connected(false),
-      uuid(QString(obs_source_get_uuid(_source))),
+      uuid(obs_source_get_uuid(_source)),
       port(0),
       revision(0),
       audioThread(nullptr),
       intervalTimer(nullptr)
 {
-    obs_log(LOG_DEBUG, "%s: Source creating", obs_source_get_name(source));
+    name = obs_source_get_name(_source);
+    obs_log(LOG_DEBUG, "%s: Source creating", qPrintable(name));
 
     // Allocate port
     port = apiClient->getFreePort();
@@ -82,7 +55,7 @@ IngressLinkSource::IngressLinkSource(
 
     // Create decoder private source (SRT, RIST, etc.)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
-    QString decoderName = QString("%1 (decoder)").arg(obs_source_get_name(source));
+    QString decoderName = QString("%1 (decoder)").arg(obs_source_get_name(_source));
     decoderSource = obs_source_create_private("ffmpeg_source", qPrintable(decoderName), decoderSettings);
     obs_source_inc_active(decoderSource);
 
@@ -111,19 +84,30 @@ IngressLinkSource::IngressLinkSource(
         apiClient, SIGNAL(connectionDeleteSucceeded(const QString &)), this,
         SLOT(onConnectionDeleteSucceeded(const QString &))
     );
+    connect(apiClient, &SourceLinkApiClient::restartIngress, [this]() { reconnect(); });
 
-    obs_log(LOG_INFO, "%s: Source created", obs_source_get_name(source));
+    renameSignal.Connect(
+        obs_source_get_signal_handler(_source), "rename",
+        [](void *data, calldata_t *cd) {
+            auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+            ingressLinkSource->name = calldata_string(cd, "new_name");
+        },
+        this
+    );
+
+    obs_log(LOG_INFO, "%s: Source created", qPrintable(name));
 }
 
 IngressLinkSource::~IngressLinkSource()
 {
-    obs_log(LOG_DEBUG, "%s: Source destroying", obs_source_get_name(source));
+    obs_log(LOG_DEBUG, "%s: Source destroying", qPrintable(name));
+
+    renameSignal.Disconnect();
 
     disconnect(this);
 
-    // Note: apiClient instance might live in a different thread
-    QMetaObject::invokeMethod(apiClient, "deleteConnection", Q_ARG(QString, uuid), Q_ARG(bool, true));
-    QMetaObject::invokeMethod(apiClient, "releasePort", Q_ARG(int, port));
+    apiClient->deleteConnection(uuid, true);
+    apiClient->releasePort(port);
 
     // Destroy decoder private source
     audioThread->requestInterruption();
@@ -132,30 +116,70 @@ IngressLinkSource::~IngressLinkSource()
 
     obs_source_dec_active(decoderSource);
 
-    obs_log(LOG_INFO, "%s: Source destroyed", obs_source_get_name(source));
+    obs_log(LOG_INFO, "%s: Source destroyed", qPrintable(name));
+}
+
+QString IngressLinkSource::compositeParameters(obs_data_t *settings, bool remote)
+{
+    auto apiSettings = apiClient->getSettings();
+    QString parameters;
+
+    if (protocol == "srt") {
+        // Generate SRT parameters
+        auto mode = apiSettings->getIngressSrtMode();
+        if (remote) {
+            // Invert mode for remote
+            if (mode == "listener") {
+                mode = "caller";
+            } else if (mode == "caller") {
+                mode = "listener";
+            }
+        }
+
+        auto latency = apiSettings->getIngressSrtLatency();
+        if (obs_data_get_bool(settings, "advanced_settings")) {
+            latency = obs_data_get_int(settings, "srt_latency");
+        }
+
+        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
+                         .arg(mode)
+                         .arg(latency * 1000) // Convert to microseconds
+                         .arg(apiSettings->getIngressSrtPbkeylen())
+                         .arg(passphrase)
+                         .arg(streamId);
+    }
+
+    return parameters;
 }
 
 void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
+    protocol = apiClient->getSettings()->getIngressProtocol();
+
     stageId = obs_data_get_string(settings, "stage_id");
     seatName = obs_data_get_string(settings, "seat_name");
     sourceName = obs_data_get_string(settings, "source_name");
-    protocol = obs_data_get_string(settings, "protocol");
     maxBitrate = obs_data_get_int(settings, "max_bitrate");
     minBitrate = obs_data_get_int(settings, "min_bitrate");
     width = obs_data_get_int(settings, "width");
     height = obs_data_get_int(settings, "height");
-    reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
-    bufferingMb = obs_data_get_int(settings, "buffering_mb");
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
+
+    if (obs_data_get_bool(settings, "advanced_settings")) {
+        reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
+        bufferingMb = obs_data_get_int(settings, "buffering_mb");
+    } else {
+        reconnectDelaySec = apiClient->getSettings()->getIngressReconnectDelayTime();
+        bufferingMb = apiClient->getSettings()->getIngressNetworkBufferSize();
+    }
 
     // Generate new passphrase and stream ID here
     passphrase = generatePassword(16, "");
     streamId = generatePassword(32, "");
 
-    localParameters = compositeParameters(settings, passphrase, streamId);
-    remoteParameters = compositeParameters(settings, passphrase, streamId, true);
+    localParameters = compositeParameters(settings);
+    remoteParameters = compositeParameters(settings, true);
 
     // Increment connection revision
     revision++;
@@ -165,7 +189,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 {
     auto decoderSettings = obs_data_create();
 
-    if (protocol == QString("srt") && port > 0) {
+    if (protocol == "srt" && port > 0) {
         auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
         obs_data_set_string(decoderSettings, "input", qPrintable(input));
     } else {
@@ -203,22 +227,32 @@ void IngressLinkSource::handleConnection()
 
 obs_properties_t *IngressLinkSource::getProperties()
 {
+    obs_log(LOG_DEBUG, "%s: Properties creating", qPrintable(name));
     auto props = obs_properties_create();
     obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
 
-    obs_property_t *prop;
+    // Connection group
+    auto connectionGroup = obs_properties_create();
+    obs_properties_add_group(props, "connection", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup);
 
-    // Stage list
+    // Connection group -> Stage list
     auto stageList = obs_properties_add_list(
-        props, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     foreach (auto &stage, apiClient->getStages()) {
         obs_property_list_add_string(stageList, qPrintable(stage.getName()), qPrintable(stage.getId()));
     }
 
-    // Connection group
-    auto connectionGroup = obs_properties_create();
-    obs_properties_add_group(props, "connection", obs_module_text("Connection"), OBS_GROUP_NORMAL, connectionGroup);
+    // Connection group -> Create button
+    obs_properties_add_button2(
+        connectionGroup, "create_stage", obs_module_text("CreateNewStage"),
+        [](obs_properties_t *props, obs_property_t *property, void *param) { 
+            auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            ingressLinkSource->apiClient->openStageCreationForm();
+            return true;
+        },
+        this
+    );
 
     // Connection group -> Seat list
     auto seatList = obs_properties_add_list(
@@ -239,7 +273,7 @@ obs_properties_t *IngressLinkSource::getProperties()
             obs_log(LOG_DEBUG, "Stage has been changed.");
 
             auto apiClient = static_cast<SourceLinkApiClient *>(param);
-            auto stageId = QString(obs_data_get_string(settings, "stage_id"));
+            QString stageId = obs_data_get_string(settings, "stage_id");
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
             obs_properties_remove_by_name(connectionGroup, "seat_name");
@@ -296,83 +330,56 @@ obs_properties_t *IngressLinkSource::getProperties()
     obs_properties_add_int(props, "height", obs_module_text("SpecifiedHeight"), 0, 2160, 2);
 
     // Private source settings
-    obs_properties_add_int_slider(props, "reconnect_delay_sec", obs_module_text("ReconnectDelayTime"), 1, 60, 1);
-    prop = obs_properties_add_int_slider(props, "buffering_mb", obs_module_text("BufferingMB"), 0, 16, 1);
-    obs_property_int_set_suffix(prop, " MB");
     obs_properties_add_bool(props, "hw_decode", obs_module_text("HardwareDecode"));
     obs_properties_add_bool(props, "clear_on_media_end", obs_module_text("ClearOnMediaEnd"));
 
-    // Protocol list
-    auto protocolList = obs_properties_add_list(
-        props, "protocol", obs_module_text("Protocol"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
-    );
-    obs_property_list_add_string(protocolList, obs_module_text("SRT"), "srt");
-
-    // Protocol setting group
-    auto protocolSettingGroup = obs_properties_create();
-    obs_properties_add_group(
-        props, "protocol_settings", obs_module_text("ProtocolSettings"), OBS_GROUP_NORMAL, protocolSettingGroup
-    );
-
-    // Protocol change event -> Update protocol settings group
+    auto advancedSettings = obs_properties_add_bool(props, "advanced_settings", obs_module_text("AdvancedSettings"));
     obs_property_set_modified_callback2(
-        protocolList,
+        advancedSettings,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            obs_log(LOG_DEBUG, "Protocol has been changed.");
-            auto apiClient = static_cast<SourceLinkApiClient *>(param);
-            auto protocol = QString(obs_data_get_string(settings, "protocol"));
+            IngressLinkSource *ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            auto apiSettings = ingressLinkSource->apiClient->getSettings();
+            auto advanced = obs_data_get_bool(settings, "advanced_settings");
 
-            // Remove group's properties
-            auto protocolSettingsGroup = obs_property_group_content(obs_properties_get(props, "protocol_settings"));
-            for (auto prop = obs_properties_first(protocolSettingsGroup); prop; obs_property_next(&prop)) {
-                obs_properties_remove_by_name(protocolSettingsGroup, obs_property_name(prop));
-            }
-
-            if (protocol == QString("srt")) {
-                // mode list
-                auto modeList = obs_properties_add_list(
-                    protocolSettingsGroup, "mode", obs_module_text("Mode"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
-                );
-                obs_property_list_add_string(modeList, "listener", "listener");
-                obs_property_list_add_string(modeList, "caller", "caller");
-                obs_property_list_add_string(modeList, "rendezvous", "rendezvous");
-
-                // Latency
-                obs_properties_add_int(protocolSettingsGroup, "latency", obs_module_text("LatencyMsecs"), 0, 60000, 1);
-
-                // pbkeylen list
-                auto pbkeylenList = obs_properties_add_list(
-                    protocolSettingsGroup, "pbkeylen", obs_module_text("PBKeyLen"), OBS_COMBO_TYPE_LIST,
-                    OBS_COMBO_FORMAT_INT
-                );
-                obs_property_list_add_int(pbkeylenList, "16", 16);
-                obs_property_list_add_int(pbkeylenList, "24", 24);
-                obs_property_list_add_int(pbkeylenList, "32", 32);
-            }
+            obs_property_set_visible(obs_properties_get(props, "reconnect_delay_sec"), advanced);
+            obs_property_set_visible(obs_properties_get(props, "buffering_mb"), advanced);
+            obs_property_set_visible(
+                obs_properties_get(props, "srt_latency"), advanced && apiSettings->getIngressProtocol() == "srt"
+            );
 
             return true;
         },
-        apiClient
+        this
     );
 
+    // Advanced settings
+    auto reconnectDelay =
+        obs_properties_add_int_slider(props, "reconnect_delay_sec", obs_module_text("ReconnectDelayTime"), 1, 60, 1);
+    obs_property_int_set_suffix(reconnectDelay, " secs");
+
+    auto buffering = obs_properties_add_int_slider(props, "buffering_mb", obs_module_text("BufferingMB"), 0, 16, 1);
+    obs_property_int_set_suffix(buffering, " MB");
+
+    auto srtLatency = obs_properties_add_int(props, "srt_latency", obs_module_text("LatencyMsecs"), 0, 60000, 1);
+    obs_property_int_set_suffix(srtLatency, " ms");
+    obs_property_set_visible(srtLatency, apiClient->getSettings()->getIngressProtocol() == "srt");
+
+    obs_log(LOG_DEBUG, "%s: Properties created", qPrintable(name));
     return props;
 }
 
-void IngressLinkSource::getDefaults(obs_data_t *settings)
+void IngressLinkSource::getDefaults(obs_data_t *settings, SourceLinkApiClient *apiClient)
 {
     obs_log(LOG_DEBUG, "Default settings applying.");
 
-    obs_data_set_default_int(settings, "reconnect_delay_sec", 1);
-    obs_data_set_default_int(settings, "buffering_mb", 1);
-    obs_data_set_default_bool(settings, "hw_decode", true);
+    obs_data_set_default_bool(settings, "hw_decode", false);
     obs_data_set_default_bool(settings, "clear_on_media_end", true);
     obs_data_set_default_int(settings, "max_bitrate", 8000);
     obs_data_set_default_int(settings, "min_bitrate", 4000);
-
-    obs_data_set_default_string(settings, "protocol", "srt");
-    obs_data_set_default_string(settings, "mode", "listener");
-    obs_data_set_default_int(settings, "latency", 200);
-    obs_data_set_default_int(settings, "pbkeylen", 16);
+    obs_data_set_default_bool(settings, "advanced_settings", false);
+    obs_data_set_default_int(settings, "srt_latency", apiClient->getSettings()->getIngressSrtLatency());
+    obs_data_set_default_int(settings, "reconnect_delay_sec", apiClient->getSettings()->getIngressReconnectDelayTime());
+    obs_data_set_default_int(settings, "buffering_mb", apiClient->getSettings()->getIngressNetworkBufferSize());
 
     obs_video_info ovi = {0};
     if (obs_get_video_info(&ovi)) {
@@ -391,7 +398,7 @@ void IngressLinkSource::videoRenderCallback()
 
 void IngressLinkSource::update(obs_data_t *settings)
 {
-    obs_log(LOG_DEBUG, "%s: Source updating", obs_source_get_name(source));
+    obs_log(LOG_DEBUG, "%s: Source updating", qPrintable(name));
 
     captureSettings(settings);
     handleConnection();
@@ -399,7 +406,7 @@ void IngressLinkSource::update(obs_data_t *settings)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
     obs_source_update(decoderSource, decoderSettings);
 
-    obs_log(LOG_INFO, "%s: Source updated", obs_source_get_name(source));
+    obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
 }
 
 void IngressLinkSource::onConnectionPutSucceeded(const StageConnection &connection)
@@ -427,21 +434,27 @@ void IngressLinkSource::onStageConnectionReady(const StageConnection &connection
         revision = connection.getRevision();
 
         // Reconnect occurres
-        OBSDataAutoRelease settings = obs_source_get_settings(source);
-        update(settings);
+        reconnect();
     }
+}
+
+void IngressLinkSource::reconnect()
+{
+    OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
+    OBSDataAutoRelease settings = obs_source_get_settings(source);
+    update(settings);
 }
 
 //--- SourceLinkAudioThread class ---//
 
 SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource)
-    : linkedSource(_linkedSource),
+    : ingressLinkSource(_linkedSource),
       QThread(_linkedSource),
       SourceAudioCapture(
           _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers, _linkedSource
       )
 {
-    obs_log(LOG_DEBUG, "%s: Audio thread creating.", obs_source_get_name(linkedSource->source));
+    obs_log(LOG_DEBUG, "%s: Audio thread creating.", qPrintable(ingressLinkSource->name));
 }
 
 SourceAudioThread::~SourceAudioThread()
@@ -451,17 +464,21 @@ SourceAudioThread::~SourceAudioThread()
         wait();
     }
 
-    obs_log(LOG_DEBUG, "%s: Audio thread destroyed.", obs_source_get_name(linkedSource->source));
+    obs_log(LOG_DEBUG, "%s: Audio thread destroyed.", qPrintable(ingressLinkSource->name));
 }
 
 void SourceAudioThread::run()
 {
-    obs_log(LOG_DEBUG, "%s: Audio thread started.", obs_source_get_name(linkedSource->source));
+    obs_log(LOG_DEBUG, "%s: Audio thread started.", qPrintable(ingressLinkSource->name));
     active = true;
 
-    while (!isInterruptionRequested()) {        
+    while (!isInterruptionRequested()) {
         QMutexLocker locker(&audioBufferMutex);
         {
+            OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
+            if (!source) {
+                break;
+            }
             if (!audioBufferFrames) {
                 // No data at this time
                 locker.unlock();
@@ -493,7 +510,7 @@ void SourceAudioThread::run()
             }
 
             // Send data to source output
-            obs_source_output_audio(linkedSource->source, &audioData);
+            obs_source_output_audio(source, &audioData);
 
             audioBufferFrames -= header->frames;
         }
@@ -501,7 +518,7 @@ void SourceAudioThread::run()
     }
 
     active = false;
-    obs_log(LOG_DEBUG, "%s: Audio thread stopped.", obs_source_get_name(linkedSource->source));
+    obs_log(LOG_DEBUG, "%s: Audio thread stopped.", qPrintable(ingressLinkSource->name));
 }
 
 //--- Source registration ---//
@@ -515,55 +532,56 @@ void *createSource(obs_data_t *settings, obs_source_t *source)
 
 void destroySource(void *data)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    delete linkedSource;
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    // Delete with thread-safe way
+    ingressLinkSource->deleteLater();
 }
 
 obs_properties_t *getProperties(void *data)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    return linkedSource->getProperties();
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    return ingressLinkSource->getProperties();
 }
 
 void getDefaults(obs_data_t *settings)
 {
-    IngressLinkSource::getDefaults(settings);
+    IngressLinkSource::getDefaults(settings, apiClient);
 }
 
 uint32_t getWidth(void *data)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    return linkedSource->getWidth();
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    return ingressLinkSource->getWidth();
 }
 
 uint32_t getHeight(void *data)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    return linkedSource->getHeight();
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    return ingressLinkSource->getHeight();
 }
 
 void videoRender(void *data, gs_effect_t *)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    linkedSource->videoRenderCallback();
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    ingressLinkSource->videoRenderCallback();
 }
 
 void update(void *data, obs_data_t *settings)
 {
-    auto linkedSource = static_cast<IngressLinkSource *>(data);
-    linkedSource->update(settings);
+    auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
+    ingressLinkSource->update(settings);
 }
 
 obs_source_info createLinkedSourceInfo()
 {
     obs_source_info sourceInfo = {0};
 
-    sourceInfo.id = "linked_source";
+    sourceInfo.id = "ingress_link_source";
     sourceInfo.type = OBS_SOURCE_TYPE_INPUT;
     sourceInfo.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE;
 
     sourceInfo.get_name = [](void *) {
-        return "Source Linked Source";
+        return "Ingress Link";
     };
     sourceInfo.create = createSource;
     sourceInfo.destroy = destroySource;

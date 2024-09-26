@@ -61,6 +61,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PARTY_MEMBERS_SCREENSHOTS_URL (API_SERVER "/api/v1/parties/%1/members/me/screenshots/%2")
 #define PING_URL (API_SERVER "/api/v1/ping")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
+#define STAGES_CREATE_FORM_URL (API_SERVER "/stages/create")
 
 // Embedded client ID and secret
 #define CLIENT_ID "testClientId"
@@ -70,12 +71,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
-#define CHECK_CLIENT_TOKEN(...)                                \
-    {                                                          \
-        if (client->refreshToken().isEmpty()) {                \
+#define CHECK_CLIENT_TOKEN(...)                             \
+    {                                                       \
+        if (client->refreshToken().isEmpty()) {             \
             obs_log(LOG_ERROR, "client: No access token."); \
-            return __VA_ARGS__;                                \
-        }                                                      \
+            return __VA_ARGS__;                             \
+        }                                                   \
     }
 
 #define CHECK_RESPONSE_NOERROR(signal, message, ...)  \
@@ -123,7 +124,9 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
     client->setScope(QString::fromLatin1(SCOPE));
     client->setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
-    client->setReplyContent("<html><body><h2>Authorization complete. You can close this window and return to OBS Studio</h2></body></html>");
+    client->setReplyContent(
+        "<html><body><h2>Authorization complete. You can close this window and return to OBS Studio</h2></body></html>"
+    );
 
     connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
     connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));
@@ -166,7 +169,9 @@ SourceLinkApiClient::~SourceLinkApiClient()
 
 void SourceLinkApiClient::login()
 {
-    obs_log(LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s", qPrintable(GRANTFLOW_STR(client->grantFlow())));
+    obs_log(
+        LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s", qPrintable(GRANTFLOW_STR(client->grantFlow()))
+    );
     client->link();
 }
 
@@ -187,8 +192,8 @@ void SourceLinkApiClient::refresh()
 
 const int SourceLinkApiClient::getFreePort()
 {
-    auto min = settings->value("portRange.min", "10000").toInt();
-    auto max = settings->value("portRange.max", "10099").toInt();
+    auto min = settings->getIngressPortMin();
+    auto max = settings->getIngressPortMax();
 
     for (auto i = min; i <= max; i++) {
         if (!usedPorts[i]) {
@@ -268,8 +273,8 @@ bool SourceLinkApiClient::requestParties()
             parties.append(partyItem.toObject());
         }
 
-        if (getPartyId().isEmpty() && parties.size() > 0) {
-            setPartyId(parties[0].getId());
+        if (settings->getPartyId().isEmpty() && parties.size() > 0) {
+            settings->setPartyId(parties[0].getId());
         }
 
         obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
@@ -294,8 +299,8 @@ bool SourceLinkApiClient::requestPartyEvents()
             partyEvents.append(partyEventItem.toObject());
         }
 
-        if (getPartyEventId().isEmpty() && partyEvents.size() > 0) {
-            setPartyEventId(partyEvents[0].getId());
+        if (settings->getPartyEventId().isEmpty() && partyEvents.size() > 0) {
+            settings->setPartyEventId(partyEvents[0].getId());
         }
 
         obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
@@ -355,16 +360,20 @@ bool SourceLinkApiClient::requestStageConnection(const QString &sourceUuid)
 
     obs_log(LOG_DEBUG, "client: Requesting stage connection for %s", qPrintable(sourceUuid));
     auto invoker = new RequestInvoker(this);
-    connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(
-            stageConnectionFailed, "clinet: Requesting stage connection for %s failed: %d", qPrintable(sourceUuid), error
-        );
+    connect(
+        invoker, &RequestInvoker::finished,
+        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
+            CHECK_RESPONSE_NOERROR(
+                stageConnectionFailed, "clinet: Requesting stage connection for %s failed: %d", qPrintable(sourceUuid),
+                error
+            );
 
-        StageConnection connection = QJsonDocument::fromJson(replyData).object();
+            StageConnection connection = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Received stage connection for %s", qPrintable(sourceUuid));
-        emit stageConnectionReady(connection);
-    });
+            obs_log(LOG_DEBUG, "client: Received stage connection for %s", qPrintable(sourceUuid));
+            emit stageConnectionReady(connection);
+        }
+    );
     invoker->get(QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL).arg(sourceUuid))));
 
     return true;
@@ -425,7 +434,8 @@ bool SourceLinkApiClient::deleteConnection(const QString &sourceUuid, const bool
     if (!noSignal) {
         connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
             CHECK_RESPONSE_NOERROR(
-                connectionDeleteFailed, "clinet: Deleting stage connection of %s failed: %d", qPrintable(sourceUuid), error
+                connectionDeleteFailed, "clinet: Deleting stage connection of %s failed: %d", qPrintable(sourceUuid),
+                error
             );
 
             obs_log(LOG_DEBUG, "client: Delete stage connection of %s succeeded", qPrintable(sourceUuid));
@@ -445,8 +455,8 @@ bool SourceLinkApiClient::putSeatAllocation(const bool force)
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
-    body["party_event_id"] = getPartyEventId();
-    body["force"] = force || getForceConnection() ? "1" : "0";
+    body["party_event_id"] = settings->getPartyEventId();
+    body["force"] = force || settings->getForceConnection() ? "1" : "0";
 
     obs_log(LOG_DEBUG, "client: Putting stage seat allocation of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(this);
@@ -482,7 +492,8 @@ bool SourceLinkApiClient::deleteSeatAllocation(const bool noSignal)
     if (!noSignal) {
         connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
             CHECK_RESPONSE_NOERROR(
-                seatAllocationDeleteFailed, "clinet: Deleting stage seat allocation of %s failed: %d", qPrintable(uuid), error
+                seatAllocationDeleteFailed, "clinet: Deleting stage seat allocation of %s failed: %d", qPrintable(uuid),
+                error
             );
 
             obs_log(LOG_DEBUG, "client: Delete stage seat allocation %s succeeded", qPrintable(uuid));
@@ -498,7 +509,7 @@ bool SourceLinkApiClient::putScreenshot(const QString &sourceName, const QImage 
 {
     CHECK_CLIENT_TOKEN(false);
 
-    auto partyId = getPartyId();
+    auto partyId = settings->getPartyId();
     if (partyId.isEmpty()) {
         obs_log(LOG_ERROR, "client: No party ID is set");
         return false;
@@ -545,6 +556,11 @@ bool SourceLinkApiClient::getPicture(const QString &pictureId)
     });
 
     return true;
+}
+
+void SourceLinkApiClient::openStageCreationForm()
+{
+    QDesktopServices::openUrl(QUrl(STAGES_CREATE_FORM_URL));
 }
 
 void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
@@ -603,3 +619,8 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     requestSeatAllocation();
 }
 
+void SourceLinkApiClient::terminate()
+{
+    obs_log(LOG_DEBUG, "client: Terminating polling timer.");
+    pollingTimer->stop();
+}

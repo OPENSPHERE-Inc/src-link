@@ -118,7 +118,7 @@ void SourceLinkDock::onPartiesReady(const QList<Party> &parties)
 
     // Restore selection (or apply default)
     if (selected.isEmpty()) {
-        selected = apiClient->getPartyId();
+        selected = apiClient->getSettings()->getPartyId();
     }
     if (!selected.isEmpty()) {
         ui->partyComboBox->setCurrentIndex(ui->partyComboBox->findData(selected));
@@ -149,7 +149,7 @@ void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
 
     // Restore selection (or apply default)
     if (selected.isEmpty()) {
-        selected = apiClient->getPartyEventId();
+        selected = apiClient->getSettings()->getPartyEventId();
     }
     if (!selected.isEmpty()) {
         ui->partyEventComboBox->setCurrentIndex(ui->partyEventComboBox->findData(selected));
@@ -194,8 +194,8 @@ void SourceLinkDock::onActivePartyEventChanged(int index)
         }
     }
 
-    apiClient->setPartyId(ui->partyComboBox->currentData().toString());
-    apiClient->setPartyEventId(ui->partyEventComboBox->currentData().toString());
+    apiClient->getSettings()->setPartyId(ui->partyComboBox->currentData().toString());
+    apiClient->getSettings()->setPartyEventId(ui->partyEventComboBox->currentData().toString());
     apiClient->putSeatAllocation();
 }
 

@@ -33,13 +33,30 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
 {
     ui->setupUi(this);
 
-    loadSettings();
+    ui->protocolComboBox->addItem("SRT", "srt");
+
+    ui->srtModeComboBox->addItem("Listaner", "listener");
+    ui->srtModeComboBox->addItem("Caller", "caller");
+    ui->srtModeComboBox->addItem("Rendezvous", "rendezvous");
+
+    ui->pbkeylenComboBox->addItem("16", 16);
+    ui->pbkeylenComboBox->addItem("24", 24);
+    ui->pbkeylenComboBox->addItem("32", 32);
 
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
     );
     connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClick()));
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
+    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, [this](bool checked) {
+        ui->reconnectDelayTimeWidget->setVisible(checked);
+        ui->networkBufferWidget->setVisible(checked);
+        ui->protocolWidget->setVisible(checked);
+        ui->srtModeWidget->setVisible(checked);
+        ui->pbkeylenWidget->setVisible(checked);
+    });
+
+    loadSettings();
 
     setClientActive(apiClient->isLoggedIn());
     onAccountInfoReady(apiClient->getAccountInfo());
@@ -97,17 +114,61 @@ void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
 
 void SettingsDialog::saveSettings()
 {
-    apiClient->setPortMin(ui->portMinSpinBox->value());
-    apiClient->setPortMax(ui->portMaxSpinBox->value());
-    apiClient->setForceConnection(ui->forceConnectionCheckBox->isChecked());
+    auto ingressPortMin = ui->portMinSpinBox->value();
+    auto ingressPortMax = ui->portMaxSpinBox->value();
+    auto ingressReconnectDelayTime = ui->reconnectDelayTimeSpinBox->value();
+    auto ingressNetworkBuffer = ui->networkBufferSpinBox->value();
+    auto ingressProtocol = ui->protocolComboBox->currentData().toString();
+    auto ingressSrtMode = ui->srtModeComboBox->currentData().toString();
+    auto ingressSrtLatecy = ui->latencySpinBox->value();
+    auto ingressSrtPbkeylen = ui->pbkeylenComboBox->currentData().toInt();
+    auto ingressRestartNeeded = ingressPortMin != apiClient->getSettings()->getIngressPortMin() ||
+                                ingressPortMax != apiClient->getSettings()->getIngressPortMax() ||
+                                ingressReconnectDelayTime != apiClient->getSettings()->getIngressReconnectDelayTime() ||
+                                ingressNetworkBuffer != apiClient->getSettings()->getIngressNetworkBufferSize() ||
+                                ingressProtocol != apiClient->getSettings()->getIngressProtocol() ||
+                                ingressSrtMode != apiClient->getSettings()->getIngressSrtMode() ||
+                                ingressSrtLatecy != apiClient->getSettings()->getIngressSrtLatency() ||
+                                ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen();
+
+    auto settings = apiClient->getSettings();
+    settings->setForceConnection(ui->forceConnectionCheckBox->isChecked());
+    settings->setIngressPortMin(ingressPortMin);
+    settings->setIngressPortMax(ingressPortMax);
+    settings->setIngressReconnectDelayTime(ingressReconnectDelayTime);
+    settings->setIngressNetworkBufferSize(ingressNetworkBuffer);
+    settings->setIngressProtocol(ingressProtocol);
+    settings->setIngressSrtMode(ingressSrtMode);
+    settings->setIngressSrtLatency(ingressSrtLatecy);
+    settings->setIngressSrtPbkeylen(ingressSrtPbkeylen);
+    settings->setIngressAdvancedSettings(ui->advancedSettingsCheckBox->isChecked());
+
     apiClient->putSeatAllocation();
+    if (ingressRestartNeeded) {
+        apiClient->restartIngress();
+    }
 }
 
 void SettingsDialog::loadSettings()
 {
-    ui->portMinSpinBox->setValue(apiClient->getPortMin());
-    ui->portMaxSpinBox->setValue(apiClient->getPortMax());
-    ui->forceConnectionCheckBox->setChecked(apiClient->getForceConnection());
+    auto settings = apiClient->getSettings();
+    ui->forceConnectionCheckBox->setChecked(settings->getForceConnection());
+    ui->portMinSpinBox->setValue(settings->getIngressPortMin());
+    ui->portMaxSpinBox->setValue(settings->getIngressPortMax());
+    ui->reconnectDelayTimeSpinBox->setValue(settings->getIngressReconnectDelayTime());
+    ui->networkBufferSpinBox->setValue(settings->getIngressNetworkBufferSize());
+    ui->protocolComboBox->setCurrentIndex(ui->protocolComboBox->findData(settings->getIngressProtocol()));
+    ui->srtModeComboBox->setCurrentIndex(ui->srtModeComboBox->findData(settings->getIngressSrtMode()));
+    ui->latencySpinBox->setValue(settings->getIngressSrtLatency());
+    ui->pbkeylenComboBox->setCurrentIndex(ui->pbkeylenComboBox->findData(settings->getIngressSrtPbkeylen()));
+    ui->advancedSettingsCheckBox->setChecked(settings->getIngressAdvancedSettings());
+
+    bool advanced = ui->advancedSettingsCheckBox->isChecked();
+    ui->reconnectDelayTimeWidget->setVisible(advanced);
+    ui->networkBufferWidget->setVisible(advanced);
+    ui->protocolWidget->setVisible(advanced);
+    ui->srtModeWidget->setVisible(advanced);
+    ui->pbkeylenWidget->setVisible(advanced);
 }
 
 void SettingsDialog::showEvent(QShowEvent *event)

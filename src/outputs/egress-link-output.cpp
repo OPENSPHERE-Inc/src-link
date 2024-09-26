@@ -426,7 +426,7 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connec
     obs_data_t *egressSettings = obs_data_create();
     obs_data_apply(egressSettings, settings);
 
-    if (connection.getProtocol() == QString("srt")) {
+    if (connection.getProtocol() == "srt") {
         auto server = QString("srt://%1:%2?%3")
                           .arg(connection.getServer())
                           .arg(connection.getPort())
