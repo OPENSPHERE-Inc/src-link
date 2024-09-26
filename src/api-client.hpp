@@ -27,25 +27,23 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QTimer>
 
 #include <o2.h>
-#include <o2requestor.h>
 
 #include "plugin-support.h"
 #include "schema.hpp"
 #include "settings.hpp"
 
+class RequestSequencer;
+
 class SourceLinkApiClient : public QObject {
     Q_OBJECT
-
-    friend class RequestInvoker;
 
     QString uuid;
     SourceLinkSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
-    O2Requestor *requestor;
-    QList<RequestInvoker *> requestQueue;
     QMap<int, bool> usedPorts;
     QTimer *pollingTimer;
+    RequestSequencer *sequencer;
 
     // Online rsources
     AccountInfo accountInfo;
@@ -94,11 +92,6 @@ private slots:
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onPollingTimerTimeout();
 
-protected:
-    inline O2 *getO2Client() { return client; }
-    inline O2Requestor *getRequestor() { return requestor; }
-    inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
-
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
     ~SourceLinkApiClient();
@@ -129,7 +122,7 @@ public slots:
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height, const int revision = 0
     );
-    bool deleteConnection(const QString &sourceUuid, const bool noSignal = false);
+    bool deleteConnection(const QString &sourceUuid, const bool parallel = false);
     bool putSeatAllocation(const bool force = false);
     bool deleteSeatAllocation(const bool noSignal = false);
     bool putScreenshot(const QString &sourceName, const QImage &image);

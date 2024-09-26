@@ -78,6 +78,7 @@ private slots:
     void onConnectionPutFailed();
     void onConnectionDeleteSucceeded(const QString &uuid);
     void onStageConnectionReady(const StageConnection &connection);
+    void onIntervalTimerTimeout();
 
 public:
     explicit IngressLinkSource(

@@ -73,8 +73,7 @@ IngressLinkSource::IngressLinkSource(
     intervalTimer->setInterval(POLLING_INTERVAL_MSECS);
     intervalTimer->start();
 
-    connect(intervalTimer, &QTimer::timeout, [this]() { apiClient->requestStageConnection(uuid); });
-
+    connect(intervalTimer, SIGNAL(timeout()), this, SLOT(onIntervalTimerTimeout()));
     connect(
         apiClient, SIGNAL(connectionPutSucceeded(const StageConnection &)), this,
         SLOT(onConnectionPutSucceeded(const StageConnection &))
@@ -84,7 +83,7 @@ IngressLinkSource::IngressLinkSource(
         apiClient, SIGNAL(connectionDeleteSucceeded(const QString &)), this,
         SLOT(onConnectionDeleteSucceeded(const QString &))
     );
-    connect(apiClient, &SourceLinkApiClient::restartIngress, [this]() { reconnect(); });
+    connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reconnect(); });
 
     renameSignal.Connect(
         obs_source_get_signal_handler(_source), "rename",
@@ -435,6 +434,13 @@ void IngressLinkSource::onStageConnectionReady(const StageConnection &connection
 
         // Reconnect occurres
         reconnect();
+    }
+}
+
+void IngressLinkSource::onIntervalTimerTimeout()
+{
+    if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
+        apiClient->requestStageConnection(uuid);
     }
 }
 

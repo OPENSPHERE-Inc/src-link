@@ -16,59 +16,164 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <obs-module.h>
+
 #include "request-invoker.hpp"
+#include "plugin-support.h"
+
+//--- RequestSequencer class ---//
+
+RequestSequencer::RequestSequencer(QNetworkAccessManager *_networkManager, O2 *_client, QObject *parent)
+    : QObject(parent),
+      networkManager(_networkManager),
+      client(_client)
+{
+    obs_log(LOG_DEBUG, "RequestSequencer created");
+}
+
+RequestSequencer::~RequestSequencer()
+{
+    if (!requestQueue.isEmpty()) {
+        obs_log(LOG_WARNING, "Remaining %d requests in queue.", requestQueue.size());
+    }
+
+    obs_log(LOG_DEBUG, "RequestSequencer destroyed");
+}
 
 //--- RequestInvoker class ---//
 
-RequestInvoker::RequestInvoker(SourceLinkApiClient *_apiClient, QObject *parent)
-    : QObject(parent),
-      apiClient(_apiClient),
-      requestor(_apiClient->getRequestor())
+RequestInvoker::RequestInvoker(RequestSequencer *_sequencer, QObject *parent) : QObject(parent), sequencer(_sequencer)
 {
-    connect(
-        requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
-        SLOT(onRequestorFinished(int, QNetworkReply::NetworkError, QByteArray))
-    );
-    connect(
-        apiClient->getO2Client(), SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
-        SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
-    );
-    obs_log(LOG_DEBUG, "RequestInvoker created");
+    obs_log(LOG_DEBUG, "RequestInvoker created (Sequential)");
+}
+
+RequestInvoker::RequestInvoker(QNetworkAccessManager *networkManager, O2 *client, QObject *parent)
+    : QObject(parent),
+      sequencer(nullptr)
+{
+    sequencer = new RequestSequencer(networkManager, client, this);
+    obs_log(LOG_DEBUG, "RequestInvoker created (Parallel)");
 }
 
 RequestInvoker::~RequestInvoker()
 {
-    disconnect(
+    disconnect(this);
+    obs_log(LOG_DEBUG, "RequestInvoker destroyed");
+}
+
+template<class Func> void RequestInvoker::queue(Func invoker)
+{
+    QMutexLocker locker(&sequencer->mutex);
+    {
+        if (sequencer->requestQueue.isEmpty()) {
+            sequencer->requestQueue.append(this);
+            invoker();
+        } else {
+            // Reserve next invocation
+            connect(sequencer->requestQueue.last(), &RequestInvoker::finished, invoker);
+            sequencer->requestQueue.append(this);
+        }
+        obs_log(LOG_DEBUG, "Queue request: size=%d", sequencer->requestQueue.size());
+    }
+    locker.unlock();
+}
+
+void RequestInvoker::refresh()
+{
+    connect(
+        sequencer->client, SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
+        SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
+    );
+    queue([this]() {
+        obs_log(LOG_DEBUG, "Invoke refresh token");
+        sequencer->client->refresh();
+    });
+}
+
+O2Requestor *RequestInvoker::createRequestor()
+{
+    auto requestor = new O2Requestor(sequencer->networkManager, sequencer->client, this);
+    requestor->setAddAccessTokenInQuery(false);
+    requestor->setAccessTokenInAuthenticationHTTPHeaderFormat("Bearer %1");
+
+    connect(
         requestor, SIGNAL(finished(int, QNetworkReply::NetworkError, QByteArray)), this,
         SLOT(onRequestorFinished(int, QNetworkReply::NetworkError, QByteArray))
     );
-    obs_log(LOG_DEBUG, "RequestInvoker destroyed");
+
+    return requestor;
+}
+
+void RequestInvoker::get(const QNetworkRequest &req, int timeout)
+{
+    queue([this, req, timeout]() { createRequestor()->get(req, timeout); });
+}
+
+void RequestInvoker::post(const QNetworkRequest &req, const QByteArray &data, int timeout)
+{
+    queue([this, req, data, timeout]() { createRequestor()->post(req, data, timeout); });
+}
+
+void RequestInvoker::post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout)
+{
+    queue([this, req, data, timeout]() { createRequestor()->post(req, data, timeout); });
+}
+
+void RequestInvoker::put(const QNetworkRequest &req, const QByteArray &data, int timeout)
+{
+    queue([this, req, data, timeout]() { createRequestor()->put(req, data, timeout); });
+}
+
+void RequestInvoker::put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout)
+{
+    queue([this, req, data, timeout]() { createRequestor()->put(req, data, timeout); });
+}
+
+void RequestInvoker::deleteResource(const QNetworkRequest &req, int timeout)
+{
+    queue([this, req, timeout]() { createRequestor()->deleteResource(req, timeout); });
+}
+
+void RequestInvoker::head(const QNetworkRequest &req, int timeout)
+{
+    queue([this, req, timeout]() { createRequestor()->head(req, timeout); });
+}
+
+void RequestInvoker::customRequest(
+    const QNetworkRequest &req, const QByteArray &verb, const QByteArray &data, int timeout
+)
+{
+    queue([this, req, verb, data, timeout]() { createRequestor()->customRequest(req, verb, data, timeout); });
 }
 
 void RequestInvoker::onRequestorFinished(int _requestId, QNetworkReply::NetworkError error, QByteArray data)
 {
-    if (requestId != _requestId) {
-        return;
-    }
     obs_log(LOG_DEBUG, "Request finished: %d", _requestId);
 
-    apiClient->requestQueue.removeOne(this);
+    QMutexLocker locker(&sequencer->mutex);
+    {
+        sequencer->requestQueue.removeOne(this);
+    }
+    locker.unlock();
+
     emit finished(error, data);
     deleteLater();
 }
 
 void RequestInvoker::onO2RefreshFinished(QNetworkReply::NetworkError error)
 {
-    if (requestId != -2) {
-        return;
-    }
     if (error != QNetworkReply::NoError) {
         obs_log(LOG_ERROR, "Refresh failed: %d", error);
     } else {
         obs_log(LOG_DEBUG, "Refresh finished");
     }
 
-    apiClient->requestQueue.removeOne(this);
+    QMutexLocker locker(&sequencer->mutex);
+    {
+        sequencer->requestQueue.removeOne(this);
+    }
+    locker.unlock();
+
     emit finished(error, nullptr);
     deleteLater();
 }

@@ -19,96 +19,76 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <QObject>
+#include <QMutex>
+#include <QNetworkAccessManager>
 
-#include "api-client.hpp"
+#include <o2.h>
+#include <o2requestor.h>
 
 #define DEFAULT_TIMEOUT_MSECS (10 * 1000)
 
+
 // This class introduces sequencial invocation of requests
+class RequestSequencer : public QObject {
+    Q_OBJECT
+
+    friend class RequestInvoker;
+
+    QNetworkAccessManager *networkManager;
+    O2 *client;
+    QList<RequestInvoker *> requestQueue;
+    QMutex mutex;
+
+public:
+    explicit RequestSequencer(QNetworkAccessManager *networkManager, O2 *client, QObject *parent = nullptr);
+    ~RequestSequencer();
+};
+
+// This class contains O2Requestor individually
 class RequestInvoker : public QObject {
     Q_OBJECT
 
-    O2Requestor *requestor;
-    SourceLinkApiClient *apiClient;
-    int requestId = -1; // -1: no request, -2: refresh, other: Proper request ID from O2Requestor
+    RequestSequencer *sequencer;
+    O2Requestor *createRequestor();
 
 signals:
     void finished(QNetworkReply::NetworkError error, QByteArray data);
 
 public:
-    explicit RequestInvoker(SourceLinkApiClient *apiClient, QObject *parent = nullptr);
+    // Sequential invocation
+    explicit RequestInvoker(RequestSequencer *sequencer, QObject *parent = nullptr);
+    
+    // Parallel invocation
+    explicit RequestInvoker(QNetworkAccessManager *networkManager, O2 *client, QObject *parent = nullptr);
+
     ~RequestInvoker();
 
-    template<class Func> inline void queue(Func invoker)
-    {
-        if (apiClient->getRequestQueue().isEmpty()) {
-            apiClient->getRequestQueue().append(this);
-            invoker();
-        } else {
-            // Reserve next invocation
-            connect(apiClient->getRequestQueue().last(), &RequestInvoker::finished, invoker);
-            apiClient->getRequestQueue().append(this);
-        }
-        obs_log(LOG_DEBUG, "Queue request: size=%d", apiClient->getRequestQueue().size());
-    }
+    template<class Func> void queue(Func invoker);
 
     /// Do token refresh
-    inline void refresh()
-    {
-        queue([this]() {
-            obs_log(LOG_DEBUG, "Invoke refresh token");
-            requestId = -2;
-            apiClient->refresh();
-        });
-    }
+    void refresh();
 
     /// Make a GET request.
-    inline void get(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->get(req, timeout); });
-    }
+    void get(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// Make a POST request.
-    inline void post(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestor->post(req, data, timeout); });
-    }
-
-    inline void post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->post(req, data, timeout); });
-    }
+    void post(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS);
+    void post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// Make a PUT request.
-    inline void put(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
-
-    inline void put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
+    void put(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS);
+    void put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// Make a DELETE request.
-    inline void deleteResource(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->deleteResource(req, timeout); });
-    }
+    void deleteResource(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// Make a HEAD request.
-    inline void head(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->head(req, timeout); });
-    }
+    void head(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// Make a custom request.
-    inline void customRequest(
+    void customRequest(
         const QNetworkRequest &req, const QByteArray &verb, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS
-    )
-    {
-        queue([this, req, verb, data, timeout]() { requestId = requestor->customRequest(req, verb, data, timeout); });
-    }
+    );
 
 private slots:
     void onRequestorFinished(int, QNetworkReply::NetworkError error, QByteArray data);
