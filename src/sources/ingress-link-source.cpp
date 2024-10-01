@@ -17,14 +17,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <obs-module.h>
+#include <obs-frontend-api.h>
 
 #include <QUrlQuery>
+#include <QJsonDocument>
 
 #include "../plugin-support.h"
 #include "../utils.hpp"
 #include "ingress-link-source.hpp"
 
 #define POLLING_INTERVAL_MSECS 10000
+#define SETTINGS_JSON_NAME "ingress-link-source.json"
 
 //--- IngressLinkSource class ---//
 
@@ -39,7 +42,8 @@ IngressLinkSource::IngressLinkSource(
       port(0),
       revision(0),
       audioThread(nullptr),
-      intervalTimer(nullptr)
+      intervalTimer(nullptr),
+      populatedSeat(false)
 {
     name = obs_source_get_name(_source);
     obs_log(LOG_DEBUG, "%s: Source creating", qPrintable(name));
@@ -47,11 +51,13 @@ IngressLinkSource::IngressLinkSource(
     // Allocate port
     port = apiClient->getFreePort();
 
+    if (!strcmp(obs_data_get_json(settings), "{}")) {
+        // Initial creation -> Load recently settings from file
+        loadSettings(settings);
+    }
+
     // Capture source's settings first
     captureSettings(settings);
-
-    // Register connection to server
-    handleConnection();
 
     // Create decoder private source (SRT, RIST, etc.)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
@@ -59,12 +65,15 @@ IngressLinkSource::IngressLinkSource(
     decoderSource = obs_source_create_private("ffmpeg_source", qPrintable(decoderName), decoderSettings);
     obs_source_inc_active(decoderSource);
 
+    // Register connection to server
+    handleConnection();
+
+    // Start audio handling
     obs_audio_info ai = {0};
     obs_get_audio_info(&ai);
     speakers = ai.speakers;
     samplesPerSec = ai.samples_per_sec;
 
-    // Audio handling
     audioThread = new SourceAudioThread(this);
     audioThread->start();
 
@@ -75,13 +84,17 @@ IngressLinkSource::IngressLinkSource(
 
     connect(intervalTimer, SIGNAL(timeout()), this, SLOT(onIntervalTimerTimeout()));
     connect(
-        apiClient, SIGNAL(connectionPutSucceeded(const StageConnection &)), this,
-        SLOT(onConnectionPutSucceeded(const StageConnection &))
+        apiClient, SIGNAL(connectionPutSucceeded(const StageConnectionInfo &)), this,
+        SLOT(onStageConnectionReady(const StageConnectionInfo &))
     );
     connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
     connect(
         apiClient, SIGNAL(connectionDeleteSucceeded(const QString &)), this,
         SLOT(onConnectionDeleteSucceeded(const QString &))
+    );
+    connect(
+        apiClient, SIGNAL(stageConnectionReady(const StageConnectionInfo &)), this,
+        SLOT(onStageConnectionReady(const StageConnectionInfo &))
     );
     connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reconnect(); });
 
@@ -151,6 +164,22 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, bool remote
     return parameters;
 }
 
+void IngressLinkSource::loadSettings(obs_data_t *settings)
+{
+    OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);
+    OBSDataAutoRelease recently_settings = obs_data_create_from_json_file(path);
+
+    if (recently_settings) {
+        obs_data_apply(settings, recently_settings);
+    }
+}
+
+void IngressLinkSource::saveSettings(obs_data_t *settings)
+{
+    OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);
+    obs_data_save_json_safe(settings, path, "tmp", "bak");
+}
+
 void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
     protocol = apiClient->getSettings()->getIngressProtocol();
@@ -188,7 +217,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 {
     auto decoderSettings = obs_data_create();
 
-    if (protocol == "srt" && port > 0) {
+    if (populatedSeat && protocol == "srt" && port > 0) {
         auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
         obs_data_set_string(decoderSettings, "input", qPrintable(input));
     } else {
@@ -238,20 +267,9 @@ obs_properties_t *IngressLinkSource::getProperties()
     auto stageList = obs_properties_add_list(
         connectionGroup, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
-    foreach (auto &stage, apiClient->getStages()) {
+    foreach (auto &stage, apiClient->getStages().values()) {
         obs_property_list_add_string(stageList, qPrintable(stage.getName()), qPrintable(stage.getId()));
     }
-
-    // Connection group -> Create button
-    obs_properties_add_button2(
-        connectionGroup, "create_stage", obs_module_text("CreateNewStage"),
-        [](obs_properties_t *props, obs_property_t *property, void *param) { 
-            auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
-            ingressLinkSource->apiClient->openStageCreationForm();
-            return true;
-        },
-        this
-    );
 
     // Connection group -> Seat list
     auto seatList = obs_properties_add_list(
@@ -275,15 +293,12 @@ obs_properties_t *IngressLinkSource::getProperties()
             QString stageId = obs_data_get_string(settings, "stage_id");
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
-            obs_properties_remove_by_name(connectionGroup, "seat_name");
-            obs_properties_remove_by_name(connectionGroup, "source_name");
+            
+            auto seatList = obs_properties_get(connectionGroup, "seat_name");
+            obs_property_list_clear(seatList);
 
-            auto seatList = obs_properties_add_list(
-                connectionGroup, "seat_name", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
-            );
-            auto sourceList = obs_properties_add_list(
-                connectionGroup, "source_name", obs_module_text("Source"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
-            );
+            auto sourceList = obs_properties_get(connectionGroup, "source_name");
+            obs_property_list_clear(sourceList);
 
             if (!apiClient->getStages().size()) {
                 obs_property_list_add_string(seatList, obs_module_text("ChooseStageFirst"), "");
@@ -291,7 +306,7 @@ obs_properties_t *IngressLinkSource::getProperties()
                 return true;
             }
 
-            foreach (auto &stage, apiClient->getStages()) {
+            foreach (auto &stage, apiClient->getStages().values()) {
                 if (stageId != stage.getId()) {
                     continue;
                 }
@@ -322,11 +337,51 @@ obs_properties_t *IngressLinkSource::getProperties()
         apiClient
     );
 
+    // Connection group -=> Reload button
+    obs_properties_add_button2(
+        connectionGroup, "reload_stages", obs_module_text("ReloadStages"),
+        [](obs_properties_t *props, obs_property_t *property, void *param) {
+            auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            auto invoker = ingressLinkSource->apiClient->requestStages();
+            if (invoker) {
+                QObject::connect(
+                    invoker, &RequestInvoker::finished,
+                    [ingressLinkSource, props](QNetworkReply::NetworkError error, QByteArray) {
+                        // Reload source properties
+                        OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
+                        obs_frontend_open_source_properties(source);
+                    }
+                );
+            }
+
+            return true;
+        },
+        this
+    );
+
+    // Connection group -> Create button
+    obs_properties_add_button2(
+        connectionGroup, "manage_stages", obs_module_text("ManageStages"),
+        [](obs_properties_t *props, obs_property_t *property, void *param) {
+            auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            ingressLinkSource->apiClient->openStagesManagementPage();
+            return true;
+        },
+        this
+    );
+
     // Other stage settings
-    obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);
-    obs_properties_add_int(props, "min_bitrate", obs_module_text("MinBitrate"), 0, 1000000000, 100);
-    obs_properties_add_int(props, "width", obs_module_text("SpecifiedWidth"), 0, 3840, 2);
-    obs_properties_add_int(props, "height", obs_module_text("SpecifiedHeight"), 0, 2160, 2);
+    auto maxBitrate = obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);
+    obs_property_int_set_suffix(maxBitrate, " kbps");
+
+    auto minBitrate = obs_properties_add_int(props, "min_bitrate", obs_module_text("MinBitrate"), 0, 1000000000, 100);
+    obs_property_int_set_suffix(minBitrate, " kbps");
+
+    auto width = obs_properties_add_int(props, "width", obs_module_text("SpecifiedWidth"), 0, 3840, 2);
+    obs_property_int_set_suffix(width, " px");
+
+    auto height = obs_properties_add_int(props, "height", obs_module_text("SpecifiedHeight"), 0, 2160, 2);
+    obs_property_int_set_suffix(height, " px");
 
     // Private source settings
     obs_properties_add_bool(props, "hw_decode", obs_module_text("HardwareDecode"));
@@ -405,12 +460,10 @@ void IngressLinkSource::update(obs_data_t *settings)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
     obs_source_update(decoderSource, decoderSettings);
 
-    obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
-}
+    // Store settings to file as recently settings.
+    saveSettings(settings);
 
-void IngressLinkSource::onConnectionPutSucceeded(const StageConnection &connection)
-{
-    connected = true;
+    obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
 }
 
 void IngressLinkSource::onConnectionPutFailed()
@@ -423,14 +476,19 @@ void IngressLinkSource::onConnectionDeleteSucceeded(const QString &)
     connected = false;
 }
 
-void IngressLinkSource::onStageConnectionReady(const StageConnection &connection)
+void IngressLinkSource::onStageConnectionReady(const StageConnectionInfo &connection)
 {
-    if (connection.getId() != uuid) {
+    if (connection.getConnection().getId() != uuid) {
         return;
     }
 
-    if (revision != connection.getRevision()) {
-        revision = connection.getRevision();
+    connected = true;
+    auto reconnectionNeeded = populatedSeat != !connection.getAllocation().getUuid().isEmpty() ||
+                              revision != connection.getConnection().getRevision();
+
+    if (reconnectionNeeded) {
+        populatedSeat = !connection.getAllocation().getUuid().isEmpty();
+        revision = connection.getConnection().getRevision();
 
         // Reconnect occurres
         reconnect();
@@ -448,6 +506,11 @@ void IngressLinkSource::reconnect()
 {
     OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
     OBSDataAutoRelease settings = obs_source_get_settings(source);
+
+    // Re-allocate port
+    apiClient->releasePort(port);
+    port = apiClient->getFreePort();
+
     update(settings);
 }
 

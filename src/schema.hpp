@@ -109,6 +109,23 @@ public:
     }
 };
 
+class StageArray : public QJsonArray {
+public:
+    StageArray() = default;
+    StageArray(const QJsonArray &json) : QJsonArray(json) {}
+
+    inline QList<Stage> values() const
+    {
+        QList<Stage> stages;
+        foreach (const QJsonValue stageItem, *this) {
+            stages.append(stageItem.toObject());
+        }
+        return stages;
+    }
+
+    Stage operator[](qsizetype i) const { return at(i).toObject(); }
+};
+
 class Party : public QJsonObject {
 public:
     Party() = default;
@@ -124,6 +141,23 @@ public:
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
     inline int getCapacity() const { return value("capacity").toInt(); }
     inline void setCapacity(int value) { insert("capacity", value); }
+};
+
+class PartyArray : public QJsonArray {
+public:
+    PartyArray() = default;
+    PartyArray(const QJsonArray &json) : QJsonArray(json) {}
+
+    inline QList<Party> values() const
+    {
+        QList<Party> parties;
+        foreach (const QJsonValue partyItem, *this) {
+            parties.append(partyItem.toObject());
+        }
+        return parties;
+    }
+
+    Party operator[](qsizetype i) const { return at(i).toObject(); }
 };
 
 class PartyEvent : public QJsonObject {
@@ -154,6 +188,23 @@ public:
     inline void setParty(const Party &value) { insert("party", value); }
     inline Stage getStage() const { return value("stage").toObject(); }
     inline void setStage(const Stage &value) { insert("stage", value); }
+};
+
+class PartyEventArray : public QJsonArray {
+public:
+    PartyEventArray() = default;
+    PartyEventArray(const QJsonArray &json) : QJsonArray(json) {}
+
+    inline QList<PartyEvent> values() const
+    {
+        QList<PartyEvent> partyEvents;
+        foreach (const QJsonValue partyEventItem, *this) {
+            partyEvents.append(partyEventItem.toObject());
+        }
+        return partyEvents;
+    }
+
+    PartyEvent operator[](qsizetype i) const { return at(i).toObject(); }
 };
 
 class StageConnection : public QJsonObject {
@@ -239,4 +290,15 @@ public:
         }
         insert("connections", connectionsArray);
     }
+};
+
+class StageConnectionInfo : public QJsonObject {
+public:
+    StageConnectionInfo() = default;
+    StageConnectionInfo(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline StageConnection getConnection() const { return value("connection").toObject(); }
+    inline void setConnection(const StageConnection &value) { insert("connection", value); }
+    inline StageSeatAllocation getAllocation() const { return value("allocation").toObject(); }
+    inline void setAllocation(const StageSeatAllocation &value) { insert("allocation", value); }
 };

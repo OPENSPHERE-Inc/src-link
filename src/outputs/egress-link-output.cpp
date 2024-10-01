@@ -352,7 +352,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
     }
     obs_data_set_default_string(defaults, "video_encoder", videoEncoderId);
-    obs_data_set_default_int(defaults, "video_bitrate", videoBitrate);
+    obs_data_set_default_int(defaults, "bitrate", videoBitrate);
     obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
     obs_data_set_default_int(defaults, "audio_bitrate", audioBitrate);
 

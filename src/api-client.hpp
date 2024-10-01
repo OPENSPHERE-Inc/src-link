@@ -31,8 +31,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "schema.hpp"
 #include "settings.hpp"
-
-class RequestSequencer;
+#include "request-invoker.hpp"
 
 class SourceLinkApiClient : public QObject {
     Q_OBJECT
@@ -47,9 +46,9 @@ class SourceLinkApiClient : public QObject {
 
     // Online rsources
     AccountInfo accountInfo;
-    QList<Party> parties;
-    QList<PartyEvent> partyEvents; // Contains all events of all parties
-    QList<Stage> stages;
+    PartyArray parties;
+    PartyEventArray partyEvents; // Contains all events of all parties
+    StageArray stages;
     StageSeatInfo seat;
 
 signals:
@@ -58,17 +57,17 @@ signals:
     void logoutSucceeded();
     void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
-    void partiesReady(const QList<Party> &parties);
+    void partiesReady(const PartyArray &parties);
     void partiesFailed();
-    void partyEventsReady(const QList<PartyEvent> &partyEvents);
+    void partyEventsReady(const PartyEventArray &partyEvents);
     void partyEventsFailed();
-    void stagesReady(const QList<Stage> &stages);
+    void stagesReady(const StageArray &stages);
     void stagesFailed();
     void seatAllocationReady(const StageSeatInfo &seat);
     void seatAllocationFailed();
-    void stageConnectionReady(const StageConnection &connection);
+    void stageConnectionReady(const StageConnectionInfo &connection);
     void stageConnectionFailed();
-    void connectionPutSucceeded(const StageConnection &connection);
+    void connectionPutSucceeded(const StageConnectionInfo &connection);
     void connectionPutFailed();
     void connectionDeleteSucceeded(const QString &uuid);
     void connectionDeleteFailed();
@@ -98,9 +97,9 @@ public:
 
     inline const QString &getUuid() const { return uuid; }
     inline const AccountInfo getAccountInfo() const { return accountInfo; }
-    inline const QList<Party> &getParties() const { return parties; }
-    inline const QList<PartyEvent> &getPartyEvents() const { return partyEvents; }
-    inline const QList<Stage> &getStages() const { return stages; }
+    inline const PartyArray &getParties() const { return parties; }
+    inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
+    inline const StageArray &getStages() const { return stages; }
     inline const StageSeatInfo getSeat() const { return seat; }
     inline SourceLinkSettingsStore *getSettings() const { return settings; }
 
@@ -108,28 +107,28 @@ public slots:
     void login();
     void logout();
     bool isLoggedIn();
-    void refresh();
-    bool ping();
-    bool requestOnlineResources();
-    bool requestAccountInfo();
-    bool requestParties();
-    bool requestPartyEvents();
-    bool requestStages();
-    bool requestSeatAllocation();
-    bool requestStageConnection(const QString &sourceUuid);
-    bool putConnection(
+    const RequestInvoker *refresh();
+    const RequestInvoker *ping();
+    void requestOnlineResources();
+    const RequestInvoker *requestAccountInfo();
+    const RequestInvoker *requestParties();
+    const RequestInvoker *requestPartyEvents();
+    const RequestInvoker *requestStages();
+    const RequestInvoker *requestSeatAllocation();
+    const RequestInvoker *requestStageConnection(const QString &sourceUuid);
+    const RequestInvoker *putConnection(
         const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height, const int revision = 0
     );
-    bool deleteConnection(const QString &sourceUuid, const bool parallel = false);
-    bool putSeatAllocation(const bool force = false);
-    bool deleteSeatAllocation(const bool noSignal = false);
-    bool putScreenshot(const QString &sourceName, const QImage &image);
-    bool getPicture(const QString &pitureId);
+    const RequestInvoker *deleteConnection(const QString &sourceUuid, const bool parallel = false);
+    const RequestInvoker *putSeatAllocation(const bool force = false);
+    const RequestInvoker *deleteSeatAllocation(const bool parallel = false);
+    const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
+    void getPicture(const QString &pitureId);
     void restartIngress() { emit ingressRestartNeeded(); }
     void terminate();
-    void openStageCreationForm(); // Just open web browser
+    void openStagesManagementPage(); // Just open web browser
 
     const int getFreePort();
     void releasePort(const int port);

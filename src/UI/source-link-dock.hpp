@@ -36,17 +36,14 @@ class SourceLinkDock : public QFrame {
 
     SourceLinkApiClient *apiClient;
     QImage defaultAccountPicture;
-    QImage defaultPartyPicture;
-    QImage defaultPartyEventPicture;
+    QImage defaultStagePicture;
     QList<SourceLinkConnectionWidget *> connectionWidgets;
 
     void updateConnections(const Stage &stage);
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);
-    void onPartiesReady(const QList<Party> &parties);
-    void onPartyEventsReady(const QList<PartyEvent> &partyEvents);
-    void onActivePartyChanged(int index);
+    void onPartyEventsReady(const PartyEventArray &partyEvents);
     void onActivePartyEventChanged(int index);
     void onPictureReady(const QString &pictureId, const QImage &picture);
     void onPictureFailed(const QString &pictureId);

@@ -65,19 +65,21 @@ class IngressLinkSource : public QObject {
     SourceAudioThread *audioThread;
     QTimer *intervalTimer;
     OBSSignal renameSignal;
+    bool populatedSeat;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
     void handleConnection();
-    QString compositeParameters(obs_data_t* settings, bool remote = false);
+    QString compositeParameters(obs_data_t *settings, bool remote = false);
+    void loadSettings(obs_data_t *settings);
+    void saveSettings(obs_data_t *settings);
 
 private slots:
-    void onConnectionPutSucceeded(const StageConnection &connection);
     void onConnectionPutFailed();
     void onConnectionDeleteSucceeded(const QString &uuid);
-    void onStageConnectionReady(const StageConnection &connection);
+    void onStageConnectionReady(const StageConnectionInfo &connection);
     void onIntervalTimerTimeout();
 
 public:

@@ -32,14 +32,12 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
       ui(new Ui::SourceLinkDock),
       apiClient(_apiClient),
       defaultAccountPicture(":/source-link/images/unknownaccount.png"),
-      defaultPartyPicture(":/source-link/images/unknownparty.png"),
-      defaultPartyEventPicture(":/source-link/images/unknownevent.png")
+      defaultStagePicture(":/source-link/images/unknownstage.png")
 {
     ui->setupUi(this);
 
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
-    ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
-    ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+    ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
 
     ui->interlockTypeComboBox->addItem("Streaming", "streaming");
     ui->interlockTypeComboBox->addItem("Recording", "recording");
@@ -54,10 +52,10 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
     );
-    connect(apiClient, SIGNAL(partiesReady(const QList<Party> &)), this, SLOT(onPartiesReady(const QList<Party> &)));
+    connect(apiClient, SIGNAL(partiesReady(const PartyArray &)), this, SLOT(onPartiesReady(const PartyArray &)));
     connect(
-        apiClient, SIGNAL(partyEventsReady(const QList<PartyEvent> &)), this,
-        SLOT(onPartyEventsReady(const QList<PartyEvent> &))
+        apiClient, SIGNAL(partyEventsReady(const PartyEventArray &)), this,
+        SLOT(onPartyEventsReady(const PartyEventArray &))
     );
     connect(
         apiClient, SIGNAL(pictureGetSucceeded(const QString &, const QImage &)), this,
@@ -70,16 +68,12 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(apiClient, SIGNAL(seatAllocationFailed()), this, SLOT(onSeatAllocationFailed()));
 
-    connect(ui->partyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
     connect(ui->partyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
     connect(ui->logoutButton, SIGNAL(clicked()), this, SLOT(onLogoutButtonClicked()));
 
     if (!apiClient->getAccountInfo().isEmpty()) {
         onAccountInfoReady(apiClient->getAccountInfo());
-    }
-    if (!apiClient->getParties().isEmpty()) {
-        onPartiesReady(apiClient->getParties());
     }
     if (!apiClient->getPartyEvents().isEmpty()) {
         onPartyEventsReady(apiClient->getPartyEvents());
@@ -107,44 +101,14 @@ void SourceLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
     }
 }
 
-void SourceLinkDock::onPartiesReady(const QList<Party> &parties)
-{
-    auto selected = ui->partyComboBox->currentData().toString();
-    ui->partyComboBox->clear();
-
-    foreach (const auto &party, parties) {
-        ui->partyComboBox->addItem(party.getName(), party.getId());
-    }
-
-    // Restore selection (or apply default)
-    if (selected.isEmpty()) {
-        selected = apiClient->getSettings()->getPartyId();
-    }
-    if (!selected.isEmpty()) {
-        ui->partyComboBox->setCurrentIndex(ui->partyComboBox->findData(selected));
-    } else {
-        ui->partyComboBox->setCurrentIndex(0);
-    }
-
-    // Reset picture for no parties
-    if (!parties.size()) {
-        ui->partyPictureLabel->setProperty("pictureId", "");
-        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
-    }
-}
-
-void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
+void SourceLinkDock::onPartyEventsReady(const PartyEventArray &partyEvents)
 {
     auto selected = ui->partyEventComboBox->currentData().toString();
     ui->partyEventComboBox->clear();
-    auto partyId = ui->partyComboBox->currentData().toString();
 
-    // Fiter out party events that are not related to the selected party
-    foreach (const auto &partyEvent, partyEvents) {
-        if (partyEvent.getParty().isEmpty() || partyEvent.getParty().getId() != partyId) {
-            continue;
-        }
-        ui->partyEventComboBox->addItem(partyEvent.getName(), partyEvent.getId());
+    // Display stage's names instead of party event
+    foreach (const auto &partyEvent, partyEvents.values()) {
+        ui->partyEventComboBox->addItem(partyEvent.getStage().getName(), partyEvent.getId());
     }
 
     // Restore selection (or apply default)
@@ -160,51 +124,32 @@ void SourceLinkDock::onPartyEventsReady(const QList<PartyEvent> &partyEvents)
     // Reset picture for no party events
     if (!partyEvents.size()) {
         ui->partyEventPictureLabel->setProperty("pictureId", "");
-        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
     }
-}
-
-void SourceLinkDock::onActivePartyChanged(int index)
-{
-    auto partyId = ui->partyComboBox->currentData().toString();
-    foreach (const auto &party, apiClient->getParties()) {
-        if (party.getId() == partyId) {
-            if (!party.getPictureId().isEmpty()) {
-                ui->partyPictureLabel->setProperty("pictureId", party.getPictureId());
-                apiClient->getPicture(party.getPictureId());
-            }
-            break;
-        }
-    }
-
-    // Refresh party events combo box
-    onPartyEventsReady(apiClient->getPartyEvents());
 }
 
 void SourceLinkDock::onActivePartyEventChanged(int index)
 {
     auto partyEventId = ui->partyEventComboBox->currentData().toString();
-    foreach (const auto &partyEvent, apiClient->getPartyEvents()) {
+    foreach (const auto &partyEvent, apiClient->getPartyEvents().values()) {
         if (partyEvent.getId() == partyEventId) {
-            if (!partyEvent.getPictureId().isEmpty()) {
-                ui->partyEventPictureLabel->setProperty("pictureId", partyEvent.getPictureId());
-                apiClient->getPicture(partyEvent.getPictureId());
+            auto stage = partyEvent.getStage();
+            if (!stage.getPictureId().isEmpty()) {
+                // Apply stage picture
+                ui->partyEventPictureLabel->setProperty("pictureId", stage.getPictureId());
+                apiClient->getPicture(stage.getPictureId());
             }
             break;
         }
     }
 
-    apiClient->getSettings()->setPartyId(ui->partyComboBox->currentData().toString());
     apiClient->getSettings()->setPartyEventId(ui->partyEventComboBox->currentData().toString());
     apiClient->putSeatAllocation();
 }
 
 void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
 {
-    if (pictureId == ui->partyPictureLabel->property("pictureId").toString()) {
-        // Update party picture with received image
-        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(picture));
-    } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
+    if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Update party event picture received image
         ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(picture));
     } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
@@ -215,12 +160,9 @@ void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &pict
 
 void SourceLinkDock::onPictureFailed(const QString &pictureId)
 {
-    if (pictureId == ui->partyPictureLabel->property("pictureId").toString()) {
-        // Reset party picture to default
-        ui->partyPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyPicture));
-    } else if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
+    if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
         // Reset party event picture to default
-        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultPartyEventPicture));
+        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
     } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
         // Reset account picture to default
         ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
