@@ -37,7 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "api-client.hpp"
 #include "utils.hpp"
 
-//#define LOCAL_DEBUG
+#define LOCAL_DEBUG
 #define SCOPE "read write"
 #define POLLING_INTERVAL_MSECS 10000
 #define SCREENSHOT_QUALITY 75
@@ -54,11 +54,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PARTIES_URL (API_SERVER "/api/v1/parties/my")
 #define PARTY_EVENTS_URL (API_SERVER "/api/v1/events/my")
 #define STAGES_URL (API_SERVER "/api/v1/stages")
-#define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections/%1")
-#define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations/%1")
-#define STAGE_SEAT_ALLOCATIONS_UPLINK_URL (API_SERVER "/api/v1/stages/seat-allocations/%1/uplink")
-#define PARTY_MEMBERS_SCREENSHOTS_URL (API_SERVER "/api/v1/parties/%1/members/me/screenshots/%2")
-#define PING_URL (API_SERVER "/api/v1/ping")
+#define DOWNLINK_URL (API_SERVER "/api/v1/downlink/%1")
+#define UPLINK_URL (API_SERVER "/api/v1/uplink/%1")
+#define UPLINK_STATUS_URL (API_SERVER "/api/v1/uplink/%1/status")
+#define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/stages")
 
@@ -96,7 +95,8 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
       pollingTimer(nullptr),
       networkManager(nullptr),
       client(nullptr),
-      activeOutputs(0)
+      activeOutputs(0),
+      standByOutputs(0)
 {
     obs_log(LOG_DEBUG, "client: SourceLinkApiClient creating with %s", API_SERVER);
 
@@ -206,25 +206,6 @@ void SourceLinkApiClient::releasePort(const int port)
     usedPorts[port] = false;
 }
 
-const RequestInvoker *SourceLinkApiClient::ping()
-{
-    CHECK_CLIENT_TOKEN(nullptr);
-
-    obs_log(LOG_DEBUG, "client: Pinging API server.");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(pingFailed, "client: Pinging API server failed: %d", error);
-
-        accountInfo = QJsonDocument::fromJson(replyData).object();
-
-        obs_log(LOG_DEBUG, "client: Pong from API server: %s", qPrintable(accountInfo.getDisplayName()));
-        emit pingSucceeded();
-    });
-    invoker->get(QNetworkRequest(QUrl(PING_URL)));
-
-    return invoker;
-}
-
 void SourceLinkApiClient::requestOnlineResources()
 {
     CHECK_CLIENT_TOKEN();
@@ -233,7 +214,7 @@ void SourceLinkApiClient::requestOnlineResources()
     requestParties();
     requestPartyEvents();
     requestStages();
-    putSeatAllocation();
+    putUplink();
 }
 
 const RequestInvoker *SourceLinkApiClient::requestAccountInfo()
@@ -321,53 +302,53 @@ const RequestInvoker *SourceLinkApiClient::requestStages()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestSeatAllocation()
+const RequestInvoker *SourceLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting seat allocation for %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Requesting uplink for %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(
-            seatAllocationFailed, "clinet: Requesting seat allocation for %s failed: %d", qPrintable(uuid), error
+            uplinkFailed, "clinet: Requesting uplink for %s failed: %d", qPrintable(uuid), error
         );
 
-        seat = QJsonDocument::fromJson(replyData).object();
+        uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Received seat allocation for %s", qPrintable(uuid));
-        emit seatAllocationReady(seat);
+        obs_log(LOG_DEBUG, "client: Received uplink for %s", qPrintable(uuid));
+        emit uplinkReady(uplink);
     });
-    invoker->get(QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL).arg(uuid))));
+    invoker->get(QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid))));
 
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestStageConnection(const QString &sourceUuid)
+const RequestInvoker *SourceLinkApiClient::requestDownlink(const QString &sourceUuid)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting stage connection for %s", qPrintable(sourceUuid));
+    obs_log(LOG_DEBUG, "client: Requesting downlink for %s", qPrintable(sourceUuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
             CHECK_RESPONSE_NOERROR(
-                stageConnectionFailed, "clinet: Requesting stage connection for %s failed: %d", qPrintable(sourceUuid),
+                downlinkFailed, "clinet: Requesting downlink for %s failed: %d", qPrintable(sourceUuid),
                 error
             );
 
-            StageConnectionInfo connection = QJsonDocument::fromJson(replyData).object();
+            DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
 
-            obs_log(LOG_DEBUG, "client: Received stage connection for %s", qPrintable(sourceUuid));
-            emit stageConnectionReady(connection);
+            obs_log(LOG_DEBUG, "client: Received downlink for %s", qPrintable(sourceUuid));
+            emit downlinkReady(connection);
         }
     );
-    invoker->get(QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL).arg(sourceUuid))));
+    invoker->get(QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid))));
 
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putConnection(
+const RequestInvoker *SourceLinkApiClient::putDownlink(
     const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
     const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
     const int width, const int height, const int revision
@@ -375,7 +356,7 @@ const RequestInvoker *SourceLinkApiClient::putConnection(
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL).arg(sourceUuid)));
+    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
@@ -391,21 +372,21 @@ const RequestInvoker *SourceLinkApiClient::putConnection(
     body["height"] = height;
     body["revision"] = revision;
 
-    obs_log(LOG_DEBUG, "client: Putting stage connection: %s", qPrintable(sourceUuid));
+    obs_log(LOG_DEBUG, "client: Putting downlink: %s", qPrintable(sourceUuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
             CHECK_RESPONSE_NOERROR(
-                connectionPutFailed, "client: Putting stage connection %s failed: %d", qPrintable(sourceUuid), error
+                putDownlinkFailed, "client: Putting downlink %s failed: %d", qPrintable(sourceUuid), error
             );
 
-            StageConnectionInfo connection = QJsonDocument::fromJson(replyData).object();
+            DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
 
             obs_log(
-                LOG_DEBUG, "client: Put stage connection %s succeeded", qPrintable(connection.getConnection().getId())
+                LOG_DEBUG, "client: Put downlink %s succeeded", qPrintable(connection.getConnection().getId())
             );
-            emit connectionPutSucceeded(connection);
+            emit putDownlinkSucceeded(connection);
         }
     );
     invoker->put(req, QJsonDocument(body).toJson());
@@ -413,112 +394,111 @@ const RequestInvoker *SourceLinkApiClient::putConnection(
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::deleteConnection(const QString &sourceUuid, const bool parallel)
+const RequestInvoker *SourceLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(STAGES_CONNECTIONS_URL).arg(sourceUuid)));
+    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting stage connection of %s", qPrintable(sourceUuid));
+    obs_log(LOG_DEBUG, "client: Deleting downlink of %s", qPrintable(sourceUuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
         CHECK_RESPONSE_NOERROR(
-            connectionDeleteFailed, "clinet: Deleting stage connection of %s failed: %d", qPrintable(sourceUuid), error
+            deleteDownlinkFailed, "clinet: Deleting downlink of %s failed: %d", qPrintable(sourceUuid), error
         );
 
-        obs_log(LOG_DEBUG, "client: Delete stage connection of %s succeeded", qPrintable(sourceUuid));
-        emit connectionDeleteSucceeded(sourceUuid);
+        obs_log(LOG_DEBUG, "client: Delete downlink of %s succeeded", qPrintable(sourceUuid));
+        emit deleteDownlinkSucceeded(sourceUuid);
     });
     invoker->deleteResource(req);
 
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putSeatAllocation(const bool force)
+const RequestInvoker *SourceLinkApiClient::putUplink(const bool force)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL).arg(uuid)));
+    auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
     body["party_event_id"] = settings->getPartyEventId();
     body["force"] = force || settings->getForceConnection() ? "1" : "0";
-    body["uplink_status"] = activeOutputs > 0 ? "active" : "inactive";
+    body["uplink_status"] = activeOutputs > 0 ? "active" : standByOutputs > 0 ? "standby" : "inactive";
 
-    obs_log(LOG_DEBUG, "client: Putting stage seat allocation of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Putting uplink of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
             if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Putting stage seat allocation of %s failed: %d", qPrintable(uuid), error);
-                emit seatAllocationPutFailed();
-                emit seatAllocationFailed();
+                obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qPrintable(uuid), error);
+                emit putUplinkFailed();
+                emit uplinkFailed();
                 return;
             }
         }
 
-        seat = QJsonDocument::fromJson(replyData).object();
+        uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Put stage seat allocation of %s succeeded", qPrintable(uuid));
-        emit seatAllocationPutSucceeded(seat);
-        emit seatAllocationReady(seat);
+        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qPrintable(uuid));
+        emit putUplinkSucceeded(uplink);
+        emit uplinkReady(uplink);
     });
     invoker->put(req, QJsonDocument(body).toJson());
 
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::uplinkSeatAllocation()
+const RequestInvoker *SourceLinkApiClient::putUplinkStatus()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_UPLINK_URL).arg(uuid)));
+    auto req = QNetworkRequest(QUrl(QString(UPLINK_STATUS_URL).arg(uuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
-    body["party_event_id"] = settings->getPartyEventId();
-    body["uplink_status"] = activeOutputs > 0 ? "active" : "inactive";
+    body["uplink_status"] = activeOutputs > 0 ? "active" : standByOutputs > 0 ? "standby" : "inactive";
 
-    obs_log(LOG_DEBUG, "client: Uplinking stage seat allocation of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Putting uplink status of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
             if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Uplinking stage seat allocation of %s failed: %d", qPrintable(uuid), error);
-                emit seatAllocationUplinkFailed();
-                emit seatAllocationFailed();
+                obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qPrintable(uuid), error);
+                emit putUplinkStatusFailed();
+                emit uplinkFailed();
                 return;
             }
         }
 
-        seat = QJsonDocument::fromJson(replyData).object();
+        uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Uplink stage seat allocation of %s succeeded", qPrintable(uuid));
-        emit seatAllocationUplinkSucceeded(seat);
-        emit seatAllocationReady(seat);
+        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qPrintable(uuid));
+        emit putUplinkStatusSucceeded(uplink);
+        emit uplinkReady(uplink);
     });
     invoker->put(req, QJsonDocument(body).toJson());
 
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::deleteSeatAllocation(const bool parallel)
+const RequestInvoker *SourceLinkApiClient::deleteUplink(const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_URL).arg(uuid)));
+    auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting stage seat allocation of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Deleting uplink of %s", qPrintable(uuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
         CHECK_RESPONSE_NOERROR(
-            seatAllocationDeleteFailed, "clinet: Deleting stage seat allocation of %s failed: %d", qPrintable(uuid),
+            deleteUplinkFailed, "clinet: Deleting uplink of %s failed: %d", qPrintable(uuid),
             error
         );
 
-        obs_log(LOG_DEBUG, "client: Delete stage seat allocation %s succeeded", qPrintable(uuid));
-        emit seatAllocationDeleteSucceeded(uuid);
+        obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qPrintable(uuid));
+        emit deleteUplinkSucceeded(uuid);
     });
     invoker->deleteResource(req);
 
@@ -529,13 +509,7 @@ const RequestInvoker *SourceLinkApiClient::putScreenshot(const QString &sourceNa
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto partyId = settings->getPartyId();
-    if (partyId.isEmpty()) {
-        obs_log(LOG_ERROR, "client: No party ID is set");
-        return nullptr;
-    }
-
-    auto req = QNetworkRequest(QUrl(QString(PARTY_MEMBERS_SCREENSHOTS_URL).arg(partyId).arg(sourceName)));
+    auto req = QNetworkRequest(QUrl(QString(SCREENSHOTS_URL).arg(uuid).arg(sourceName)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "image/jpeg");
 
     QByteArray imageBytes(image.sizeInBytes(), Qt::Uninitialized);
@@ -547,11 +521,11 @@ const RequestInvoker *SourceLinkApiClient::putScreenshot(const QString &sourceNa
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceName](QNetworkReply::NetworkError error, QByteArray) {
         CHECK_RESPONSE_NOERROR(
-            screenshotPutFailed, "client: Putting screenshot of %s failed: %d", qPrintable(sourceName), error
+            putScreenshotFailed, "client: Putting screenshot of %s failed: %d", qPrintable(sourceName), error
         );
 
         obs_log(LOG_DEBUG, "client: Put screenshot of %s succeeded", qPrintable(sourceName));
-        emit screenshotPutSucceeded(sourceName);
+        emit putScreenshotSucceeded(sourceName);
     });
     invoker->put(req, imageBytes);
 
@@ -564,14 +538,14 @@ void SourceLinkApiClient::getPicture(const QString &pictureId)
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
             obs_log(LOG_ERROR, "client: Getting picture of %s failed: %d", qPrintable(pictureId), reply->error());
-            emit pictureGetFailed(pictureId);
+            emit getPictureFailed(pictureId);
             return;
         }
 
         auto picture = QImage::fromData(reply->readAll());
 
         obs_log(LOG_DEBUG, "client: Get picture of %s succeeded", qPrintable(pictureId));
-        emit pictureGetSucceeded(pictureId, picture);
+        emit getPictureSucceeded(pictureId, picture);
         reply->deleteLater();
     });
 }
@@ -633,13 +607,13 @@ void SourceLinkApiClient::onPollingTimerTimeout()
         return;
     }
 
-    // Polling seat allocation
-    uplinkSeatAllocation(); //requestSeatAllocation();
+    // Polling uplink
+    putUplinkStatus(); //requestUplink();
 }
 
 void SourceLinkApiClient::terminate()
 {
     obs_log(LOG_DEBUG, "client: Terminating API client.");
     pollingTimer->stop();
-    deleteSeatAllocation(true);
+    deleteUplink(true);
 }

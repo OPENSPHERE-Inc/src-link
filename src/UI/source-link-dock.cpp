@@ -58,15 +58,15 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
         SLOT(onPartyEventsReady(const PartyEventArray &))
     );
     connect(
-        apiClient, SIGNAL(pictureGetSucceeded(const QString &, const QImage &)), this,
+        apiClient, SIGNAL(getPictureSucceeded(const QString &, const QImage &)), this,
         SLOT(onPictureReady(const QString &, const QImage &))
     );
-    connect(apiClient, SIGNAL(pictureGetFailed(const QString &)), this, SLOT(onPictureFailed(const QString &)));
+    connect(apiClient, SIGNAL(getPictureFailed(const QString &)), this, SLOT(onPictureFailed(const QString &)));
     connect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo &)), this,
-        SLOT(onSeatAllocationReady(const StageSeatInfo &))
+        apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this,
+        SLOT(onUplinkReady(const UplinkInfo &))
     );
-    connect(apiClient, SIGNAL(seatAllocationFailed()), this, SLOT(onSeatAllocationFailed()));
+    connect(apiClient, SIGNAL(uplinkFailed()), this, SLOT(onUplinkFailed()));
 
     connect(ui->partyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
@@ -144,7 +144,7 @@ void SourceLinkDock::onActivePartyEventChanged(int index)
     }
 
     apiClient->getSettings()->setPartyEventId(ui->partyEventComboBox->currentData().toString());
-    apiClient->putSeatAllocation();
+    apiClient->putUplink();
 }
 
 void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
@@ -169,12 +169,12 @@ void SourceLinkDock::onPictureFailed(const QString &pictureId)
     }
 }
 
-void SourceLinkDock::onSeatAllocationReady(const StageSeatInfo &seat)
+void SourceLinkDock::onUplinkReady(const UplinkInfo &uplink)
 {
     // Always show outputs
-    updateConnections(seat.getStage());
+    updateConnections(uplink.getStage());
 
-    if (!seat.getAllocation().isEmpty()) {
+    if (!uplink.getAllocation().isEmpty()) {
         ui->seatAllocationStatus->setText(QString("Ready"));
         setThemeID(ui->seatAllocationStatus, "good");
     } else {
@@ -183,7 +183,7 @@ void SourceLinkDock::onSeatAllocationReady(const StageSeatInfo &seat)
     }
 }
 
-void SourceLinkDock::onSeatAllocationFailed()
+void SourceLinkDock::onUplinkFailed()
 {
     ui->seatAllocationStatus->setText(QString("No seat"));
     setThemeID(ui->seatAllocationStatus, "error");

@@ -77,9 +77,9 @@ class IngressLinkSource : public QObject {
     void saveSettings(obs_data_t *settings);
 
 private slots:
-    void onConnectionPutFailed();
-    void onConnectionDeleteSucceeded(const QString &uuid);
-    void onStageConnectionReady(const StageConnectionInfo &connection);
+    void onPutDownlinkFailed();
+    void onDeleteDownlinkSucceeded(const QString &uuid);
+    void onDownlinkReady(const DownlinkInfo &downlink);
     void onIntervalTimerTimeout();
 
 public:

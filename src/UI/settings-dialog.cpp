@@ -143,7 +143,7 @@ void SettingsDialog::saveSettings()
     settings->setIngressSrtPbkeylen(ingressSrtPbkeylen);
     settings->setIngressAdvancedSettings(ui->advancedSettingsCheckBox->isChecked());
 
-    apiClient->putSeatAllocation();
+    apiClient->putUplink();
     if (ingressRestartNeeded) {
         apiClient->restartIngress();
     }

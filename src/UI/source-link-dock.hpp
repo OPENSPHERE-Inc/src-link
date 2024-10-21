@@ -47,8 +47,8 @@ private slots:
     void onActivePartyEventChanged(int index);
     void onPictureReady(const QString &pictureId, const QImage &picture);
     void onPictureFailed(const QString &pictureId);
-    void onSeatAllocationReady(const StageSeatInfo &seat);
-    void onSeatAllocationFailed();
+    void onUplinkReady(const UplinkInfo &uplink);
+    void onUplinkFailed();
     void onInterlockTypeChanged(int index);
     void onLogoutButtonClicked();
 

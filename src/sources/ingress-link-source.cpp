@@ -84,17 +84,16 @@ IngressLinkSource::IngressLinkSource(
 
     connect(intervalTimer, SIGNAL(timeout()), this, SLOT(onIntervalTimerTimeout()));
     connect(
-        apiClient, SIGNAL(connectionPutSucceeded(const StageConnectionInfo &)), this,
-        SLOT(onStageConnectionReady(const StageConnectionInfo &))
+        apiClient, SIGNAL(putDownlinkSucceeded(const DownlinkInfo &)), this,
+        SLOT(onDownlinkReady(const DownlinkInfo &))
     );
-    connect(apiClient, SIGNAL(connectionPutFailed()), this, SLOT(onConnectionPutFailed()));
+    connect(apiClient, SIGNAL(putDownlinkFailed()), this, SLOT(onPutDownlinkFailed()));
     connect(
-        apiClient, SIGNAL(connectionDeleteSucceeded(const QString &)), this,
-        SLOT(onConnectionDeleteSucceeded(const QString &))
+        apiClient, SIGNAL(deleteDownlinkSucceeded(const QString &)), this,
+        SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
     connect(
-        apiClient, SIGNAL(stageConnectionReady(const StageConnectionInfo &)), this,
-        SLOT(onStageConnectionReady(const StageConnectionInfo &))
+        apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &))
     );
     connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reconnect(); });
 
@@ -118,7 +117,7 @@ IngressLinkSource::~IngressLinkSource()
 
     disconnect(this);
 
-    apiClient->deleteConnection(uuid, true);
+    apiClient->deleteDownlink(uuid, true);
     apiClient->releasePort(port);
 
     // Destroy decoder private source
@@ -242,14 +241,14 @@ void IngressLinkSource::handleConnection()
         // Register connection to server
         // Note: apiClient instance might live in a different thread
         QMetaObject::invokeMethod(
-            apiClient, "putConnection", Q_ARG(QString, uuid), Q_ARG(QString, stageId), Q_ARG(QString, seatName),
+            apiClient, "putDownlink", Q_ARG(QString, uuid), Q_ARG(QString, stageId), Q_ARG(QString, seatName),
             Q_ARG(QString, sourceName), Q_ARG(QString, protocol), Q_ARG(int, port), Q_ARG(QString, remoteParameters),
             Q_ARG(int, maxBitrate), Q_ARG(int, minBitrate), Q_ARG(int, width), Q_ARG(int, height), Q_ARG(int, revision)
         );
     } else {
         // Unregister connection if no stage/seat/source selected.
         // Note: apiClient instance might live in a different thread
-        QMetaObject::invokeMethod(apiClient, "deleteConnection", Q_ARG(QString, uuid));
+        QMetaObject::invokeMethod(apiClient, "deleteDownlink", Q_ARG(QString, uuid));
     }
 }
 
@@ -293,7 +292,7 @@ obs_properties_t *IngressLinkSource::getProperties()
             QString stageId = obs_data_get_string(settings, "stage_id");
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
-            
+
             auto seatList = obs_properties_get(connectionGroup, "seat_name");
             obs_property_list_clear(seatList);
 
@@ -466,29 +465,29 @@ void IngressLinkSource::update(obs_data_t *settings)
     obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
 }
 
-void IngressLinkSource::onConnectionPutFailed()
+void IngressLinkSource::onPutDownlinkFailed()
 {
     connected = false;
 }
 
-void IngressLinkSource::onConnectionDeleteSucceeded(const QString &)
+void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &)
 {
     connected = false;
 }
 
-void IngressLinkSource::onStageConnectionReady(const StageConnectionInfo &connection)
+void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
 {
-    if (connection.getConnection().getId() != uuid) {
+    if (downlink.getConnection().getId() != uuid) {
         return;
     }
 
     connected = true;
-    auto reconnectionNeeded = populatedSeat != !connection.getAllocation().getUuid().isEmpty() ||
-                              revision != connection.getConnection().getRevision();
+    auto reconnectionNeeded = populatedSeat != !downlink.getAllocation().isEmpty() ||
+                              revision != downlink.getConnection().getRevision();
 
     if (reconnectionNeeded) {
-        populatedSeat = !connection.getAllocation().getUuid().isEmpty();
-        revision = connection.getConnection().getRevision();
+        populatedSeat = !downlink.getAllocation().isEmpty();
+        revision = downlink.getConnection().getRevision();
 
         // Reconnect occurres
         reconnect();
@@ -498,7 +497,7 @@ void IngressLinkSource::onStageConnectionReady(const StageConnectionInfo &connec
 void IngressLinkSource::onIntervalTimerTimeout()
 {
     if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
-        apiClient->requestStageConnection(uuid);
+        apiClient->requestDownlink(uuid);
     }
 }
 

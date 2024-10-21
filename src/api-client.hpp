@@ -44,13 +44,14 @@ class SourceLinkApiClient : public QObject {
     QTimer *pollingTimer;
     RequestSequencer *sequencer;
     int activeOutputs;
+    int standByOutputs;
 
     // Online rsources
     AccountInfo accountInfo;
     PartyArray parties;
     PartyEventArray partyEvents; // Contains all events of all parties
     StageArray stages;
-    StageSeatInfo seat;
+    UplinkInfo uplink;
 
 signals:
     void loginSucceeded();
@@ -64,26 +65,24 @@ signals:
     void partyEventsFailed();
     void stagesReady(const StageArray &stages);
     void stagesFailed();
-    void seatAllocationReady(const StageSeatInfo &seat);
-    void seatAllocationFailed();
-    void stageConnectionReady(const StageConnectionInfo &connection);
-    void stageConnectionFailed();
-    void connectionPutSucceeded(const StageConnectionInfo &connection);
-    void connectionPutFailed();
-    void connectionDeleteSucceeded(const QString &uuid);
-    void connectionDeleteFailed();
-    void seatAllocationPutSucceeded(const StageSeatInfo &seat);
-    void seatAllocationPutFailed();
-    void seatAllocationUplinkSucceeded(const StageSeatInfo &seat);
-    void seatAllocationUplinkFailed();
-    void seatAllocationDeleteSucceeded(const QString &uuid);
-    void seatAllocationDeleteFailed();
-    void pingSucceeded();
-    void pingFailed();
-    void screenshotPutSucceeded(const QString &sourceName);
-    void screenshotPutFailed();
-    void pictureGetSucceeded(const QString &pictureId, const QImage &picture);
-    void pictureGetFailed(const QString &pictureId);
+    void uplinkReady(const UplinkInfo &uplink);
+    void uplinkFailed();
+    void downlinkReady(const DownlinkInfo &downlink);
+    void downlinkFailed();
+    void putDownlinkSucceeded(const DownlinkInfo &downlink);
+    void putDownlinkFailed();
+    void deleteDownlinkSucceeded(const QString &uuid);
+    void deleteDownlinkFailed();
+    void putUplinkSucceeded(const UplinkInfo &uplink);
+    void putUplinkFailed();
+    void putUplinkStatusSucceeded(const UplinkInfo &uplink);
+    void putUplinkStatusFailed();
+    void deleteUplinkSucceeded(const QString &uuid);
+    void deleteUplinkFailed();
+    void putScreenshotSucceeded(const QString &sourceName);
+    void putScreenshotFailed();
+    void getPictureSucceeded(const QString &pictureId, const QImage &picture);
+    void getPictureFailed(const QString &pictureId);
     void ingressRestartNeeded();
 
 private slots:
@@ -103,7 +102,7 @@ public:
     inline const PartyArray &getParties() const { return parties; }
     inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
     inline const StageArray &getStages() const { return stages; }
-    inline const StageSeatInfo getSeat() const { return seat; }
+    inline const UplinkInfo getUplink() const { return uplink; }
     inline SourceLinkSettingsStore *getSettings() const { return settings; }
 
 public slots:
@@ -111,23 +110,22 @@ public slots:
     void logout();
     bool isLoggedIn();
     const RequestInvoker *refresh();
-    const RequestInvoker *ping();
     void requestOnlineResources();
     const RequestInvoker *requestAccountInfo();
     const RequestInvoker *requestParties();
     const RequestInvoker *requestPartyEvents();
     const RequestInvoker *requestStages();
-    const RequestInvoker *requestSeatAllocation();
-    const RequestInvoker *requestStageConnection(const QString &sourceUuid);
-    const RequestInvoker *putConnection(
+    const RequestInvoker *requestUplink();
+    const RequestInvoker *requestDownlink(const QString &sourceUuid);
+    const RequestInvoker *putDownlink(
         const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
         const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
         const int width, const int height, const int revision = 0
     );
-    const RequestInvoker *deleteConnection(const QString &sourceUuid, const bool parallel = false);
-    const RequestInvoker *putSeatAllocation(const bool force = false);
-    const RequestInvoker *uplinkSeatAllocation();
-    const RequestInvoker *deleteSeatAllocation(const bool parallel = false);
+    const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
+    const RequestInvoker *putUplink(const bool force = false);
+    const RequestInvoker *putUplinkStatus();
+    const RequestInvoker *deleteUplink(const bool parallel = false);
     const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
     void restartIngress() { emit ingressRestartNeeded(); }
@@ -138,4 +136,6 @@ public slots:
     void releasePort(const int port);
     inline void incrementActiveOutputs() { activeOutputs++; }
     inline void decrementActiveOutputs() { activeOutputs--; }
+    inline void incrementStandByOutputs() { standByOutputs++; }
+    inline void decrementStandByOutputs() { standByOutputs--; }
 };

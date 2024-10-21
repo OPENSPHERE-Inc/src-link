@@ -282,18 +282,12 @@ public:
     inline void setParticipantId(const QString &value) { insert("participant_id", value); }
     inline QString getAccountId() const { return value("account_id").toString(); }
     inline void setAccountId(const QString &value) { insert("account_id", value); }
-    inline QString getUuid() const { return value("uuid").toString(); }
-    inline void setUuid(const QString &value) { insert("uuid", value); }
-    inline QDateTime getLastUplinkAt() const { QDateTime::fromString(value("last_uplink_at").toString(), Qt::ISODate); }
-    inline void setLastUplinkAt(const QDateTime &value) { insert("last_uplink_at", value.toString(Qt::ISODate)); }
-    inline QString getUplinkStatus() const { return value("uplink_status").toString(); }
-    inline void setUplinkStatus(const QString &value) { insert("uplink_status", value); }
 };
 
-class StageSeatInfo : public QJsonObject {
+class UplinkInfo : public QJsonObject {
 public:
-    StageSeatInfo() = default;
-    StageSeatInfo(const QJsonObject &json) : QJsonObject(json) {}
+    UplinkInfo() = default;
+    UplinkInfo(const QJsonObject &json) : QJsonObject(json) {}
 
     inline StageSeatAllocation getAllocation() const { return value("allocation").toObject(); }
     inline void setAllocation(const StageSeatAllocation &value) { insert("allocation", value); }
@@ -317,10 +311,10 @@ public:
     }
 };
 
-class StageConnectionInfo : public QJsonObject {
+class DownlinkInfo : public QJsonObject {
 public:
-    StageConnectionInfo() = default;
-    StageConnectionInfo(const QJsonObject &json) : QJsonObject(json) {}
+    DownlinkInfo() = default;
+    DownlinkInfo(const QJsonObject &json) : QJsonObject(json) {}
 
     inline StageConnection getConnection() const { return value("connection").toObject(); }
     inline void setConnection(const StageConnection &value) { insert("connection", value); }

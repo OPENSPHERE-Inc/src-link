@@ -115,8 +115,8 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_a
     connect(monitoringTimer, SIGNAL(timeout()), this, SLOT(onMonitoringTimerTimeout()));
 
     connect(
-        apiClient, SIGNAL(seatAllocationReady(const StageSeatInfo &)), this,
-        SLOT(onSeatAllocationReady(const StageSeatInfo &))
+        apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this,
+        SLOT(onUplinkReady(const UplinkInfo &))
     );
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
@@ -468,10 +468,22 @@ void EgressLinkOutput::start()
         // Reduce reconnect with timeout
         connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
+        if (!activeSourceUuid.isEmpty()) {
+            // Get reference for specific source
+            source = obs_get_source_by_uuid(qPrintable(activeSourceUuid));
+            if (!source) {
+                obs_log(LOG_ERROR, "%s: Source not found: %s", qPrintable(name), qPrintable(activeSourceUuid));
+                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                return;
+            }
+            // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
+            obs_source_inc_showing(source);
+        }
+
         // Retrieve connection
         // Find connection specified by name
         connection = StageConnection();
-        foreach (const auto &c, apiClient->getSeat().getConnections()) {
+        foreach (const auto &c, apiClient->getUplink().getConnections()) {
             if (c.getSourceName() == name) {
                 connection = c;
                 break;
@@ -481,6 +493,7 @@ void EgressLinkOutput::start()
         if (connection.isEmpty()) {
             obs_log(LOG_WARNING, "%s: No active connection", qPrintable(name));
             setStatus(LINKED_OUTPUT_STATUS_STAND_BY);
+            apiClient->incrementStandByOutputs();
             return;
         }
 
@@ -517,17 +530,7 @@ void EgressLinkOutput::start()
         auto video = obs_get_video();
         auto audio = obs_get_audio();
 
-        if (!activeSourceUuid.isEmpty()) {
-            // Specific source
-            source = obs_get_source_by_uuid(qPrintable(activeSourceUuid));
-            if (!source) {
-                obs_log(LOG_ERROR, "%s: Source not found: %s", qPrintable(name), qPrintable(activeSourceUuid));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
-                return;
-            }
-            // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
-            obs_source_inc_showing(source);
-
+        if (source) {
             // Video setup
             sourceView = obs_view_create();
             obs_view_set_source(sourceView, 0, source);
@@ -693,7 +696,9 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
             obs_log(LOG_INFO, "%s: Inactivated output", qPrintable(name));
         }
         
-        if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
+        if (status == LINKED_OUTPUT_STATUS_STAND_BY) {
+            apiClient->decrementStandByOutputs();
+        } else if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
             apiClient->decrementActiveOutputs();
         }
 
@@ -821,10 +826,10 @@ void EgressLinkOutput::setVisible(bool value)
     storedSettingsRev++;
 }
 
-void EgressLinkOutput::onSeatAllocationReady(const StageSeatInfo &seat)
+void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
 {
     StageConnection next;
-    foreach (const auto &c, apiClient->getSeat().getConnections()) {
+    foreach (const auto &c, apiClient->getUplink().getConnections()) {
         if (c.getSourceName() == name) {
             next = c;
             break;

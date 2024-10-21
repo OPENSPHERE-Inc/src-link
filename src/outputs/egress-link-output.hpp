@@ -84,7 +84,7 @@ signals:
 private slots:
     void onPollingTimerTimeout();
     void onMonitoringTimerTimeout();
-    void onSeatAllocationReady(const StageSeatInfo &seat);
+    void onUplinkReady(const UplinkInfo &uplink);
 
 public:
     explicit EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient);
