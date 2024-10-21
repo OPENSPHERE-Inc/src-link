@@ -56,6 +56,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define STAGES_URL (API_SERVER "/api/v1/stages")
 #define STAGES_CONNECTIONS_URL (API_SERVER "/api/v1/stages/connections/%1")
 #define STAGE_SEAT_ALLOCATIONS_URL (API_SERVER "/api/v1/stages/seat-allocations/%1")
+#define STAGE_SEAT_ALLOCATIONS_UPLINK_URL (API_SERVER "/api/v1/stages/seat-allocations/%1/uplink")
 #define PARTY_MEMBERS_SCREENSHOTS_URL (API_SERVER "/api/v1/parties/%1/members/me/screenshots/%2")
 #define PING_URL (API_SERVER "/api/v1/ping")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
@@ -94,8 +95,11 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
       settings(new SourceLinkSettingsStore()),
       pollingTimer(nullptr),
       networkManager(nullptr),
-      client(nullptr)
+      client(nullptr),
+      activeOutputs(0)
 {
+    obs_log(LOG_DEBUG, "client: SourceLinkApiClient creating with %s", API_SERVER);
+
     pollingTimer = new QTimer(this);
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
@@ -440,6 +444,7 @@ const RequestInvoker *SourceLinkApiClient::putSeatAllocation(const bool force)
     QJsonObject body;
     body["party_event_id"] = settings->getPartyEventId();
     body["force"] = force || settings->getForceConnection() ? "1" : "0";
+    body["uplink_status"] = activeOutputs > 0 ? "active" : "inactive";
 
     obs_log(LOG_DEBUG, "client: Putting stage seat allocation of %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
@@ -457,6 +462,40 @@ const RequestInvoker *SourceLinkApiClient::putSeatAllocation(const bool force)
 
         obs_log(LOG_DEBUG, "client: Put stage seat allocation of %s succeeded", qPrintable(uuid));
         emit seatAllocationPutSucceeded(seat);
+        emit seatAllocationReady(seat);
+    });
+    invoker->put(req, QJsonDocument(body).toJson());
+
+    return invoker;
+}
+
+const RequestInvoker *SourceLinkApiClient::uplinkSeatAllocation()
+{
+    CHECK_CLIENT_TOKEN(nullptr);
+
+    auto req = QNetworkRequest(QUrl(QString(STAGE_SEAT_ALLOCATIONS_UPLINK_URL).arg(uuid)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject body;
+    body["party_event_id"] = settings->getPartyEventId();
+    body["uplink_status"] = activeOutputs > 0 ? "active" : "inactive";
+
+    obs_log(LOG_DEBUG, "client: Uplinking stage seat allocation of %s", qPrintable(uuid));
+    auto invoker = new RequestInvoker(sequencer, this);
+    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            if (error == QNetworkReply::ContentOperationNotPermittedError) {
+                obs_log(LOG_ERROR, "client: Uplinking stage seat allocation of %s failed: %d", qPrintable(uuid), error);
+                emit seatAllocationUplinkFailed();
+                emit seatAllocationFailed();
+                return;
+            }
+        }
+
+        seat = QJsonDocument::fromJson(replyData).object();
+
+        obs_log(LOG_DEBUG, "client: Uplink stage seat allocation of %s succeeded", qPrintable(uuid));
+        emit seatAllocationUplinkSucceeded(seat);
         emit seatAllocationReady(seat);
     });
     invoker->put(req, QJsonDocument(body).toJson());
@@ -595,7 +634,7 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     }
 
     // Polling seat allocation
-    requestSeatAllocation();
+    uplinkSeatAllocation(); //requestSeatAllocation();
 }
 
 void SourceLinkApiClient::terminate()

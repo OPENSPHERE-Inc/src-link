@@ -43,6 +43,7 @@ class SourceLinkApiClient : public QObject {
     QMap<int, bool> usedPorts;
     QTimer *pollingTimer;
     RequestSequencer *sequencer;
+    int activeOutputs;
 
     // Online rsources
     AccountInfo accountInfo;
@@ -73,6 +74,8 @@ signals:
     void connectionDeleteFailed();
     void seatAllocationPutSucceeded(const StageSeatInfo &seat);
     void seatAllocationPutFailed();
+    void seatAllocationUplinkSucceeded(const StageSeatInfo &seat);
+    void seatAllocationUplinkFailed();
     void seatAllocationDeleteSucceeded(const QString &uuid);
     void seatAllocationDeleteFailed();
     void pingSucceeded();
@@ -123,6 +126,7 @@ public slots:
     );
     const RequestInvoker *deleteConnection(const QString &sourceUuid, const bool parallel = false);
     const RequestInvoker *putSeatAllocation(const bool force = false);
+    const RequestInvoker *uplinkSeatAllocation();
     const RequestInvoker *deleteSeatAllocation(const bool parallel = false);
     const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
@@ -132,4 +136,6 @@ public slots:
 
     const int getFreePort();
     void releasePort(const int port);
+    inline void incrementActiveOutputs() { activeOutputs++; }
+    inline void decrementActiveOutputs() { activeOutputs--; }
 };

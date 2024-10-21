@@ -62,6 +62,17 @@ public:
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
 };
 
+class AccountView : public QJsonObject {
+public:
+    AccountView() = default;
+    AccountView(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getDisplayName() const { return value("display_name").toString(); }
+    inline void setDisplayName(const QString &value) { insert("display_name", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+};
+
 class Stage : public QJsonObject {
 public:
     Stage() = default;
@@ -107,6 +118,9 @@ public:
         }
         insert("seats", seatsArray);
     }
+
+    inline AccountView getOnwerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
 };
 
 class StageArray : public QJsonArray {
@@ -141,6 +155,9 @@ public:
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
     inline int getCapacity() const { return value("capacity").toInt(); }
     inline void setCapacity(int value) { insert("capacity", value); }
+
+    inline AccountView getOnwerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
 };
 
 class PartyArray : public QJsonArray {
@@ -184,10 +201,14 @@ public:
         return QDateTime::fromString(value("status_changed_at").toString(), Qt::ISODate);
     }
     inline void setStatusChangedAt(const QDateTime &value) { insert("status_changed_at", value.toString(Qt::ISODate)); }
+
     inline Party getParty() const { return value("party").toObject(); }
     inline void setParty(const Party &value) { insert("party", value); }
     inline Stage getStage() const { return value("stage").toObject(); }
     inline void setStage(const Stage &value) { insert("stage", value); }
+
+    inline AccountView getOnwerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
 };
 
 class PartyEventArray : public QJsonArray {
@@ -263,6 +284,10 @@ public:
     inline void setAccountId(const QString &value) { insert("account_id", value); }
     inline QString getUuid() const { return value("uuid").toString(); }
     inline void setUuid(const QString &value) { insert("uuid", value); }
+    inline QDateTime getLastUplinkAt() const { QDateTime::fromString(value("last_uplink_at").toString(), Qt::ISODate); }
+    inline void setLastUplinkAt(const QDateTime &value) { insert("last_uplink_at", value.toString(Qt::ISODate)); }
+    inline QString getUplinkStatus() const { return value("uplink_status").toString(); }
+    inline void setUplinkStatus(const QString &value) { insert("uplink_status", value); }
 };
 
 class StageSeatInfo : public QJsonObject {

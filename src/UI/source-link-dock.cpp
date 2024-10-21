@@ -171,12 +171,15 @@ void SourceLinkDock::onPictureFailed(const QString &pictureId)
 
 void SourceLinkDock::onSeatAllocationReady(const StageSeatInfo &seat)
 {
+    // Always show outputs
+    updateConnections(seat.getStage());
+
     if (!seat.getAllocation().isEmpty()) {
         ui->seatAllocationStatus->setText(QString("Ready"));
         setThemeID(ui->seatAllocationStatus, "good");
-        updateConnections(seat.getStage());
     } else {
-        onSeatAllocationFailed();
+        ui->seatAllocationStatus->setText(QString("No seat"));
+        setThemeID(ui->seatAllocationStatus, "error");
     }
 }
 

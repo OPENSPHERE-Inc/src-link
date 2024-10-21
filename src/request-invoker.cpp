@@ -67,7 +67,9 @@ template<class Func> void RequestInvoker::queue(Func invoker)
     {
         if (sequencer->requestQueue.isEmpty()) {
             sequencer->requestQueue.append(this);
+            locker.unlock(); // Must unlock before invoking
             invoker();
+            return;
         } else {
             // Reserve next invocation
             connect(sequencer->requestQueue.last(), &RequestInvoker::finished, invoker);

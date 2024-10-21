@@ -103,7 +103,7 @@ void SourceLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
         break;
     case LINKED_OUTPUT_STATUS_STAND_BY:
         ui->statusValueLabel->setText(obs_module_text("StandBy"));
-        setThemeID(ui->statusValueLabel, "warning");
+        setThemeID(ui->statusValueLabel, "good");
         break;
     case LINKED_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(obs_module_text("Error"));

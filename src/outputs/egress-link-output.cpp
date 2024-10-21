@@ -647,9 +647,9 @@ void EgressLinkOutput::start()
             return;
         }
 
-        status = LINKED_OUTPUT_STATUS_ACTIVE;
         obs_log(LOG_INFO, "%s: Activated output", qPrintable(name));
-        emit statusChanged(status);
+        setStatus(LINKED_OUTPUT_STATUS_ACTIVE);
+        apiClient->incrementActiveOutputs();
     }
     locker.unlock();
 }
@@ -692,6 +692,10 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
         if (stopStatus && status != LINKED_OUTPUT_STATUS_INACTIVE) {
             obs_log(LOG_INFO, "%s: Inactivated output", qPrintable(name));
         }
+        
+        if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
+            apiClient->decrementActiveOutputs();
+        }
 
         setStatus(LINKED_OUTPUT_STATUS_INACTIVE);
     }
@@ -711,10 +715,12 @@ void EgressLinkOutput::onPollingTimerTimeout()
     }
 
     // Upload screenshot during output is active
-    OBSSourceAutoRelease source = obs_frontend_get_current_scene();
+    OBSSourceAutoRelease ssSource = obs_frontend_get_current_scene();
     bool success = false;
     // Keep source's aspect ratio
-    auto screenshot = takeSourceScreenshot(source, success, 0, OUTPUT_SCREENSHOT_HEIGHT);
+    auto screenshot = source
+        ? takeSourceScreenshot(source, success, 0, OUTPUT_SCREENSHOT_HEIGHT)
+        : takeSourceScreenshot(ssSource, success, 0, OUTPUT_SCREENSHOT_HEIGHT);
 
     if (success) {
         apiClient->putScreenshot(name, screenshot);
