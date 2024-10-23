@@ -45,8 +45,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 // REST Endpoints
 #ifdef LOCAL_DEBUG
 #define API_SERVER "http://localhost:3000"
+#define API_WS_SERVER "ws://localhost:3000"
 #else
 #define API_SERVER "https://source-link-test.opensphere.co.jp"
+#define API_WS_SERVER "wss://source-link-test.opensphere.co.jp"
 #endif
 #define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
 #define TOKEN_URL (API_SERVER "/oauth2/token")
@@ -60,6 +62,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/stages")
+#define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
 
 // Embedded client ID and secret
 #define CLIENT_ID "testClientId"
@@ -309,9 +312,7 @@ const RequestInvoker *SourceLinkApiClient::requestUplink()
     obs_log(LOG_DEBUG, "client: Requesting uplink for %s", qPrintable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(
-            uplinkFailed, "clinet: Requesting uplink for %s failed: %d", qPrintable(uuid), error
-        );
+        CHECK_RESPONSE_NOERROR(uplinkFailed, "clinet: Requesting uplink for %s failed: %d", qPrintable(uuid), error);
 
         uplink = QJsonDocument::fromJson(replyData).object();
 
@@ -333,8 +334,7 @@ const RequestInvoker *SourceLinkApiClient::requestDownlink(const QString &source
         invoker, &RequestInvoker::finished,
         [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
             CHECK_RESPONSE_NOERROR(
-                downlinkFailed, "clinet: Requesting downlink for %s failed: %d", qPrintable(sourceUuid),
-                error
+                downlinkFailed, "clinet: Requesting downlink for %s failed: %d", qPrintable(sourceUuid), error
             );
 
             DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
@@ -383,9 +383,7 @@ const RequestInvoker *SourceLinkApiClient::putDownlink(
 
             DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
 
-            obs_log(
-                LOG_DEBUG, "client: Put downlink %s succeeded", qPrintable(connection.getConnection().getId())
-            );
+            obs_log(LOG_DEBUG, "client: Put downlink %s succeeded", qPrintable(connection.getConnection().getId()));
             emit putDownlinkSucceeded(connection);
         }
     );
@@ -492,10 +490,7 @@ const RequestInvoker *SourceLinkApiClient::deleteUplink(const bool parallel)
     obs_log(LOG_DEBUG, "client: Deleting uplink of %s", qPrintable(uuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
-        CHECK_RESPONSE_NOERROR(
-            deleteUplinkFailed, "clinet: Deleting uplink of %s failed: %d", qPrintable(uuid),
-            error
-        );
+        CHECK_RESPONSE_NOERROR(deleteUplinkFailed, "clinet: Deleting uplink of %s failed: %d", qPrintable(uuid), error);
 
         obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qPrintable(uuid));
         emit deleteUplinkSucceeded(uuid);

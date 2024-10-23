@@ -14,7 +14,13 @@ include(helpers)
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
+
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+
+target_compile_definitions(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE ASIO_STANDALONE $<$<BOOL:${PLUGIN_TESTS}>:PLUGIN_TESTS> $<$<BOOL:${OS_WINDOWS}>:_WEBSOCKETPP_CPP11_STL_>
+          $<$<BOOL:${OS_WINDOWS}>:_WIN32_WINNT=0x0603>)
 
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)
@@ -42,6 +48,7 @@ target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE src/plugin-main.cpp
           src/api-client.cpp
+          src/api-websocket.cpp
           src/request-invoker.cpp
           src/schema.hpp
           src/utils.cpp
