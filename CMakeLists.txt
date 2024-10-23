@@ -28,8 +28,8 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core Network Concurrent)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::Concurrent)
+  find_package(Qt6 COMPONENTS Widgets Core Network Concurrent WebSockets)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::Concurrent Qt6::WebSockets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
                                   -Wno-comma>)
