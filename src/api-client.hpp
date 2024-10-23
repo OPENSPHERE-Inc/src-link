@@ -32,9 +32,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "schema.hpp"
 #include "settings.hpp"
 #include "request-invoker.hpp"
+#include "api-websocket.hpp"
 
 class SourceLinkApiClient : public QObject {
     Q_OBJECT
+
+    friend class SourceLinkWebSocketClient;
 
     QString uuid;
     SourceLinkSettingsStore *settings;
@@ -45,6 +48,7 @@ class SourceLinkApiClient : public QObject {
     RequestSequencer *sequencer;
     int activeOutputs;
     int standByOutputs;
+    SourceLinkWebSocketClient *websocket;
 
     // Online rsources
     AccountInfo accountInfo;
@@ -52,6 +56,7 @@ class SourceLinkApiClient : public QObject {
     PartyEventArray partyEvents; // Contains all events of all parties
     StageArray stages;
     UplinkInfo uplink;
+    QMap<QString, DownlinkInfo> downlinks;
 
 signals:
     void loginSucceeded();
@@ -92,6 +97,9 @@ private slots:
     void onO2OpenBrowser(const QUrl &url);
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onPollingTimerTimeout();
+    void onWebSocketReady();
+    void onWebSocketDataChanged(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
+    void onWebSocketDataRemoved(const QString &subId, const QString &name, const QString &id);
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);

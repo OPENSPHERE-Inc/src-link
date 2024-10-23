@@ -494,6 +494,7 @@ void EgressLinkOutput::start()
             obs_log(LOG_WARNING, "%s: No active connection", qPrintable(name));
             setStatus(LINKED_OUTPUT_STATUS_STAND_BY);
             apiClient->incrementStandByOutputs();
+            apiClient->putUplinkStatus();
             return;
         }
 
@@ -653,6 +654,7 @@ void EgressLinkOutput::start()
         obs_log(LOG_INFO, "%s: Activated output", qPrintable(name));
         setStatus(LINKED_OUTPUT_STATUS_ACTIVE);
         apiClient->incrementActiveOutputs();
+        apiClient->putUplinkStatus();
     }
     locker.unlock();
 }
@@ -698,8 +700,10 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
         
         if (status == LINKED_OUTPUT_STATUS_STAND_BY) {
             apiClient->decrementStandByOutputs();
+            apiClient->putUplinkStatus();
         } else if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
             apiClient->decrementActiveOutputs();
+            apiClient->putUplinkStatus();
         }
 
         setStatus(LINKED_OUTPUT_STATUS_INACTIVE);

@@ -497,7 +497,7 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
 void IngressLinkSource::onIntervalTimerTimeout()
 {
     if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
-        apiClient->requestDownlink(uuid);
+        //apiClient->requestDownlink(uuid);
     }
 }
 

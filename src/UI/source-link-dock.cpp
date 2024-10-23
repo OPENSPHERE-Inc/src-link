@@ -52,7 +52,6 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
     );
-    connect(apiClient, SIGNAL(partiesReady(const PartyArray &)), this, SLOT(onPartiesReady(const PartyArray &)));
     connect(
         apiClient, SIGNAL(partyEventsReady(const PartyEventArray &)), this,
         SLOT(onPartyEventsReady(const PartyEventArray &))

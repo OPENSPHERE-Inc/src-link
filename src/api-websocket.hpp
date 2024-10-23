@@ -19,12 +19,41 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <QObject>
+#include <QWebSocket>
+
+class SourceLinkApiClient;
 
 class SourceLinkWebSocketClient : public QObject {
     Q_OBJECT
 
+    QUrl url;
+    QWebSocket *client;
+    SourceLinkApiClient *apiClient;
+    bool started;
+    QTimer *intervalTimer;
+
+    void open();
+
+ signals:
+    void ready();
+    void added(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
+    void changed(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
+    void removed(const QString &subId, const QString &name, const QString &id);
+
+private slots:
+    void onConnected();
+    void onDisconnected();
+    void onPong(quint64 elapsedTime, const QByteArray &payload);
+    void onTextMessageReceived(QString message);
+
 public:
-    explicit SourceLinkWebSocketClient(QObject *parent = nullptr);
+    explicit SourceLinkWebSocketClient(QUrl wsUrl, SourceLinkApiClient *apiClient, QObject *parent = nullptr);
     ~SourceLinkWebSocketClient();
 
+public slots:
+    void start();
+    void stop();
+
+    void subscribe(const QString &name, const QString &uuid);
+    void unsubscribe(const QString &name, const QString &uuid);
 };

@@ -25,16 +25,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QtConcurrent>
 #include <QPromise>
 #include <QTimer>
 #include <QByteArray>
+#include <QBuffer>
 
 #include <o0settingsstore.h>
 #include <o0globals.h>
 
 #include "plugin-support.h"
 #include "api-client.hpp"
+#include "api-websocket.hpp"
 #include "utils.hpp"
 
 #define LOCAL_DEBUG
@@ -107,6 +108,7 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
     sequencer = new RequestSequencer(networkManager, client, this);
+    websocket = new SourceLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
 
     uuid = settings->value("uuid");
     if (uuid.isEmpty()) {
@@ -138,13 +140,29 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
         client, SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
         SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
     );
+    connect(websocket, SIGNAL(ready()), this, SLOT(onWebSocketReady()));
+    connect(
+        websocket, SIGNAL(added(const QString &, const QString &, const QString &, const QJsonObject &)), this,
+        SLOT(onWebSocketDataChanged(const QString &, const QString &, const QString &, const QJsonObject &))
+    );
+    connect(
+        websocket, SIGNAL(changed(const QString &, const QString &, const QString &, const QJsonObject &)), this,
+        SLOT(onWebSocketDataChanged(const QString &, const QString &, const QString &, const QJsonObject &))
+    );
+    connect(
+        websocket, SIGNAL(removed(const QString &, const QString &, const QString &)), this,
+        SLOT(onWebSocketDataRemoved(const QString &, const QString &, const QString &))
+    );
 
     if (client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
         // Refresh token now
         auto invoker = new RequestInvoker(sequencer, this);
         invoker->refresh();
     } else {
-        requestOnlineResources();
+        connect(requestAccountInfo(), &RequestInvoker::finished, this, [this]() {
+            requestOnlineResources();
+            websocket->start();
+        });
 
         // Schedule next refresh
         QTimer::singleShot(
@@ -213,7 +231,6 @@ void SourceLinkApiClient::requestOnlineResources()
 {
     CHECK_CLIENT_TOKEN();
 
-    requestAccountInfo();
     requestParties();
     requestPartyEvents();
     requestStages();
@@ -228,10 +245,10 @@ const RequestInvoker *SourceLinkApiClient::requestAccountInfo()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(accountInfoFailed, "client: Requesting account info failed: %d", error);
+        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getDisplayName()));
 
         accountInfo = QJsonDocument::fromJson(replyData).object();
-
-        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getDisplayName()));
+        
         emit accountInfoReady(accountInfo);
     });
     invoker->get(QNetworkRequest(QUrl(ACCOUNT_INFO_URL)));
@@ -247,15 +264,15 @@ const RequestInvoker *SourceLinkApiClient::requestParties()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(partiesFailed, "client: Requesting parties failed: %d", error);
+        obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
 
         parties = QJsonDocument::fromJson(replyData).array();
-
         auto size = parties.size();
+
         if (settings->getPartyId().isEmpty() && size > 0) {
             settings->setPartyId(parties[0].getId());
         }
 
-        obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
         emit partiesReady(parties);
     });
     invoker->get(QNetworkRequest(QUrl(PARTIES_URL)));
@@ -271,14 +288,14 @@ const RequestInvoker *SourceLinkApiClient::requestPartyEvents()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(partyEventsFailed, "client: Requesting party events failed: %d", error);
+        obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
 
         partyEvents = QJsonDocument::fromJson(replyData).array();
 
         if (settings->getPartyEventId().isEmpty() && partyEvents.size() > 0) {
             settings->setPartyEventId(partyEvents[0].getId());
         }
-
-        obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
+        
         emit partyEventsReady(partyEvents);
     });
     invoker->get(QNetworkRequest(QUrl(PARTY_EVENTS_URL)));
@@ -294,10 +311,10 @@ const RequestInvoker *SourceLinkApiClient::requestStages()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(stagesFailed, "client: Requesting stages failed: %d", error);
+        obs_log(LOG_DEBUG, "client: Received %d stages", stages.size());
 
         stages = QJsonDocument::fromJson(replyData).array();
 
-        obs_log(LOG_DEBUG, "client: Received %d stages", stages.size());
         emit stagesReady(stages);
     });
     invoker->get(QNetworkRequest(QUrl(STAGES_URL)));
@@ -313,10 +330,10 @@ const RequestInvoker *SourceLinkApiClient::requestUplink()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(uplinkFailed, "clinet: Requesting uplink for %s failed: %d", qPrintable(uuid), error);
+        obs_log(LOG_DEBUG, "client: Received uplink for %s", qPrintable(uuid));
 
         uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Received uplink for %s", qPrintable(uuid));
         emit uplinkReady(uplink);
     });
     invoker->get(QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid))));
@@ -336,11 +353,11 @@ const RequestInvoker *SourceLinkApiClient::requestDownlink(const QString &source
             CHECK_RESPONSE_NOERROR(
                 downlinkFailed, "clinet: Requesting downlink for %s failed: %d", qPrintable(sourceUuid), error
             );
-
-            DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
-
             obs_log(LOG_DEBUG, "client: Received downlink for %s", qPrintable(sourceUuid));
-            emit downlinkReady(connection);
+
+            downlinks[sourceUuid] = QJsonDocument::fromJson(replyData).object();
+
+            emit downlinkReady(downlinks[sourceUuid]);
         }
     );
     invoker->get(QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid))));
@@ -380,11 +397,16 @@ const RequestInvoker *SourceLinkApiClient::putDownlink(
             CHECK_RESPONSE_NOERROR(
                 putDownlinkFailed, "client: Putting downlink %s failed: %d", qPrintable(sourceUuid), error
             );
+            obs_log(
+                LOG_DEBUG, "client: Put downlink %s succeeded",
+                qPrintable(downlinks[sourceUuid].getConnection().getId())
+            );
 
-            DownlinkInfo connection = QJsonDocument::fromJson(replyData).object();
+            websocket->subscribe("downlink", sourceUuid);
 
-            obs_log(LOG_DEBUG, "client: Put downlink %s succeeded", qPrintable(connection.getConnection().getId()));
-            emit putDownlinkSucceeded(connection);
+            downlinks[sourceUuid] = QJsonDocument::fromJson(replyData).object();
+
+            emit putDownlinkSucceeded(downlinks[sourceUuid]);
         }
     );
     invoker->put(req, QJsonDocument(body).toJson());
@@ -404,9 +426,14 @@ const RequestInvoker *SourceLinkApiClient::deleteDownlink(const QString &sourceU
         CHECK_RESPONSE_NOERROR(
             deleteDownlinkFailed, "clinet: Deleting downlink of %s failed: %d", qPrintable(sourceUuid), error
         );
-
         obs_log(LOG_DEBUG, "client: Delete downlink of %s succeeded", qPrintable(sourceUuid));
-        emit deleteDownlinkSucceeded(sourceUuid);
+
+        websocket->unsubscribe("downlink", sourceUuid);
+
+        if (downlinks.contains(sourceUuid)) {
+            downlinks.remove(sourceUuid);
+            emit deleteDownlinkSucceeded(sourceUuid);
+        }
     });
     invoker->deleteResource(req);
 
@@ -436,10 +463,12 @@ const RequestInvoker *SourceLinkApiClient::putUplink(const bool force)
                 return;
             }
         }
+        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qPrintable(uuid));
 
         uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qPrintable(uuid));
+        websocket->subscribe("uplink", uuid);
+        
         emit putUplinkSucceeded(uplink);
         emit uplinkReady(uplink);
     });
@@ -469,10 +498,10 @@ const RequestInvoker *SourceLinkApiClient::putUplinkStatus()
                 return;
             }
         }
+        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qPrintable(uuid));
 
         uplink = QJsonDocument::fromJson(replyData).object();
 
-        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qPrintable(uuid));
         emit putUplinkStatusSucceeded(uplink);
         emit uplinkReady(uplink);
     });
@@ -491,8 +520,12 @@ const RequestInvoker *SourceLinkApiClient::deleteUplink(const bool parallel)
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
         CHECK_RESPONSE_NOERROR(deleteUplinkFailed, "clinet: Deleting uplink of %s failed: %d", qPrintable(uuid), error);
-
         obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qPrintable(uuid));
+
+        websocket->unsubscribe("uplink", uuid);
+
+        uplink = QJsonObject();
+
         emit deleteUplinkSucceeded(uuid);
     });
     invoker->deleteResource(req);
@@ -568,11 +601,16 @@ void SourceLinkApiClient::onO2LinkingSucceeded()
         CHECK_CLIENT_TOKEN();
         obs_log(LOG_DEBUG, "client: The API client has linked up.");
 
-        requestOnlineResources();
+        connect(requestAccountInfo(), &RequestInvoker::finished, this, [this]() {
+            requestOnlineResources();
+            websocket->start();
+        });
 
         emit loginSucceeded();
     } else {
         obs_log(LOG_DEBUG, "client: The API client has unlinked.");
+
+        websocket->stop();
 
         emit logoutSucceeded();
     }
@@ -581,6 +619,8 @@ void SourceLinkApiClient::onO2LinkingSucceeded()
 void SourceLinkApiClient::onO2LinkingFailed()
 {
     obs_log(LOG_ERROR, "client: The API client linking failed.");
+
+    websocket->stop();
 
     emit loginFailed();
 }
@@ -603,7 +643,103 @@ void SourceLinkApiClient::onPollingTimerTimeout()
     }
 
     // Polling uplink
-    putUplinkStatus(); //requestUplink();
+    //putUplinkStatus(); //requestUplink();
+}
+
+void SourceLinkApiClient::onWebSocketReady()
+{
+    obs_log(LOG_DEBUG, "client: WebSocket is ready.");
+    websocket->subscribe("uplink", uuid);
+
+    foreach (auto uuid, downlinks.keys()) {
+        websocket->subscribe("downlink", uuid);
+    }
+}
+
+void SourceLinkApiClient::onWebSocketDataChanged(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload)
+{
+    obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s,%s", qPrintable(subId), qPrintable(name), qPrintable(id));
+
+    if (name == "uplink.allocations") {
+        uplink.setAllocation(payload);
+        emit uplinkReady(uplink);
+
+    } else if (name == "uplink.stages") {
+        uplink.setStage(payload);
+        emit uplinkReady(uplink);
+
+    } else if (name == "uplink.connections") {
+        StageConnection newConnection = payload;
+        auto connections = uplink["connections"].toArray();
+        bool found = false;
+
+        for (int i = 0; i < connections.size(); i++) {
+            StageConnection oldConnection = connections[i].toObject();
+            if (oldConnection.getId() == newConnection.getId()) {
+                connections[i] = newConnection;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            connections.append(newConnection);
+        }
+
+        uplink["connections"] = connections;
+        emit uplinkReady(uplink);
+
+    } else if (name == "downlink.connections") {
+        StageConnection newConnection = payload;
+        downlinks[subId]["connection"] = newConnection;
+        emit downlinkReady(downlinks[subId]);
+
+    } else if (name == "downlink.allocations") {
+        StageSeatAllocation newAllocation = payload;
+        downlinks[subId]["allocation"] = newAllocation;
+        emit downlinkReady(downlinks[subId]);
+    }
+}
+
+void SourceLinkApiClient::onWebSocketDataRemoved(const QString &subId, const QString &name, const QString &id)
+{
+    obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s,%s", qPrintable(subId), qPrintable(name), qPrintable(id));
+
+    if (name == "uplink.allocations") {
+        if (uplink.getAllocation().getId() == id) {
+            uplink.remove("allocation");
+            emit uplinkReady(uplink);
+        }
+
+    } else if (name == "uplink.stages") {
+        if (uplink.getStage().getId() == id) {
+            uplink.remove("stage");
+            emit uplinkReady(uplink);
+        }
+
+    } else if (name == "uplink.connections") {
+        auto connections = uplink["connections"].toArray();
+        for (int i = 0; i < connections.size(); i++) {
+            StageConnection connection = connections[i].toObject();
+            if (connection.getId() == id) {
+                connections.removeAt(i);
+                break;
+            }
+        }
+
+        uplink["connections"] = connections;
+        emit uplinkReady(uplink);
+
+    } else if (name == "downlink.connections") {
+        if (downlinks.contains(subId)) {
+            downlinks.remove(subId);
+            emit deleteDownlinkSucceeded(id);
+        }
+
+    } else if (name == "downlink.allocations") {
+        downlinks[subId].remove("allocation");
+        emit downlinkReady(downlinks[subId]);
+    }
 }
 
 void SourceLinkApiClient::terminate()

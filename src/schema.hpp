@@ -259,6 +259,8 @@ public:
     inline void setHeight(int value) { insert("height", value); }
     inline int getRevision() const { return value("revision").toInt(); }
     inline void setRevision(int value) { insert("revision", value); }
+    inline bool getDisabled() const { return value("disabled").toBool(); }
+    inline void setDisabled(bool value) { insert("disabled", value); }
 };
 
 class StageSeatAllocation : public QJsonObject {
@@ -282,6 +284,8 @@ public:
     inline void setParticipantId(const QString &value) { insert("participant_id", value); }
     inline QString getAccountId() const { return value("account_id").toString(); }
     inline void setAccountId(const QString &value) { insert("account_id", value); }
+    inline bool getDisabled() const { return value("disabled").toBool(); }
+    inline void setDisabled(bool value) { insert("disabled", value); }
 };
 
 class UplinkInfo : public QJsonObject {
@@ -320,4 +324,21 @@ public:
     inline void setConnection(const StageConnection &value) { insert("connection", value); }
     inline StageSeatAllocation getAllocation() const { return value("allocation").toObject(); }
     inline void setAllocation(const StageSeatAllocation &value) { insert("allocation", value); }
+};
+
+class WebSocketMessage : public QJsonObject {
+public:
+    WebSocketMessage() = default;
+    WebSocketMessage(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getSubId() const { return value("sub_id").toString(); }
+    inline void setSubId(const QString &value) { insert("sub_id", value); }
+    inline QString getEvent() const { return value("event").toString(); }
+    inline void setEvent(const QString &value) { insert("event", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getId() const { return value("id").toString(); }
+    inline void setId(const QString &value) { insert("id", value); }
+    inline QJsonObject getPayload() const { return value("payload").toObject(); }
+    inline void setPayload(const QJsonObject &value) { insert("payload", value); }
 };
