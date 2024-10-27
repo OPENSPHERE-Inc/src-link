@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QObject>
 #include <QWebSocket>
+#include <QJsonObject>
 
 class SourceLinkApiClient;
 
@@ -30,15 +31,19 @@ class SourceLinkWebSocketClient : public QObject {
     QWebSocket *client;
     SourceLinkApiClient *apiClient;
     bool started;
+    int reconnectCount;
     QTimer *intervalTimer;
 
     void open();
 
  signals:
-    void ready();
-    void added(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
-    void changed(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
-    void removed(const QString &subId, const QString &name, const QString &id);
+    void ready(bool reconect);
+    void connected();
+    void disconnected();
+    void reconnecting();
+    void added(const QString &name, const QString &id, const QJsonObject &payload);
+    void changed(const QString &name, const QString &id, const QJsonObject &payload);
+    void removed(const QString &name, const QString &id, const QJsonObject &payload);
 
 private slots:
     void onConnected();
@@ -53,7 +58,7 @@ public:
 public slots:
     void start();
     void stop();
-
-    void subscribe(const QString &name, const QString &uuid);
-    void unsubscribe(const QString &name, const QString &uuid);
+    void subscribe(const QString &name, const QJsonObject &payload = QJsonObject());
+    void unsubscribe(const QString &name, const QJsonObject &payload = QJsonObject());
+    bool isStarted() const { return started; }
 };

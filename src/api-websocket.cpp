@@ -30,7 +30,8 @@ SourceLinkWebSocketClient::SourceLinkWebSocketClient(QUrl _url, SourceLinkApiCli
     : QObject(parent),
       apiClient(_apiClient),
       url(_url),
-      started(false)
+      started(false),
+      reconnectCount(0)
 {
     intervalTimer = new QTimer(this);
     client = new QWebSocket("https://" + url.host(), QWebSocketProtocol::Version13, this);
@@ -65,16 +66,19 @@ SourceLinkWebSocketClient::~SourceLinkWebSocketClient()
 void SourceLinkWebSocketClient::onConnected() 
 {
     obs_log(LOG_DEBUG, "WebSocket connected");
+    emit connected();
 }
 
 void SourceLinkWebSocketClient::onDisconnected() 
 {
     if (started) {
-        // Reconnect
         obs_log(LOG_DEBUG, "WebSocket reconnecting");
+        reconnectCount++;
         open();
+        emit reconnecting();
     } else {
         obs_log(LOG_DEBUG, "WebSocket disconnected");
+        emit disconnected();
     }
 }
 
@@ -87,13 +91,13 @@ void SourceLinkWebSocketClient::onTextMessageReceived(QString message)
 {
     WebSocketMessage messageObj = QJsonDocument::fromJson(message.toUtf8()).object();
     if (messageObj.getEvent() == "ready") {
-        emit ready();
+        emit ready(reconnectCount > 0);
     } else if (messageObj.getEvent() == "added") {
-        emit added(messageObj.getSubId(), messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+        emit added(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else if (messageObj.getEvent() == "changed") {
-        emit changed(messageObj.getSubId(), messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+        emit changed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else if (messageObj.getEvent() == "removed") {
-        emit removed(messageObj.getSubId(), messageObj.getName(), messageObj.getId());
+        emit removed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else {
         obs_log(LOG_WARNING, "WebSocket unknown message: %s", qPrintable(message));
     }
@@ -106,7 +110,7 @@ void SourceLinkWebSocketClient::open()
     }
 
     auto req = QNetworkRequest(url);
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->client->token()).toLatin1());
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
 
     client->open(req);
 }
@@ -118,8 +122,9 @@ void SourceLinkWebSocketClient::start()
     }
 
     obs_log(LOG_DEBUG, "WebSocket connecting: %s", qPrintable(url.toString()));
-    open();
     started = true;
+    reconnectCount = 0;
+    open();
 }
 
 void SourceLinkWebSocketClient::stop() 
@@ -133,16 +138,13 @@ void SourceLinkWebSocketClient::stop()
     client->close();
 }
 
-void SourceLinkWebSocketClient::subscribe(const QString &name, const QString &uuid) 
+void SourceLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload) 
 {
     if (!started || !client->isValid()) {
         return;
     }
     
     obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qPrintable(name));
-
-    QJsonObject payload;
-    payload["uuid"] = uuid;
 
     QJsonObject message;
     message["event"] = "subscribe";
@@ -152,16 +154,13 @@ void SourceLinkWebSocketClient::subscribe(const QString &name, const QString &uu
     client->sendTextMessage(QJsonDocument(message).toJson());
 }
 
-void SourceLinkWebSocketClient::unsubscribe(const QString &name, const QString &uuid)
+void SourceLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &payload)
 {
     if (!started || !client->isValid()) {
         return;
     }
 
     obs_log(LOG_DEBUG, "WebSocket unsubscribe: %s", qPrintable(name));
-
-    QJsonObject payload;
-    payload["uuid"] = uuid;
 
     QJsonObject message;
     message["event"] = "unsubscribe";

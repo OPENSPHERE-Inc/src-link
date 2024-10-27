@@ -36,8 +36,8 @@ public:
 
     inline void setPartyId(const QString &partyId) { setValue("partyId", partyId); }
     inline const QString getPartyId() { return value("partyId"); }
-    inline void setPartyEventId(const QString &partyEventId) { setValue("partyEventId", partyEventId); }
-    inline const QString getPartyEventId() { return value("partyEventId"); }
+    inline void setParticipantId(const QString &participantId) { setValue("participantId", participantId); }
+    inline const QString getParticipantId() { return value("participantId"); }
     inline void setForceConnection(const bool forceConnection)
     {
         setValue("forceConnection", forceConnection ? "true" : "false");

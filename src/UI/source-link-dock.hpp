@@ -43,12 +43,12 @@ class SourceLinkDock : public QFrame {
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);
-    void onPartyEventsReady(const PartyEventArray &partyEvents);
-    void onActivePartyEventChanged(int index);
+    void onParticipantsReady(const PartyEventParticipantArray &participants);
+    void onActiveParticipantChanged(int index);
     void onPictureReady(const QString &pictureId, const QImage &picture);
     void onPictureFailed(const QString &pictureId);
     void onUplinkReady(const UplinkInfo &uplink);
-    void onUplinkFailed();
+    void onUplinkFailed(const QString &uuid);
     void onInterlockTypeChanged(int index);
     void onLogoutButtonClicked();
 

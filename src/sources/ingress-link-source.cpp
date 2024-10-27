@@ -26,8 +26,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../utils.hpp"
 #include "ingress-link-source.hpp"
 
-#define POLLING_INTERVAL_MSECS 10000
 #define SETTINGS_JSON_NAME "ingress-link-source.json"
+#define FILLER_IMAGE_NAME "filler.jpg"
 
 //--- IngressLinkSource class ---//
 
@@ -37,12 +37,11 @@ IngressLinkSource::IngressLinkSource(
     : QObject(parent),
       weakSource(obs_source_get_weak_source(_source)),
       apiClient(_apiClient),
-      connected(false),
+      active(false),
       uuid(obs_source_get_uuid(_source)),
       port(0),
       revision(0),
       audioThread(nullptr),
-      intervalTimer(nullptr),
       populatedSeat(false)
 {
     name = obs_source_get_name(_source);
@@ -65,6 +64,10 @@ IngressLinkSource::IngressLinkSource(
     decoderSource = obs_source_create_private("ffmpeg_source", qPrintable(decoderName), decoderSettings);
     obs_source_inc_active(decoderSource);
 
+    // Create filler private source
+    QString fillerFile = QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(FILLER_IMAGE_NAME);
+    fillerRenderer = new ImageRenderer(false, fillerFile, this);
+
     // Register connection to server
     handleConnection();
 
@@ -77,25 +80,18 @@ IngressLinkSource::IngressLinkSource(
     audioThread = new SourceAudioThread(this);
     audioThread->start();
 
-    // API server polling
-    intervalTimer = new QTimer(this);
-    intervalTimer->setInterval(POLLING_INTERVAL_MSECS);
-    intervalTimer->start();
-
-    connect(intervalTimer, SIGNAL(timeout()), this, SLOT(onIntervalTimerTimeout()));
     connect(
-        apiClient, SIGNAL(putDownlinkSucceeded(const DownlinkInfo &)), this,
-        SLOT(onDownlinkReady(const DownlinkInfo &))
+        apiClient, SIGNAL(putDownlinkSucceeded(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &))
     );
-    connect(apiClient, SIGNAL(putDownlinkFailed()), this, SLOT(onPutDownlinkFailed()));
+    connect(apiClient, SIGNAL(putDownlinkFailed(const QString &)), this, SLOT(onPutDownlinkFailed(const QString &)));
     connect(
         apiClient, SIGNAL(deleteDownlinkSucceeded(const QString &)), this,
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
-    connect(
-        apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &))
-    );
-    connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reconnect(); });
+    connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
+    connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reactivate(); });
+    connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
+    connect(apiClient, SIGNAL(webSocketReady(bool)), this, SLOT(onWebSocketReady(bool)));
 
     renameSignal.Connect(
         obs_source_get_signal_handler(_source), "rename",
@@ -169,6 +165,9 @@ void IngressLinkSource::loadSettings(obs_data_t *settings)
     OBSDataAutoRelease recently_settings = obs_data_create_from_json_file(path);
 
     if (recently_settings) {
+        obs_data_erase(recently_settings, "stage_id");
+        obs_data_erase(recently_settings, "seat_name");
+        obs_data_erase(recently_settings, "source_name");
         obs_data_apply(settings, recently_settings);
     }
 }
@@ -266,6 +265,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     auto stageList = obs_properties_add_list(
         connectionGroup, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
+    obs_property_list_add_string(stageList, "", "");
     foreach (auto &stage, apiClient->getStages().values()) {
         obs_property_list_add_string(stageList, qPrintable(stage.getName()), qPrintable(stage.getId()));
     }
@@ -274,13 +274,13 @@ obs_properties_t *IngressLinkSource::getProperties()
     auto seatList = obs_properties_add_list(
         connectionGroup, "seat_name", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
-    obs_property_list_add_string(seatList, obs_module_text("ChooseStageFirst"), "");
+    obs_property_list_add_string(seatList, "", "");
 
     // Connection group -> Source list
     auto sourceList = obs_properties_add_list(
         connectionGroup, "source_name", obs_module_text("Source"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
-    obs_property_list_add_string(sourceList, obs_module_text("ChooseStageFirst"), "");
+    obs_property_list_add_string(sourceList, "", "");
 
     // Stage change event -> Update connection group
     obs_property_set_modified_callback2(
@@ -300,35 +300,33 @@ obs_properties_t *IngressLinkSource::getProperties()
             obs_property_list_clear(sourceList);
 
             if (!apiClient->getStages().size()) {
-                obs_property_list_add_string(seatList, obs_module_text("ChooseStageFirst"), "");
-                obs_property_list_add_string(sourceList, obs_module_text("ChooseStageFirst"), "");
+                obs_property_list_add_string(seatList, "", "");
+                obs_property_list_add_string(sourceList, "", "");
                 return true;
             }
 
-            foreach (auto &stage, apiClient->getStages().values()) {
-                if (stageId != stage.getId()) {
-                    continue;
-                }
+            auto stage = apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
 
-                if (!stage.getSeats().size()) {
-                    obs_property_list_add_string(seatList, obs_module_text("ChooseStageFirst"), "");
-                }
-                if (!stage.getSources().size()) {
-                    obs_property_list_add_string(sourceList, obs_module_text("ChooseStageFirst"), "");
-                }
+            if (!stage.getSeats().size()) {
+                obs_property_list_add_string(seatList, "", "");
+            } else {
+                obs_property_list_add_string(seatList, "", "");
+            }
+            if (!stage.getSources().size()) {
+                obs_property_list_add_string(sourceList, "", "");
+            } else {
+                obs_property_list_add_string(sourceList, "", "");
+            }
 
-                foreach (auto &seat, stage.getSeats()) {
-                    obs_property_list_add_string(
-                        seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName())
-                    );
-                }
-                foreach (auto &source, stage.getSources()) {
-                    obs_property_list_add_string(
-                        sourceList, qPrintable(source.getDisplayName()), qPrintable(source.getName())
-                    );
-                }
-
-                break;
+            foreach (auto &seat, stage.getSeats().values()) {
+                obs_property_list_add_string(
+                    seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName())
+                );
+            }
+            foreach (auto &source, stage.getSources().values()) {
+                obs_property_list_add_string(
+                    sourceList, qPrintable(source.getDisplayName()), qPrintable(source.getName())
+                );
             }
 
             return true;
@@ -443,10 +441,15 @@ void IngressLinkSource::getDefaults(obs_data_t *settings, SourceLinkApiClient *a
     obs_log(LOG_DEBUG, "Default settings applied.");
 }
 
-void IngressLinkSource::videoRenderCallback()
+void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 {
     // Just pass through the video
-    obs_source_video_render(decoderSource);
+    if (active) {
+        obs_source_video_render(decoderSource);
+    } else {
+        // Display filler image
+        fillerRenderer->render(effect, getWidth(), getHeight());
+    }
 }
 
 void IngressLinkSource::update(obs_data_t *settings)
@@ -465,14 +468,20 @@ void IngressLinkSource::update(obs_data_t *settings)
     obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
 }
 
-void IngressLinkSource::onPutDownlinkFailed()
+void IngressLinkSource::onPutDownlinkFailed(const QString &_uuid)
 {
-    connected = false;
+    if (_uuid != uuid) {
+        return;
+    }
+    active = false;
 }
 
-void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &)
+void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &_uuid)
 {
-    connected = false;
+    if (_uuid != uuid) {
+        return;
+    }
+    active = false;
 }
 
 void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
@@ -481,28 +490,41 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
         return;
     }
 
-    connected = true;
-    auto reconnectionNeeded = populatedSeat != !downlink.getAllocation().isEmpty() ||
-                              revision != downlink.getConnection().getRevision();
+    active = true;
+    auto reactivateNeeded = populatedSeat != !downlink.getConnection().getAllocationId().isEmpty() ||
+                            revision != downlink.getConnection().getRevision();
 
-    if (reconnectionNeeded) {
-        populatedSeat = !downlink.getAllocation().isEmpty();
+    if (reactivateNeeded) {
+        populatedSeat = !downlink.getConnection().getAllocationId().isEmpty();
         revision = downlink.getConnection().getRevision();
 
         // Reconnect occurres
-        reconnect();
+        reactivate();
     }
 }
 
-void IngressLinkSource::onIntervalTimerTimeout()
+// This is called when link or refresh token succeeded
+void IngressLinkSource::onLoginSucceeded()
 {
-    if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
-        //apiClient->requestDownlink(uuid);
+    // Re-put connection
+    handleConnection();
+}
+
+void IngressLinkSource::onLogoutSucceeded()
+{
+    active = false;
+}
+
+void IngressLinkSource::onWebSocketReady(bool reconnect)
+{
+    if (reconnect) {
+        handleConnection();
     }
 }
 
-void IngressLinkSource::reconnect()
+void IngressLinkSource::reactivate()
 {
+    obs_log(LOG_DEBUG, "%s: Source reactivating with rev.%d", qPrintable(name), revision);
     OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
     OBSDataAutoRelease settings = obs_source_get_settings(source);
 
@@ -511,6 +533,7 @@ void IngressLinkSource::reconnect()
     port = apiClient->getFreePort();
 
     update(settings);
+    obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qPrintable(name), revision);
 }
 
 //--- SourceLinkAudioThread class ---//
@@ -628,10 +651,10 @@ uint32_t getHeight(void *data)
     return ingressLinkSource->getHeight();
 }
 
-void videoRender(void *data, gs_effect_t *)
+void videoRender(void *data, gs_effect_t *effect)
 {
     auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
-    ingressLinkSource->videoRenderCallback();
+    ingressLinkSource->videoRenderCallback(effect);
 }
 
 void update(void *data, obs_data_t *settings)

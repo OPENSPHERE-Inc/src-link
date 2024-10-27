@@ -31,13 +31,13 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
       ui(new Ui::SourceLinkDock),
       apiClient(_apiClient),
-      defaultAccountPicture(":/source-link/images/unknownaccount.png"),
+      defaultAccountPicture(":/source-link/images/unknownman.png"),
       defaultStagePicture(":/source-link/images/unknownstage.png")
 {
     ui->setupUi(this);
 
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
-    ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
+    ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
 
     ui->interlockTypeComboBox->addItem("Streaming", "streaming");
     ui->interlockTypeComboBox->addItem("Recording", "recording");
@@ -53,29 +53,26 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
     );
     connect(
-        apiClient, SIGNAL(partyEventsReady(const PartyEventArray &)), this,
-        SLOT(onPartyEventsReady(const PartyEventArray &))
+        apiClient, SIGNAL(participantsReady(const PartyEventParticipantArray &)), this,
+        SLOT(onParticipantsReady(const PartyEventParticipantArray &))
     );
     connect(
         apiClient, SIGNAL(getPictureSucceeded(const QString &, const QImage &)), this,
         SLOT(onPictureReady(const QString &, const QImage &))
     );
     connect(apiClient, SIGNAL(getPictureFailed(const QString &)), this, SLOT(onPictureFailed(const QString &)));
-    connect(
-        apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this,
-        SLOT(onUplinkReady(const UplinkInfo &))
-    );
-    connect(apiClient, SIGNAL(uplinkFailed()), this, SLOT(onUplinkFailed()));
+    connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
+    connect(apiClient, SIGNAL(uplinkFailed(const QString &)), this, SLOT(onUplinkFailed(const QString &)));
 
-    connect(ui->partyEventComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyEventChanged(int)));
+    connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
     connect(ui->logoutButton, SIGNAL(clicked()), this, SLOT(onLogoutButtonClicked()));
 
     if (!apiClient->getAccountInfo().isEmpty()) {
         onAccountInfoReady(apiClient->getAccountInfo());
     }
-    if (!apiClient->getPartyEvents().isEmpty()) {
-        onPartyEventsReady(apiClient->getPartyEvents());
+    if (!apiClient->getParticipants().isEmpty()) {
+        onParticipantsReady(apiClient->getParticipants());
     }
 
     obs_log(LOG_DEBUG, "SourceLinkDock created");
@@ -100,57 +97,74 @@ void SourceLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
     }
 }
 
-void SourceLinkDock::onPartyEventsReady(const PartyEventArray &partyEvents)
+void SourceLinkDock::onParticipantsReady(const PartyEventParticipantArray &participants)
 {
-    auto selected = ui->partyEventComboBox->currentData().toString();
-    ui->partyEventComboBox->clear();
+    auto prev = ui->participantComboBox->currentData().toString();
+    auto selected = prev;
 
-    // Display stage's names instead of party event
-    foreach (const auto &partyEvent, partyEvents.values()) {
-        ui->partyEventComboBox->addItem(partyEvent.getStage().getName(), partyEvent.getId());
-    }
+    ui->participantComboBox->blockSignals(true);
+    {
+        ui->participantComboBox->clear();
 
-    // Restore selection (or apply default)
-    if (selected.isEmpty()) {
-        selected = apiClient->getSettings()->getPartyEventId();
-    }
-    if (!selected.isEmpty()) {
-        ui->partyEventComboBox->setCurrentIndex(ui->partyEventComboBox->findData(selected));
-    } else {
-        ui->partyEventComboBox->setCurrentIndex(0);
-    }
+        // Display stage's names instead of party event
+        foreach (const auto &participant, participants.values()) {
+            ui->participantComboBox->addItem(participant.getStageView().getName(), participant.getId());
+        }
 
-    // Reset picture for no party events
-    if (!partyEvents.size()) {
-        ui->partyEventPictureLabel->setProperty("pictureId", "");
-        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
+        // Restore selection (or apply default)
+        if (selected.isEmpty()) {
+            selected = apiClient->getSettings()->getParticipantId();
+        }
+        if (!selected.isEmpty()) {
+            ui->participantComboBox->setCurrentIndex(std::max(ui->participantComboBox->findData(selected), 0));
+        } else {
+            ui->participantComboBox->setCurrentIndex(0);
+        }
+
+        // Reset picture for no party events
+        if (!participants.size()) {
+            ui->participantPictureLabel->setProperty("pictureId", "");
+            ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
+        }
+    }
+    ui->participantComboBox->blockSignals(false);
+
+    if (prev != selected) {
+        onActiveParticipantChanged(ui->participantComboBox->currentIndex());
     }
 }
 
-void SourceLinkDock::onActivePartyEventChanged(int index)
+void SourceLinkDock::onActiveParticipantChanged(int index)
 {
-    auto partyEventId = ui->partyEventComboBox->currentData().toString();
-    foreach (const auto &partyEvent, apiClient->getPartyEvents().values()) {
-        if (partyEvent.getId() == partyEventId) {
-            auto stage = partyEvent.getStage();
-            if (!stage.getPictureId().isEmpty()) {
-                // Apply stage picture
-                ui->partyEventPictureLabel->setProperty("pictureId", stage.getPictureId());
-                apiClient->getPicture(stage.getPictureId());
-            }
-            break;
+    auto participantId = ui->participantComboBox->currentData().toString();
+    auto participant = apiClient->getParticipants().find([participantId](const PartyEventParticipant &participant) {
+        return participant.getId() == participantId;
+    });
+
+    if (!participant.isEmpty()) {
+        auto stage = participant.getStageView();
+        if (!stage.getPictureId().isEmpty()) {
+            // Apply stage picture
+            ui->participantPictureLabel->setProperty("pictureId", stage.getPictureId());
+            apiClient->getPicture(stage.getPictureId());
+        } else {
+            // Apply default picture
+            ui->participantPictureLabel->setProperty("pictureId", "");
+            ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
         }
     }
 
-    apiClient->getSettings()->setPartyEventId(ui->partyEventComboBox->currentData().toString());
-    apiClient->putUplink();
+    if (apiClient->getSettings()->getParticipantId() != participantId) {
+        apiClient->getSettings()->setParticipantId(participantId);
+        apiClient->putUplink();
+    }
 }
 
 void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
 {
-    if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
+    if (pictureId == ui->participantPictureLabel->property("pictureId").toString()) {
         // Update party event picture received image
-        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(picture));
+        ui->participantPictureLabel->setPixmap(QPixmap::fromImage(picture));
     } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
         // Update account picture with received image
         ui->accountPictureLabel->setPixmap(QPixmap::fromImage(picture));
@@ -159,9 +173,9 @@ void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &pict
 
 void SourceLinkDock::onPictureFailed(const QString &pictureId)
 {
-    if (pictureId == ui->partyEventPictureLabel->property("pictureId").toString()) {
+    if (pictureId == ui->participantPictureLabel->property("pictureId").toString()) {
         // Reset party event picture to default
-        ui->partyEventPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
+        ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
     } else if (pictureId == ui->accountPictureLabel->property("pictureId").toString()) {
         // Reset account picture to default
         ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
@@ -182,7 +196,7 @@ void SourceLinkDock::onUplinkReady(const UplinkInfo &uplink)
     }
 }
 
-void SourceLinkDock::onUplinkFailed()
+void SourceLinkDock::onUplinkFailed(const QString &)
 {
     ui->seatAllocationStatus->setText(QString("No seat"));
     setThemeID(ui->seatAllocationStatus, "error");
@@ -196,7 +210,7 @@ void SourceLinkDock::updateConnections(const Stage &stage)
     // Update connection widgets
     foreach (const auto widget, connectionWidgets) {
         auto found = false;
-        foreach (const auto &source, stage.getSources()) {
+        foreach (const auto &source, stage.getSources().values()) {
             if (widget->source.getName() == source.getName()) {
                 found = true;
                 break;
@@ -209,7 +223,7 @@ void SourceLinkDock::updateConnections(const Stage &stage)
         }
     }
 
-    foreach (const auto &source, stage.getSources()) {
+    foreach (const auto &source, stage.getSources().values()) {
         auto newcommer = true;
         foreach (const auto widget, connectionWidgets) {
             if (widget->source.getName() == source.getName()) {
@@ -234,8 +248,9 @@ void SourceLinkDock::onInterlockTypeChanged(int)
 
 void SourceLinkDock::onLogoutButtonClicked()
 {
-    int ret =
-        QMessageBox::warning(this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel);
+    int ret = QMessageBox::warning(
+        this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel
+    );
 
     if (ret == QMessageBox::Yes) {
         apiClient->logout();

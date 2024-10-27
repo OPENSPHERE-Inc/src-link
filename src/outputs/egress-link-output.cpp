@@ -23,12 +23,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "egress-link-output.hpp"
 #include "audio-source.hpp"
 
-#define OUTPUT_MAX_RETRIES 7
+#define OUTPUT_MAX_RETRIES 3
 #define OUTPUT_RETRY_DELAY_SECS 1
 #define OUTPUT_JSON_NAME "output.json"
 #define OUTPUT_POLLING_INTERVAL_MSECS 10000
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
-#define OUTPUT_RETRY_TIMEOUT_MSECS 15000
+#define OUTPUT_RETRY_TIMEOUT_MSECS 5000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
 
 inline audio_t *createSilenceAudio()
@@ -114,10 +114,7 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_a
     monitoringTimer->start();
     connect(monitoringTimer, SIGNAL(timeout()), this, SLOT(onMonitoringTimerTimeout()));
 
-    connect(
-        apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this,
-        SLOT(onUplinkReady(const UplinkInfo &))
-    );
+    connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
@@ -453,7 +450,7 @@ void EgressLinkOutput::start()
     releaseResources();
 
     QMutexLocker locker(&outputMutex);
-    {
+    auto innerFunc = [&]() {
         if (status != LINKED_OUTPUT_STATUS_INACTIVE) {
             return;
         }
@@ -464,9 +461,6 @@ void EgressLinkOutput::start()
             setStatus(LINKED_OUTPUT_STATUS_DISABLED);
             return;
         }
-
-        // Reduce reconnect with timeout
-        connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
         if (!activeSourceUuid.isEmpty()) {
             // Get reference for specific source
@@ -483,7 +477,7 @@ void EgressLinkOutput::start()
         // Retrieve connection
         // Find connection specified by name
         connection = StageConnection();
-        foreach (const auto &c, apiClient->getUplink().getConnections()) {
+        foreach (const auto &c, apiClient->getUplink().getConnections().values()) {
             if (c.getSourceName() == name) {
                 connection = c;
                 break;
@@ -491,12 +485,13 @@ void EgressLinkOutput::start()
         }
 
         if (connection.isEmpty()) {
-            obs_log(LOG_WARNING, "%s: No active connection", qPrintable(name));
             setStatus(LINKED_OUTPUT_STATUS_STAND_BY);
             apiClient->incrementStandByOutputs();
-            apiClient->putUplinkStatus();
             return;
         }
+
+        // Reduce reconnect with timeout
+        connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
         width = connection.getWidth();
         height = connection.getHeight();
@@ -654,8 +649,9 @@ void EgressLinkOutput::start()
         obs_log(LOG_INFO, "%s: Activated output", qPrintable(name));
         setStatus(LINKED_OUTPUT_STATUS_ACTIVE);
         apiClient->incrementActiveOutputs();
-        apiClient->putUplinkStatus();
-    }
+    };
+    innerFunc();
+    apiClient->syncUplinkStatus();
     locker.unlock();
 }
 
@@ -697,13 +693,11 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
         if (stopStatus && status != LINKED_OUTPUT_STATUS_INACTIVE) {
             obs_log(LOG_INFO, "%s: Inactivated output", qPrintable(name));
         }
-        
+
         if (status == LINKED_OUTPUT_STATUS_STAND_BY) {
             apiClient->decrementStandByOutputs();
-            apiClient->putUplinkStatus();
         } else if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
             apiClient->decrementActiveOutputs();
-            apiClient->putUplinkStatus();
         }
 
         setStatus(LINKED_OUTPUT_STATUS_INACTIVE);
@@ -714,6 +708,7 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
 void EgressLinkOutput::stop()
 {
     releaseResources(true);
+    apiClient->syncUplinkStatus();
 }
 
 // Called every OUTPUT_POLLING_INTERVAL_MSECS
@@ -727,9 +722,8 @@ void EgressLinkOutput::onPollingTimerTimeout()
     OBSSourceAutoRelease ssSource = obs_frontend_get_current_scene();
     bool success = false;
     // Keep source's aspect ratio
-    auto screenshot = source
-        ? takeSourceScreenshot(source, success, 0, OUTPUT_SCREENSHOT_HEIGHT)
-        : takeSourceScreenshot(ssSource, success, 0, OUTPUT_SCREENSHOT_HEIGHT);
+    auto screenshot = source ? takeSourceScreenshot(source, success, 0, OUTPUT_SCREENSHOT_HEIGHT)
+                             : takeSourceScreenshot(ssSource, success, 0, OUTPUT_SCREENSHOT_HEIGHT);
 
     if (success) {
         apiClient->putScreenshot(name, screenshot);
@@ -792,7 +786,9 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
 
         auto outputOnLive = output && obs_output_active(output);
         if (!outputOnLive) {
-            obs_log(LOG_DEBUG, "%s: Attempting reactivate output", qPrintable(name));
+            if (status != LINKED_OUTPUT_STATUS_STAND_BY) {
+                obs_log(LOG_DEBUG, "%s: Attempting reactivate output", qPrintable(name));
+            }
             start();
             return;
         }
@@ -832,15 +828,11 @@ void EgressLinkOutput::setVisible(bool value)
 
 void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
 {
-    StageConnection next;
-    foreach (const auto &c, apiClient->getUplink().getConnections()) {
-        if (c.getSourceName() == name) {
-            next = c;
-            break;
-        }
-    }
+    StageConnection next = apiClient->getUplink().getConnections().find([this](const StageConnection &c) {
+        return c.getSourceName() == name;
+    });
 
-    if (connection != next) {
+    if (connection.getId() != next.getId() || connection.getRevision() != next.getRevision()) {
         // Restart output
         obs_log(LOG_DEBUG, "%s: The connection has been changed", qPrintable(name));
         // The connection will be retrieved in start() again.

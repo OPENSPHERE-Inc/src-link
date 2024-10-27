@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../api-client.hpp"
 #include "audio-capture.hpp"
+#include "image-renderer.hpp"
 
 #define MAX_AUDIO_BUFFER_FRAMES 131071
 
@@ -59,11 +60,11 @@ class IngressLinkSource : public QObject {
     SourceLinkApiClient *apiClient;
     OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
     OBSSourceAutoRelease decoderSource;
+    ImageRenderer *fillerRenderer;
     speaker_layout speakers;
     uint32_t samplesPerSec;
-    bool connected;
+    bool active;
     SourceAudioThread *audioThread;
-    QTimer *intervalTimer;
     OBSSignal renameSignal;
     bool populatedSeat;
 
@@ -77,10 +78,12 @@ class IngressLinkSource : public QObject {
     void saveSettings(obs_data_t *settings);
 
 private slots:
-    void onPutDownlinkFailed();
+    void onPutDownlinkFailed(const QString &uuid);
     void onDeleteDownlinkSucceeded(const QString &uuid);
     void onDownlinkReady(const DownlinkInfo &downlink);
-    void onIntervalTimerTimeout();
+    void onLoginSucceeded();
+    void onLogoutSucceeded();
+    void onWebSocketReady(bool reconnect);
 
 public:
     explicit IngressLinkSource(
@@ -92,9 +95,9 @@ public:
     inline uint32_t getWidth() { return width; }
     inline uint32_t getHeight() { return height; }
     void update(obs_data_t *settings);
-    void reconnect();
+    void reactivate();
 
-    void videoRenderCallback();
+    void videoRenderCallback(gs_effect_t* effect);
 
     static void getDefaults(obs_data_t *settings, SourceLinkApiClient *apiClient);
 };

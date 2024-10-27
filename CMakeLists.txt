@@ -64,6 +64,7 @@ target_sources(
           src/UI/resources.qrc
           src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp
+          src/sources/image-renderer.cpp
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp)
 

@@ -18,9 +18,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <obs-module.h>
-#include <obs.hpp>
-
 #include <QNetworkAccessManager>
 #include <QByteArray>
 #include <QException>
@@ -34,6 +31,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "request-invoker.hpp"
 #include "api-websocket.hpp"
 
+#define UPLINK_STATUS_INACTIVE "inactive"
+#define UPLINK_STATUS_ACTIVE "active"
+#define UPLINK_STATUS_STANDBY "standby"
+
 class SourceLinkApiClient : public QObject {
     Q_OBJECT
 
@@ -44,24 +45,29 @@ class SourceLinkApiClient : public QObject {
     O2 *client;
     QNetworkAccessManager *networkManager;
     QMap<int, bool> usedPorts;
-    QTimer *pollingTimer;
     RequestSequencer *sequencer;
     int activeOutputs;
     int standByOutputs;
     SourceLinkWebSocketClient *websocket;
+    QString uplinkStatus;
 
     // Online rsources
     AccountInfo accountInfo;
     PartyArray parties;
     PartyEventArray partyEvents; // Contains all events of all parties
+    PartyEventParticipantArray participants; // Contains all participants of all events
     StageArray stages;
     UplinkInfo uplink;
     QMap<QString, DownlinkInfo> downlinks;
+
+    inline QString getAccessToken() { return client->token(); }
 
 signals:
     void loginSucceeded();
     void loginFailed();
     void logoutSucceeded();
+    void webSocketReady(bool reconnect);
+    void webSocketDisconnected();
     void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
     void partiesReady(const PartyArray &parties);
@@ -70,22 +76,24 @@ signals:
     void partyEventsFailed();
     void stagesReady(const StageArray &stages);
     void stagesFailed();
+    void participantsReady(const PartyEventParticipantArray &participants);
+    void participantsFailed();
     void uplinkReady(const UplinkInfo &uplink);
-    void uplinkFailed();
+    void uplinkFailed(const QString &uuid);
     void downlinkReady(const DownlinkInfo &downlink);
-    void downlinkFailed();
+    void downlinkFailed(const QString &uuid);
     void putDownlinkSucceeded(const DownlinkInfo &downlink);
-    void putDownlinkFailed();
+    void putDownlinkFailed(const QString &uuid);
     void deleteDownlinkSucceeded(const QString &uuid);
-    void deleteDownlinkFailed();
+    void deleteDownlinkFailed(const QString &uuid);
     void putUplinkSucceeded(const UplinkInfo &uplink);
-    void putUplinkFailed();
+    void putUplinkFailed(const QString &uuid);
     void putUplinkStatusSucceeded(const UplinkInfo &uplink);
-    void putUplinkStatusFailed();
+    void putUplinkStatusFailed(const QString &uuid);
     void deleteUplinkSucceeded(const QString &uuid);
-    void deleteUplinkFailed();
+    void deleteUplinkFailed(const QString &uuid);
     void putScreenshotSucceeded(const QString &sourceName);
-    void putScreenshotFailed();
+    void putScreenshotFailed(const QString &sourceName);
     void getPictureSucceeded(const QString &pictureId, const QImage &picture);
     void getPictureFailed(const QString &pictureId);
     void ingressRestartNeeded();
@@ -96,10 +104,10 @@ private slots:
     void onO2LinkingFailed();
     void onO2OpenBrowser(const QUrl &url);
     void onO2RefreshFinished(QNetworkReply::NetworkError);
-    void onPollingTimerTimeout();
-    void onWebSocketReady();
-    void onWebSocketDataChanged(const QString &subId, const QString &name, const QString &id, const QJsonObject &payload);
-    void onWebSocketDataRemoved(const QString &subId, const QString &name, const QString &id);
+    void onWebSocketReady(bool reconnect);
+    void onWebSocketDisconnected();
+    void onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload);
+    void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);
 
 public:
     explicit SourceLinkApiClient(QObject *parent = nullptr);
@@ -109,6 +117,7 @@ public:
     inline const AccountInfo getAccountInfo() const { return accountInfo; }
     inline const PartyArray &getParties() const { return parties; }
     inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
+    inline const PartyEventParticipantArray &getParticipants() const { return participants; }
     inline const StageArray &getStages() const { return stages; }
     inline const UplinkInfo getUplink() const { return uplink; }
     inline SourceLinkSettingsStore *getSettings() const { return settings; }
@@ -118,10 +127,12 @@ public slots:
     void logout();
     bool isLoggedIn();
     const RequestInvoker *refresh();
-    void requestOnlineResources();
+    void resyncOnlineResources();
+    void clearOnlineResources();
     const RequestInvoker *requestAccountInfo();
     const RequestInvoker *requestParties();
     const RequestInvoker *requestPartyEvents();
+    const RequestInvoker *requestParticipants();
     const RequestInvoker *requestStages();
     const RequestInvoker *requestUplink();
     const RequestInvoker *requestDownlink(const QString &sourceUuid);
@@ -139,6 +150,7 @@ public slots:
     void restartIngress() { emit ingressRestartNeeded(); }
     void terminate();
     void openStagesManagementPage(); // Just open web browser
+    void syncUplinkStatus();
 
     const int getFreePort();
     void releasePort(const int port);

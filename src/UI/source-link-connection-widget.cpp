@@ -135,7 +135,7 @@ void SourceLinkConnectionWidget::updateSourceList()
                 auto widget = (SourceLinkConnectionWidget *)param;
                 auto type = obs_source_get_type(source);
                 auto flags = obs_source_get_output_flags(source);
-    
+
                 if (flags & OBS_SOURCE_VIDEO && (type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE)) {
                     widget->ui->videoSourceComboBox->addItem(obs_source_get_name(source), obs_source_get_uuid(source));
                 }

@@ -201,12 +201,12 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="partyEventLayout">
+        <layout class="QHBoxLayout" name="participantLayout">
          <property name="bottomMargin">
           <number>0</number>
          </property>
          <item>
-          <widget class="QLabel" name="partyEventLabel">
+          <widget class="QLabel" name="participantLabel">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
              <horstretch>0</horstretch>
@@ -225,7 +225,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QComboBox" name="partyEventComboBox">
+          <widget class="QComboBox" name="participantComboBox">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -240,7 +240,7 @@
         </layout>
        </item>
        <item>
-        <widget class="QLabel" name="partyEventPictureLabel">
+        <widget class="QLabel" name="participantPictureLabel">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
            <horstretch>0</horstretch>
