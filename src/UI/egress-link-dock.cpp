@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -22,17 +22,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QmessageBox>
 
 #include "../outputs/egress-link-output.hpp"
-#include "source-link-dock.hpp"
-#include "source-link-connection-widget.hpp"
+#include "egress-link-dock.hpp"
+#include "egress-link-connection-widget.hpp"
 
 //--- SouceLinkDock class ---//
 
-SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
+EgressLinkDock::EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
-      ui(new Ui::SourceLinkDock),
+      ui(new Ui::EgressLinkDock),
       apiClient(_apiClient),
-      defaultAccountPicture(":/source-link/images/unknownman.png"),
-      defaultStagePicture(":/source-link/images/unknownstage.png")
+      defaultAccountPicture(":/sr-link/images/unknownman.png"),
+      defaultStagePicture(":/sr-link/images/unknownstage.png")
 {
     ui->setupUi(this);
 
@@ -75,17 +75,17 @@ SourceLinkDock::SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent)
         onParticipantsReady(apiClient->getParticipants());
     }
 
-    obs_log(LOG_DEBUG, "SourceLinkDock created");
+    obs_log(LOG_DEBUG, "EgressLinkDock created");
 }
 
-SourceLinkDock::~SourceLinkDock()
+EgressLinkDock::~EgressLinkDock()
 {
     disconnect(this);
 
-    obs_log(LOG_DEBUG, "SourceLinkDock destroyed");
+    obs_log(LOG_DEBUG, "EgressLinkDock destroyed");
 }
 
-void SourceLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
+void EgressLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
 {
     ui->accountNameLabel->setText(accountInfo.getDisplayName());
     ui->accountPictureLabel->setProperty("pictureId", accountInfo.getPictureId());
@@ -97,7 +97,7 @@ void SourceLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
     }
 }
 
-void SourceLinkDock::onParticipantsReady(const PartyEventParticipantArray &participants)
+void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &participants)
 {
     auto prev = ui->participantComboBox->currentData().toString();
     auto selected = prev;
@@ -134,7 +134,7 @@ void SourceLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
     }
 }
 
-void SourceLinkDock::onActiveParticipantChanged(int index)
+void EgressLinkDock::onActiveParticipantChanged(int index)
 {
     auto participantId = ui->participantComboBox->currentData().toString();
     auto participant = apiClient->getParticipants().find([participantId](const PartyEventParticipant &participant) {
@@ -160,7 +160,7 @@ void SourceLinkDock::onActiveParticipantChanged(int index)
     }
 }
 
-void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
+void EgressLinkDock::onPictureReady(const QString &pictureId, const QImage &picture)
 {
     if (pictureId == ui->participantPictureLabel->property("pictureId").toString()) {
         // Update party event picture received image
@@ -171,7 +171,7 @@ void SourceLinkDock::onPictureReady(const QString &pictureId, const QImage &pict
     }
 }
 
-void SourceLinkDock::onPictureFailed(const QString &pictureId)
+void EgressLinkDock::onPictureFailed(const QString &pictureId)
 {
     if (pictureId == ui->participantPictureLabel->property("pictureId").toString()) {
         // Reset party event picture to default
@@ -182,7 +182,7 @@ void SourceLinkDock::onPictureFailed(const QString &pictureId)
     }
 }
 
-void SourceLinkDock::onUplinkReady(const UplinkInfo &uplink)
+void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
 {
     // Always show outputs
     updateConnections(uplink.getStage());
@@ -191,21 +191,21 @@ void SourceLinkDock::onUplinkReady(const UplinkInfo &uplink)
         ui->seatAllocationStatus->setText(QString("Ready"));
         setThemeID(ui->seatAllocationStatus, "good");
     } else {
-        ui->seatAllocationStatus->setText(QString("No seat"));
+        ui->seatAllocationStatus->setText(QString("No slot"));
         setThemeID(ui->seatAllocationStatus, "error");
     }
 }
 
-void SourceLinkDock::onUplinkFailed(const QString &)
+void EgressLinkDock::onUplinkFailed(const QString &)
 {
-    ui->seatAllocationStatus->setText(QString("No seat"));
+    ui->seatAllocationStatus->setText(QString("No slot"));
     setThemeID(ui->seatAllocationStatus, "error");
 
     qDeleteAll(connectionWidgets);
     connectionWidgets.clear();
 }
 
-void SourceLinkDock::updateConnections(const Stage &stage)
+void EgressLinkDock::updateConnections(const Stage &stage)
 {
     // Update connection widgets
     foreach (const auto widget, connectionWidgets) {
@@ -233,20 +233,20 @@ void SourceLinkDock::updateConnections(const Stage &stage)
         }
         if (newcommer) {
             auto interlockType = ui->interlockTypeComboBox->currentData().toString();
-            auto widget = new SourceLinkConnectionWidget(source, interlockType, apiClient, this);
+            auto widget = new EgressLinkConnectionWidget(source, interlockType, apiClient, this);
             connectionWidgets.append(widget);
             ui->connectionsLayout->addWidget(widget);
         }
     }
 }
 
-void SourceLinkDock::onInterlockTypeChanged(int)
+void EgressLinkDock::onInterlockTypeChanged(int)
 {
     auto interlockType = ui->interlockTypeComboBox->currentData().toString();
     apiClient->getSettings()->setValue("interlock_type", interlockType);
 }
 
-void SourceLinkDock::onLogoutButtonClicked()
+void EgressLinkDock::onLogoutButtonClicked()
 {
     int ret = QMessageBox::warning(
         this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel

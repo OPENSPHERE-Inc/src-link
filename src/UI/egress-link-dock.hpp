@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -25,19 +25,19 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
-#include "ui_source-link-dock.h"
+#include "ui_egress-link-dock.h"
 
-class SourceLinkConnectionWidget;
+class EgressLinkConnectionWidget;
 
-class SourceLinkDock : public QFrame {
+class EgressLinkDock : public QFrame {
     Q_OBJECT
 
-    Ui::SourceLinkDock *ui;
+    Ui::EgressLinkDock *ui;
 
-    SourceLinkApiClient *apiClient;
+    SRLinkApiClient *apiClient;
     QImage defaultAccountPicture;
     QImage defaultStagePicture;
-    QList<SourceLinkConnectionWidget *> connectionWidgets;
+    QList<EgressLinkConnectionWidget *> connectionWidgets;
 
     void updateConnections(const Stage &stage);
 
@@ -53,7 +53,7 @@ private slots:
     void onLogoutButtonClicked();
 
 public:
-    explicit SourceLinkDock(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
-    ~SourceLinkDock();
+    explicit EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent = nullptr);
+    ~EgressLinkDock();
 };
 

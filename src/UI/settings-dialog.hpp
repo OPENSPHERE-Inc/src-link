@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -31,7 +31,7 @@ class SettingsDialog : public QDialog {
 
     Ui::SettingsDialog *ui;
 
-    SourceLinkApiClient *apiClient;
+    SRLinkApiClient *apiClient;
 
     void setClientActive(bool active);
 
@@ -48,6 +48,6 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 public:
-    SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent = nullptr);
+    SettingsDialog(SRLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~SettingsDialog();
 };

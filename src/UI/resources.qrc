@@ -1,5 +1,5 @@
 <RCC>
-  <qresource prefix="/source-link">
+  <qresource prefix="/sr-link">
     <file>images/unknownclient.png</file>
     <file>images/unknownevent.png</file>
     <file>images/unknownman.png</file>

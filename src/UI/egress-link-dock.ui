@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>SourceLinkDock</class>
- <widget class="QFrame" name="SourceLinkDock">
+ <class>EgressLinkDock</class>
+ <widget class="QFrame" name="EgressLinkDock">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -109,7 +109,7 @@
             <string/>
            </property>
            <property name="pixmap">
-            <pixmap resource="resources.qrc">:/source-link/images/unknownman.png</pixmap>
+            <pixmap resource="resources.qrc">:/sr-link/images/unknownman.png</pixmap>
            </property>
            <property name="scaledContents">
             <bool>true</bool>
@@ -220,7 +220,7 @@
             </size>
            </property>
            <property name="text">
-            <string>Stage</string>
+            <string>Receiver</string>
            </property>
           </widget>
          </item>
@@ -233,7 +233,7 @@
             </size>
            </property>
            <property name="placeholderText">
-            <string>No stages</string>
+            <string>No receivers</string>
            </property>
           </widget>
          </item>
@@ -272,7 +272,7 @@
           <string/>
          </property>
          <property name="pixmap">
-          <pixmap resource="resources.qrc">:/source-link/images/unknownstage.png</pixmap>
+          <pixmap resource="resources.qrc">:/sr-link/images/unknownstage.png</pixmap>
          </property>
          <property name="scaledContents">
           <bool>false</bool>

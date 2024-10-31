@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -22,14 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWebSocket>
 #include <QJsonObject>
 
-class SourceLinkApiClient;
+class SRLinkApiClient;
 
-class SourceLinkWebSocketClient : public QObject {
+class SRLinkWebSocketClient : public QObject {
     Q_OBJECT
 
     QUrl url;
     QWebSocket *client;
-    SourceLinkApiClient *apiClient;
+    SRLinkApiClient *apiClient;
     bool started;
     int reconnectCount;
     QTimer *intervalTimer;
@@ -52,8 +52,8 @@ private slots:
     void onTextMessageReceived(QString message);
 
 public:
-    explicit SourceLinkWebSocketClient(QUrl wsUrl, SourceLinkApiClient *apiClient, QObject *parent = nullptr);
-    ~SourceLinkWebSocketClient();
+    explicit SRLinkWebSocketClient(QUrl wsUrl, SRLinkApiClient *apiClient, QObject *parent = nullptr);
+    ~SRLinkWebSocketClient();
 
 public slots:
     void start();

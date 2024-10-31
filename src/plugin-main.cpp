@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
-#include "UI/source-link-dock.hpp"
+#include "UI/egress-link-dock.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -34,28 +34,28 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
-SourceLinkSettingsStore *settingsStore = nullptr;
-SourceLinkApiClient *apiClient = nullptr;
-SourceLinkDock *sourceLinkDock = nullptr;
+SRLinkSettingsStore *settingsStore = nullptr;
+SRLinkApiClient *apiClient = nullptr;
+EgressLinkDock *sourceLinkDock = nullptr;
 
 obs_source_info linkedSourceInfo;
 
-void registerLinkedSourceDock()
+void registerSRLinkDock()
 {
     auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
         if (!sourceLinkDock) {
-            sourceLinkDock = new SourceLinkDock(apiClient, mainWindow);
-            obs_frontend_add_dock_by_id("SourceLinkDock", obs_module_text("SourceLinkDock"), sourceLinkDock);
+            sourceLinkDock = new EgressLinkDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id("SRLinkDock", obs_module_text("SRLinkDock"), sourceLinkDock);
         }
     }
 }
 
-void unregisterLinkedSourceDock()
+void unregisterSRLinkDock()
 {
     if (sourceLinkDock) {
         // The instance will be deleted by OBS (Do not call delete manually!)
-        obs_frontend_remove_dock("SourceLinkDock");
+        obs_frontend_remove_dock("SRLinkDock");
         sourceLinkDock = nullptr;
     }
 }
@@ -72,7 +72,7 @@ void frontendEventCallback(enum obs_frontend_event event, void *)
 
 bool obs_module_load(void)
 {
-    apiClient = new SourceLinkApiClient();
+    apiClient = new SRLinkApiClient();
 
     obs_frontend_add_event_callback(frontendEventCallback, nullptr);
 
@@ -91,11 +91,11 @@ bool obs_module_load(void)
 
         // Dock
         if (apiClient->isLoggedIn()) {
-            registerLinkedSourceDock();
+            registerSRLinkDock();
         }
 
-        QObject::connect(apiClient, &SourceLinkApiClient::loginSucceeded, []() { registerLinkedSourceDock(); });
-        QObject::connect(apiClient, &SourceLinkApiClient::logoutSucceeded, []() { unregisterLinkedSourceDock(); });
+        QObject::connect(apiClient, &SRLinkApiClient::loginSucceeded, []() { registerSRLinkDock(); });
+        QObject::connect(apiClient, &SRLinkApiClient::logoutSucceeded, []() { unregisterSRLinkDock(); });
     }
 
     obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);

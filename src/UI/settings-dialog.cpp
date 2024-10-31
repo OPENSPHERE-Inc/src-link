@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../plugin-support.h"
 #include "settings-dialog.hpp"
 
-SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
+SettingsDialog::SettingsDialog(SRLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::SettingsDialog),
       apiClient(_apiClient)
@@ -42,6 +42,15 @@ SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
     ui->pbkeylenComboBox->addItem("16", 16);
     ui->pbkeylenComboBox->addItem("24", 24);
     ui->pbkeylenComboBox->addItem("32", 32);
+
+    ui->ssIntervalComboBox->addItem("5 secs", 5);
+    ui->ssIntervalComboBox->addItem("10 secs", 10);
+    ui->ssIntervalComboBox->addItem("15 secs", 15);
+    ui->ssIntervalComboBox->addItem("30 secs", 30);
+    ui->ssIntervalComboBox->addItem("1 minutes", 60);
+    ui->ssIntervalComboBox->addItem("2 minutes", 120);
+    ui->ssIntervalComboBox->addItem("3 minutes", 180);
+    ui->ssIntervalComboBox->addItem("5 minutes", 300);
 
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
@@ -122,7 +131,7 @@ void SettingsDialog::saveSettings()
     auto ingressSrtMode = ui->srtModeComboBox->currentData().toString();
     auto ingressSrtLatecy = ui->latencySpinBox->value();
     auto ingressSrtPbkeylen = ui->pbkeylenComboBox->currentData().toInt();
-    auto ingressRestartNeeded = ingressPortMin != apiClient->getSettings()->getIngressPortMin() ||
+    auto ingressRefreshNeeded = ingressPortMin != apiClient->getSettings()->getIngressPortMin() ||
                                 ingressPortMax != apiClient->getSettings()->getIngressPortMax() ||
                                 ingressReconnectDelayTime != apiClient->getSettings()->getIngressReconnectDelayTime() ||
                                 ingressNetworkBuffer != apiClient->getSettings()->getIngressNetworkBufferSize() ||
@@ -130,6 +139,9 @@ void SettingsDialog::saveSettings()
                                 ingressSrtMode != apiClient->getSettings()->getIngressSrtMode() ||
                                 ingressSrtLatecy != apiClient->getSettings()->getIngressSrtLatency() ||
                                 ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen();
+    
+    auto egressScreenshotInterval = ui->ssIntervalComboBox->currentData().toInt();
+    auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
 
     auto settings = apiClient->getSettings();
     settings->setForceConnection(ui->forceConnectionCheckBox->isChecked());
@@ -142,10 +154,14 @@ void SettingsDialog::saveSettings()
     settings->setIngressSrtLatency(ingressSrtLatecy);
     settings->setIngressSrtPbkeylen(ingressSrtPbkeylen);
     settings->setIngressAdvancedSettings(ui->advancedSettingsCheckBox->isChecked());
+    settings->setEgressScreenshotInterval(egressScreenshotInterval);
 
     apiClient->putUplink();
-    if (ingressRestartNeeded) {
-        apiClient->restartIngress();
+    if (ingressRefreshNeeded) {
+        apiClient->refreshIngress();
+    }
+    if (egressRefreshNeeded) {
+        apiClient->refreshEgress();
     }
 }
 
@@ -162,6 +178,7 @@ void SettingsDialog::loadSettings()
     ui->latencySpinBox->setValue(settings->getIngressSrtLatency());
     ui->pbkeylenComboBox->setCurrentIndex(ui->pbkeylenComboBox->findData(settings->getIngressSrtPbkeylen()));
     ui->advancedSettingsCheckBox->setChecked(settings->getIngressAdvancedSettings());
+    ui->ssIntervalComboBox->setCurrentIndex(ui->ssIntervalComboBox->findData(settings->getEgressScreenshotInterval()));
 
     bool advanced = ui->advancedSettingsCheckBox->isChecked();
     ui->reconnectDelayTimeWidget->setVisible(advanced);

@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -90,24 +90,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
         }                                             \
     }
 
-//--- SourceLinkApiClient class ---//
+//--- SRLinkApiClient class ---//
 
-SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
+SRLinkApiClient::SRLinkApiClient(QObject *parent)
     : QObject(parent),
       // Create store object for writing the received tokens (It will be child of O2 instance)
-      settings(new SourceLinkSettingsStore()),
+      settings(new SRLinkSettingsStore()),
       networkManager(nullptr),
       client(nullptr),
       activeOutputs(0),
       standByOutputs(0),
       uplinkStatus(UPLINK_STATUS_INACTIVE)
 {
-    obs_log(LOG_DEBUG, "client: SourceLinkApiClient creating with %s", API_SERVER);
+    obs_log(LOG_DEBUG, "client: SRLinkApiClient creating with %s", API_SERVER);
 
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
     sequencer = new RequestSequencer(networkManager, client, this);
-    websocket = new SourceLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
+    websocket = new SRLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
 
     uuid = settings->value("uuid");
     if (uuid.isEmpty()) {
@@ -172,15 +172,15 @@ SourceLinkApiClient::SourceLinkApiClient(QObject *parent)
         );
     }
 
-    obs_log(LOG_DEBUG, "client: SourceLinkApiClient created");
+    obs_log(LOG_DEBUG, "client: SRLinkApiClient created");
 }
 
-SourceLinkApiClient::~SourceLinkApiClient()
+SRLinkApiClient::~SRLinkApiClient()
 {
-    obs_log(LOG_DEBUG, "client: SourceLinkApiClient destroyed");
+    obs_log(LOG_DEBUG, "client: SRLinkApiClient destroyed");
 }
 
-void SourceLinkApiClient::login()
+void SRLinkApiClient::login()
 {
     obs_log(
         LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s", qPrintable(GRANTFLOW_STR(client->grantFlow()))
@@ -188,24 +188,24 @@ void SourceLinkApiClient::login()
     client->link();
 }
 
-void SourceLinkApiClient::logout()
+void SRLinkApiClient::logout()
 {
     client->unlink();
 }
 
-bool SourceLinkApiClient::isLoggedIn()
+bool SRLinkApiClient::isLoggedIn()
 {
     return client->linked();
 }
 
-const RequestInvoker *SourceLinkApiClient::refresh()
+const RequestInvoker *SRLinkApiClient::refresh()
 {
     auto invoker = new RequestInvoker(sequencer, this);
     invoker->refresh();
     return invoker;
 }
 
-const int SourceLinkApiClient::getFreePort()
+const int SRLinkApiClient::getFreePort()
 {
     auto min = settings->getIngressPortMin();
     auto max = settings->getIngressPortMax();
@@ -219,12 +219,12 @@ const int SourceLinkApiClient::getFreePort()
     return 0;
 }
 
-void SourceLinkApiClient::releasePort(const int port)
+void SRLinkApiClient::releasePort(const int port)
 {
     usedPorts[port] = false;
 }
 
-void SourceLinkApiClient::resyncOnlineResources()
+void SRLinkApiClient::resyncOnlineResources()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -235,7 +235,7 @@ void SourceLinkApiClient::resyncOnlineResources()
     putUplink();
 }
 
-void SourceLinkApiClient::clearOnlineResources()
+void SRLinkApiClient::clearOnlineResources()
 {
     accountInfo = AccountInfo();
     parties = PartyArray();
@@ -246,14 +246,14 @@ void SourceLinkApiClient::clearOnlineResources()
     downlinks.clear();
 }
 
-void SourceLinkApiClient::terminate()
+void SRLinkApiClient::terminate()
 {
     obs_log(LOG_DEBUG, "client: Terminating API client.");
     deleteUplink(true);
 }
 
 // Call putUplinkStatus() when uplinkStatus is changed
-void SourceLinkApiClient::syncUplinkStatus()
+void SRLinkApiClient::syncUplinkStatus()
 {
     auto nextUplinkStatus = activeOutputs > 0    ? UPLINK_STATUS_ACTIVE
                             : standByOutputs > 0 ? UPLINK_STATUS_STANDBY
@@ -264,7 +264,7 @@ void SourceLinkApiClient::syncUplinkStatus()
     }
 }
 
-const RequestInvoker *SourceLinkApiClient::requestAccountInfo()
+const RequestInvoker *SRLinkApiClient::requestAccountInfo()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -283,7 +283,7 @@ const RequestInvoker *SourceLinkApiClient::requestAccountInfo()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestParties()
+const RequestInvoker *SRLinkApiClient::requestParties()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -306,7 +306,7 @@ const RequestInvoker *SourceLinkApiClient::requestParties()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestPartyEvents()
+const RequestInvoker *SRLinkApiClient::requestPartyEvents()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -325,7 +325,7 @@ const RequestInvoker *SourceLinkApiClient::requestPartyEvents()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestParticipants()
+const RequestInvoker *SRLinkApiClient::requestParticipants()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -348,17 +348,17 @@ const RequestInvoker *SourceLinkApiClient::requestParticipants()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestStages()
+const RequestInvoker *SRLinkApiClient::requestStages()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting stages.");
+    obs_log(LOG_DEBUG, "client: Requesting receivers.");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(stagesFailed, "client: Requesting stages failed: %d", error);
+        CHECK_RESPONSE_NOERROR(stagesFailed, "client: Requesting receivers failed: %d", error);
 
         stages = QJsonDocument::fromJson(replyData).array();
-        obs_log(LOG_DEBUG, "client: Received %d stages", stages.size());
+        obs_log(LOG_DEBUG, "client: Received %d receivers", stages.size());
 
         emit stagesReady(stages);
     });
@@ -367,7 +367,7 @@ const RequestInvoker *SourceLinkApiClient::requestStages()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestUplink()
+const RequestInvoker *SRLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -390,7 +390,7 @@ const RequestInvoker *SourceLinkApiClient::requestUplink()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::requestDownlink(const QString &sourceUuid)
+const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -416,7 +416,7 @@ const RequestInvoker *SourceLinkApiClient::requestDownlink(const QString &source
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putDownlink(
+const RequestInvoker *SRLinkApiClient::putDownlink(
     const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
     const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
     const int width, const int height, const int revision
@@ -472,7 +472,7 @@ const RequestInvoker *SourceLinkApiClient::putDownlink(
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
+const RequestInvoker *SRLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -500,7 +500,7 @@ const RequestInvoker *SourceLinkApiClient::deleteDownlink(const QString &sourceU
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putUplink(const bool force)
+const RequestInvoker *SRLinkApiClient::putUplink(const bool force)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -537,7 +537,7 @@ const RequestInvoker *SourceLinkApiClient::putUplink(const bool force)
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putUplinkStatus()
+const RequestInvoker *SRLinkApiClient::putUplinkStatus()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -570,7 +570,7 @@ const RequestInvoker *SourceLinkApiClient::putUplinkStatus()
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::deleteUplink(const bool parallel)
+const RequestInvoker *SRLinkApiClient::deleteUplink(const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -597,14 +597,14 @@ const RequestInvoker *SourceLinkApiClient::deleteUplink(const bool parallel)
     return invoker;
 }
 
-const RequestInvoker *SourceLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
+const RequestInvoker *SRLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     auto req = QNetworkRequest(QUrl(QString(SCREENSHOTS_URL).arg(uuid).arg(sourceName)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "image/jpeg");
 
-    QByteArray imageBytes(image.sizeInBytes(), Qt::Uninitialized);
+    QByteArray imageBytes;
     QBuffer imageBuffer(&imageBytes);
     imageBuffer.open(QIODevice::WriteOnly);
     image.save(&imageBuffer, "JPG", SCREENSHOT_QUALITY);
@@ -621,12 +621,12 @@ const RequestInvoker *SourceLinkApiClient::putScreenshot(const QString &sourceNa
 
         emit putScreenshotSucceeded(sourceName);
     });
-    invoker->put(req, imageBytes);
+    invoker->put(req, imageBuffer.data());
 
     return invoker;
 }
 
-void SourceLinkApiClient::getPicture(const QString &pictureId)
+void SRLinkApiClient::getPicture(const QString &pictureId)
 {
     auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL).arg(pictureId))));
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
@@ -644,17 +644,17 @@ void SourceLinkApiClient::getPicture(const QString &pictureId)
     });
 }
 
-void SourceLinkApiClient::openStagesManagementPage()
+void SRLinkApiClient::openStagesManagementPage()
 {
     QDesktopServices::openUrl(QUrl(STAGES_MANAGEMENT_PAGE_URL));
 }
 
-void SourceLinkApiClient::onO2OpenBrowser(const QUrl &url)
+void SRLinkApiClient::onO2OpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
 }
 
-void SourceLinkApiClient::onO2LinkedChanged()
+void SRLinkApiClient::onO2LinkedChanged()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -662,7 +662,7 @@ void SourceLinkApiClient::onO2LinkedChanged()
 }
 
 // This is called when link or refresh token succeeded
-void SourceLinkApiClient::onO2LinkingSucceeded()
+void SRLinkApiClient::onO2LinkingSucceeded()
 {
     if (client->linked()) {
         CHECK_CLIENT_TOKEN();
@@ -687,7 +687,7 @@ void SourceLinkApiClient::onO2LinkingSucceeded()
     }
 }
 
-void SourceLinkApiClient::onO2LinkingFailed()
+void SRLinkApiClient::onO2LinkingFailed()
 {
     obs_log(LOG_ERROR, "client: The API client linking failed.");
 
@@ -696,7 +696,7 @@ void SourceLinkApiClient::onO2LinkingFailed()
     emit loginFailed();
 }
 
-void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
+void SRLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 {
     if (error != QNetworkReply::NoError) {
         return;
@@ -707,7 +707,7 @@ void SourceLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
     QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
 }
 
-void SourceLinkApiClient::onWebSocketReady(bool reconnect)
+void SRLinkApiClient::onWebSocketReady(bool reconnect)
 {
     obs_log(LOG_DEBUG, "client: WebSocket is ready.");
     websocket->subscribe("uplink", {{"uuid", uuid}});
@@ -726,12 +726,12 @@ void SourceLinkApiClient::onWebSocketReady(bool reconnect)
     emit webSocketReady(reconnect);
 }
 
-void SourceLinkApiClient::onWebSocketDisconnected()
+void SRLinkApiClient::onWebSocketDisconnected()
 {
     emit webSocketDisconnected();
 }
 
-void SourceLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
+void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
 {
     obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qPrintable(name), qPrintable(id));
 
@@ -784,7 +784,7 @@ void SourceLinkApiClient::onWebSocketDataChanged(const QString &name, const QStr
     }
 }
 
-void SourceLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
+void SRLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
 {
     obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qPrintable(name), qPrintable(id));
 

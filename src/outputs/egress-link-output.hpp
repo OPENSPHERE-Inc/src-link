@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -48,7 +48,7 @@ class EgressLinkOutput : public QObject {
 
     QString name;
 
-    SourceLinkApiClient *apiClient;
+    SRLinkApiClient *apiClient;
     StageConnection connection;
     OBSDataAutoRelease settings;
     OBSServiceAutoRelease service;
@@ -67,7 +67,7 @@ class EgressLinkOutput : public QObject {
     int storedSettingsRev;
     int activeSettingsRev;
     uint64_t connectionAttemptingAt;
-    QTimer *pollingTimer;
+    QTimer *snapshotTimer;
     QTimer *monitoringTimer;
     int width;
     int height;
@@ -82,12 +82,12 @@ signals:
     void statusChanged(EgressLinkOutputStatus status);
 
 private slots:
-    void onPollingTimerTimeout();
+    void onSnapshotTimerTimeout();
     void onMonitoringTimerTimeout();
     void onUplinkReady(const UplinkInfo &uplink);
 
 public:
-    explicit EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient);
+    explicit EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiClient);
     ~EgressLinkOutput();
 
     obs_properties_t *getProperties();
@@ -97,6 +97,7 @@ public:
     void stop();
     void setSourceUuid(const QString &value = PROGRAM_OUT_SOURCE);
     void setVisible(bool value);
+    void refresh();
 
     inline const QString &getName() const { return name; }
     inline void setName(const QString &value) { name = value; }

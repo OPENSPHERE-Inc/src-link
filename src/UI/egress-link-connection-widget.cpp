@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -18,15 +18,15 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <qt-wrappers.hpp>
 
-#include "source-link-connection-widget.hpp"
+#include "egress-link-connection-widget.hpp"
 
-//--- SourceLinkConnectionWidget class ---//
+//--- EgressLinkConnectionWidget class ---//
 
-SourceLinkConnectionWidget::SourceLinkConnectionWidget(
-    const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_apiClient, QWidget *parent
+EgressLinkConnectionWidget::EgressLinkConnectionWidget(
+    const StageSource &_source, const QString &interlockType, SRLinkApiClient *_apiClient, QWidget *parent
 )
     : QWidget(parent),
-      ui(new Ui::SourceLinkConnectionWidget),
+      ui(new Ui::EgressLinkConnectionWidget),
       source(_source)
 {
     ui->setupUi(this);
@@ -60,10 +60,10 @@ SourceLinkConnectionWidget::SourceLinkConnectionWidget(
     sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
     sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
 
-    obs_log(LOG_DEBUG, "SourceLinkConnectionWidget created");
+    obs_log(LOG_DEBUG, "EgressLinkConnectionWidget created");
 }
 
-SourceLinkConnectionWidget::~SourceLinkConnectionWidget()
+EgressLinkConnectionWidget::~EgressLinkConnectionWidget()
 {
     disconnect(this);
 
@@ -72,10 +72,10 @@ SourceLinkConnectionWidget::~SourceLinkConnectionWidget()
 
     delete output;
 
-    obs_log(LOG_DEBUG, "SourceLinkConnectionWidget destroyed");
+    obs_log(LOG_DEBUG, "EgressLinkConnectionWidget destroyed");
 }
 
-void SourceLinkConnectionWidget::setEnableVideoSourceChangeEvent(bool enabled)
+void EgressLinkConnectionWidget::setEnableVideoSourceChangeEvent(bool enabled)
 {
     if (enabled) {
         connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
@@ -84,17 +84,17 @@ void SourceLinkConnectionWidget::setEnableVideoSourceChangeEvent(bool enabled)
     }
 }
 
-void SourceLinkConnectionWidget::onSettingsButtonClick()
+void EgressLinkConnectionWidget::onSettingsButtonClick()
 {
     outputDialog->show();
 }
 
-void SourceLinkConnectionWidget::onVideoSourceChanged(int)
+void EgressLinkConnectionWidget::onVideoSourceChanged(int)
 {
     output->setSourceUuid(ui->videoSourceComboBox->currentData().toString());
 }
 
-void SourceLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
+void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
 {
     switch (status) {
     case LINKED_OUTPUT_STATUS_ACTIVE:
@@ -120,7 +120,7 @@ void SourceLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     }
 }
 
-void SourceLinkConnectionWidget::updateSourceList()
+void EgressLinkConnectionWidget::updateSourceList()
 {
     // Prevent event triggering during changing combo box items
     setEnableVideoSourceChangeEvent(false);
@@ -132,7 +132,7 @@ void SourceLinkConnectionWidget::updateSourceList()
 
         obs_enum_sources(
             [](void *param, obs_source_t *source) {
-                auto widget = (SourceLinkConnectionWidget *)param;
+                auto widget = (EgressLinkConnectionWidget *)param;
                 auto type = obs_source_get_type(source);
                 auto flags = obs_source_get_output_flags(source);
 
@@ -157,7 +157,7 @@ void SourceLinkConnectionWidget::updateSourceList()
     setEnableVideoSourceChangeEvent(true);
 }
 
-void SourceLinkConnectionWidget::setSource(const StageSource &_source)
+void EgressLinkConnectionWidget::setSource(const StageSource &_source)
 {
     source = _source;
 
@@ -173,13 +173,13 @@ void SourceLinkConnectionWidget::setSource(const StageSource &_source)
     output->setName(source.getName());
 }
 
-void SourceLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
+void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
 {
-    auto widget = (SourceLinkConnectionWidget *)data;
+    auto widget = (EgressLinkConnectionWidget *)data;
     widget->updateSourceList();
 }
 
-void SourceLinkConnectionWidget::onVisibilityChanged(bool value)
+void EgressLinkConnectionWidget::onVisibilityChanged(bool value)
 {
     output->setVisible(value);
 }

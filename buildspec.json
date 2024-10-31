@@ -33,11 +33,11 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "jp.co.opensphere.source-link"
+            "bundleId": "jp.co.opensphere.sr-link"
         }
     },
-    "name": "osi-source-link",
-    "displayName": "Source Link Plugin",
+    "name": "osi-sr-link",
+    "displayName": "SR Link Plugin",
     "version": "0.1.0",
     "author": "OPENSPHERE Inc.",
     "website": "https://opensphere.co.jp/",

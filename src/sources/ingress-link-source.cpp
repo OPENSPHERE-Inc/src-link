@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -32,7 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //--- IngressLinkSource class ---//
 
 IngressLinkSource::IngressLinkSource(
-    obs_data_t *settings, obs_source_t *_source, SourceLinkApiClient *_apiClient, QObject *parent
+    obs_data_t *settings, obs_source_t *_source, SRLinkApiClient *_apiClient, QObject *parent
 )
     : QObject(parent),
       weakSource(obs_source_get_weak_source(_source)),
@@ -89,7 +89,7 @@ IngressLinkSource::IngressLinkSource(
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
     connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
-    connect(apiClient, &SourceLinkApiClient::ingressRestartNeeded, [this]() { reactivate(); });
+    connect(apiClient, &SRLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
     connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
     connect(apiClient, SIGNAL(webSocketReady(bool)), this, SLOT(onWebSocketReady(bool)));
 
@@ -236,7 +236,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 
 void IngressLinkSource::handleConnection()
 {
-    if (!stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
+    if (port > 0 && !stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
         // Note: apiClient instance might live in a different thread
         QMetaObject::invokeMethod(
@@ -263,7 +263,7 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -> Stage list
     auto stageList = obs_properties_add_list(
-        connectionGroup, "stage_id", obs_module_text("Stage"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "stage_id", obs_module_text("Receiver"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     obs_property_list_add_string(stageList, "", "");
     foreach (auto &stage, apiClient->getStages().values()) {
@@ -272,7 +272,7 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -> Seat list
     auto seatList = obs_properties_add_list(
-        connectionGroup, "seat_name", obs_module_text("Seat"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
+        connectionGroup, "seat_name", obs_module_text("Slot"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING
     );
     obs_property_list_add_string(seatList, "", "");
 
@@ -286,9 +286,9 @@ obs_properties_t *IngressLinkSource::getProperties()
     obs_property_set_modified_callback2(
         stageList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            obs_log(LOG_DEBUG, "Stage has been changed.");
+            obs_log(LOG_DEBUG, "Receiver has been changed.");
 
-            auto apiClient = static_cast<SourceLinkApiClient *>(param);
+            auto apiClient = static_cast<SRLinkApiClient *>(param);
             QString stageId = obs_data_get_string(settings, "stage_id");
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
@@ -336,7 +336,7 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -=> Reload button
     obs_properties_add_button2(
-        connectionGroup, "reload_stages", obs_module_text("ReloadStages"),
+        connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
         [](obs_properties_t *props, obs_property_t *property, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
@@ -358,7 +358,7 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -> Create button
     obs_properties_add_button2(
-        connectionGroup, "manage_stages", obs_module_text("ManageStages"),
+        connectionGroup, "manage_stages", obs_module_text("ManageReceivers"),
         [](obs_properties_t *props, obs_property_t *property, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             ingressLinkSource->apiClient->openStagesManagementPage();
@@ -419,7 +419,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     return props;
 }
 
-void IngressLinkSource::getDefaults(obs_data_t *settings, SourceLinkApiClient *apiClient)
+void IngressLinkSource::getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient)
 {
     obs_log(LOG_DEBUG, "Default settings applying.");
 
@@ -492,7 +492,7 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
 
     active = true;
     auto reactivateNeeded = populatedSeat != !downlink.getConnection().getAllocationId().isEmpty() ||
-                            revision != downlink.getConnection().getRevision();
+                            revision < downlink.getConnection().getRevision();
 
     if (reactivateNeeded) {
         populatedSeat = !downlink.getConnection().getAllocationId().isEmpty();
@@ -614,7 +614,7 @@ void SourceAudioThread::run()
 
 //--- Source registration ---//
 
-extern SourceLinkApiClient *apiClient;
+extern SRLinkApiClient *apiClient;
 
 void *createSource(obs_data_t *settings, obs_source_t *source)
 {

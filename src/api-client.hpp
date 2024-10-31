@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -35,20 +35,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_ACTIVE "active"
 #define UPLINK_STATUS_STANDBY "standby"
 
-class SourceLinkApiClient : public QObject {
+class SRLinkApiClient : public QObject {
     Q_OBJECT
 
-    friend class SourceLinkWebSocketClient;
+    friend class SRLinkWebSocketClient;
 
     QString uuid;
-    SourceLinkSettingsStore *settings;
+    SRLinkSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
     QMap<int, bool> usedPorts;
     RequestSequencer *sequencer;
     int activeOutputs;
     int standByOutputs;
-    SourceLinkWebSocketClient *websocket;
+    SRLinkWebSocketClient *websocket;
     QString uplinkStatus;
 
     // Online rsources
@@ -96,7 +96,8 @@ signals:
     void putScreenshotFailed(const QString &sourceName);
     void getPictureSucceeded(const QString &pictureId, const QImage &picture);
     void getPictureFailed(const QString &pictureId);
-    void ingressRestartNeeded();
+    void ingressRefreshNeeded();
+    void egressRefreshNeeded();
 
 private slots:
     void onO2LinkedChanged();
@@ -110,8 +111,8 @@ private slots:
     void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);
 
 public:
-    explicit SourceLinkApiClient(QObject *parent = nullptr);
-    ~SourceLinkApiClient();
+    explicit SRLinkApiClient(QObject *parent = nullptr);
+    ~SRLinkApiClient();
 
     inline const QString &getUuid() const { return uuid; }
     inline const AccountInfo getAccountInfo() const { return accountInfo; }
@@ -120,7 +121,7 @@ public:
     inline const PartyEventParticipantArray &getParticipants() const { return participants; }
     inline const StageArray &getStages() const { return stages; }
     inline const UplinkInfo getUplink() const { return uplink; }
-    inline SourceLinkSettingsStore *getSettings() const { return settings; }
+    inline SRLinkSettingsStore *getSettings() const { return settings; }
 
 public slots:
     void login();
@@ -147,7 +148,8 @@ public slots:
     const RequestInvoker *deleteUplink(const bool parallel = false);
     const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
-    void restartIngress() { emit ingressRestartNeeded(); }
+    void refreshIngress() { emit ingressRefreshNeeded(); }
+    void refreshEgress() { emit egressRefreshNeeded(); }
     void terminate();
     void openStagesManagementPage(); // Just open web browser
     void syncUplinkStatus();

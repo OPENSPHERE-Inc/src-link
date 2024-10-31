@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -22,14 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
-#include "ui_source-link-connection-widget.h"
+#include "ui_egress-link-connection-widget.h"
 
-class SourceLinkConnectionWidget : public QWidget {
+class EgressLinkConnectionWidget : public QWidget {
     Q_OBJECT
 
-    friend class SourceLinkDock;
+    friend class EgressLinkDock;
 
-    Ui::SourceLinkConnectionWidget *ui;
+    Ui::EgressLinkConnectionWidget *ui;
 
     StageSource source;
 
@@ -50,11 +50,11 @@ private slots:
     void onVisibilityChanged(bool value);
 
 public:
-    explicit SourceLinkConnectionWidget(
-        const StageSource &_source, const QString &interlockType, SourceLinkApiClient *_client,
+    explicit EgressLinkConnectionWidget(
+        const StageSource &_source, const QString &interlockType, SRLinkApiClient *_client,
         QWidget *parent = nullptr
     );
-    ~SourceLinkConnectionWidget();
+    ~EgressLinkConnectionWidget();
 
     void setSource(const StageSource &_source);
 };

@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -24,9 +24,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define SETTINGS_JSON_NAME "settings.json"
 
-//--- SourceLinkSettingsStore class ---//
+//--- SRLinkSettingsStore class ---//
 
-SourceLinkSettingsStore::SourceLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
+SRLinkSettingsStore::SRLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
 {
     OBSString config_dir_path = obs_module_get_config_path(obs_current_module(), "");
     os_mkdirs(config_dir_path);
@@ -37,15 +37,15 @@ SourceLinkSettingsStore::SourceLinkSettingsStore(QObject *parent) : O0AbstractSt
         settingsData = obs_data_create();
     }
 
-    obs_log(LOG_DEBUG, "client: SourceLinkSettingsStore created");
+    obs_log(LOG_DEBUG, "client: SRLinkSettingsStore created");
 }
 
-SourceLinkSettingsStore::~SourceLinkSettingsStore()
+SRLinkSettingsStore::~SRLinkSettingsStore()
 {
-    obs_log(LOG_DEBUG, "client: SourceLinkSettingsStore destroyed");
+    obs_log(LOG_DEBUG, "client: SRLinkSettingsStore destroyed");
 }
 
-QString SourceLinkSettingsStore::value(const QString &key, const QString &defaultValue)
+QString SRLinkSettingsStore::value(const QString &key, const QString &defaultValue)
 {
     auto value = QString(obs_data_get_string(settingsData, qPrintable(key)));
     if (!value.isEmpty()) {
@@ -55,7 +55,7 @@ QString SourceLinkSettingsStore::value(const QString &key, const QString &defaul
     }
 }
 
-void SourceLinkSettingsStore::setValue(const QString &key, const QString &value)
+void SRLinkSettingsStore::setValue(const QString &key, const QString &value)
 {
     obs_data_set_string(settingsData, qPrintable(key), qPrintable(value));
     OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);

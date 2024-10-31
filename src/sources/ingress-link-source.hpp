@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -57,7 +57,7 @@ class IngressLinkSource : public QObject {
     bool clearOnMediaEnd;
     int revision; // Connection revision
 
-    SourceLinkApiClient *apiClient;
+    SRLinkApiClient *apiClient;
     OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
     OBSSourceAutoRelease decoderSource;
     ImageRenderer *fillerRenderer;
@@ -87,7 +87,7 @@ private slots:
 
 public:
     explicit IngressLinkSource(
-        obs_data_t *settings, obs_source_t *source, SourceLinkApiClient *_apiClient, QObject *parent = nullptr
+        obs_data_t *settings, obs_source_t *source, SRLinkApiClient *_apiClient, QObject *parent = nullptr
     );
     ~IngressLinkSource();
 
@@ -99,7 +99,7 @@ public:
 
     void videoRenderCallback(gs_effect_t* effect);
 
-    static void getDefaults(obs_data_t *settings, SourceLinkApiClient *apiClient);
+    static void getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient);
 };
 
 class SourceAudioThread : public QThread, SourceAudioCapture {

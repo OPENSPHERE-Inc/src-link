@@ -57,10 +57,10 @@ target_sources(
           src/UI/settings-dialog.cpp
           src/UI/output-dialog.ui
           src/UI/output-dialog.cpp
-          src/UI/source-link-dock.ui
-          src/UI/source-link-connection-widget.ui
-          src/UI/source-link-connection-widget.cpp
-          src/UI/source-link-dock.cpp
+          src/UI/egress-link-dock.ui
+          src/UI/egress-link-dock.cpp
+          src/UI/egress-link-connection-widget.ui
+          src/UI/egress-link-connection-widget.cpp
           src/UI/resources.qrc
           src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp

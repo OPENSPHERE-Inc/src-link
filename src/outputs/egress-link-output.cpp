@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_MAX_RETRIES 3
 #define OUTPUT_RETRY_DELAY_SECS 1
 #define OUTPUT_JSON_NAME "output.json"
-#define OUTPUT_POLLING_INTERVAL_MSECS 10000
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
 #define OUTPUT_RETRY_TIMEOUT_MSECS 5000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
@@ -83,7 +82,7 @@ inline bool isSourceAvailable(obs_source_t *source)
 
 //--- EgressLinkOutput class ---//
 
-EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_apiClient)
+EgressLinkOutput::EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiClient)
     : QObject(_apiClient),
       name(_name),
       apiClient(_apiClient),
@@ -104,10 +103,10 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_a
 
     loadSettings();
 
-    pollingTimer = new QTimer(this);
-    pollingTimer->setInterval(OUTPUT_POLLING_INTERVAL_MSECS);
-    pollingTimer->start();
-    connect(pollingTimer, SIGNAL(timeout()), this, SLOT(onPollingTimerTimeout()));
+    snapshotTimer = new QTimer(this);
+    snapshotTimer->setInterval(apiClient->getSettings()->getEgressScreenshotInterval() * 1000);
+    snapshotTimer->start();
+    connect(snapshotTimer, SIGNAL(timeout()), this, SLOT(onSnapshotTimerTimeout()));
 
     monitoringTimer = new QTimer(this);
     monitoringTimer->setInterval(OUTPUT_MONITORING_INTERVAL_MSECS);
@@ -115,6 +114,7 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SourceLinkApiClient *_a
     connect(monitoringTimer, SIGNAL(timeout()), this, SLOT(onMonitoringTimerTimeout()));
 
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
+    connect(apiClient, &SRLinkApiClient::egressRefreshNeeded, this, [this]() { refresh(); });
 
     obs_log(LOG_INFO, "%s: Output created", qPrintable(name));
 }
@@ -128,6 +128,11 @@ EgressLinkOutput::~EgressLinkOutput()
     stop();
 
     obs_log(LOG_INFO, "%s: Output destroyed", qPrintable(name));
+}
+
+void EgressLinkOutput::refresh()
+{
+    snapshotTimer->setInterval(apiClient->getSettings()->getEgressScreenshotInterval() * 1000);
 }
 
 obs_properties_t *EgressLinkOutput::getProperties()
@@ -711,8 +716,8 @@ void EgressLinkOutput::stop()
     apiClient->syncUplinkStatus();
 }
 
-// Called every OUTPUT_POLLING_INTERVAL_MSECS
-void EgressLinkOutput::onPollingTimerTimeout()
+// Called every OUTPUT_SNAPSHOT_INTERVAL_MSECS
+void EgressLinkOutput::onSnapshotTimerTimeout()
 {
     if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
         return;

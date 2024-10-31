@@ -1,5 +1,5 @@
 /*
-Source Link
+SR Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -22,14 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <o2.h>
 
-class SourceLinkSettingsStore : public O0AbstractStore {
+class SRLinkSettingsStore : public O0AbstractStore {
     Q_OBJECT
 
     OBSDataAutoRelease settingsData;
 
 public:
-    explicit SourceLinkSettingsStore(QObject *parent = nullptr);
-    ~SourceLinkSettingsStore();
+    explicit SRLinkSettingsStore(QObject *parent = nullptr);
+    ~SRLinkSettingsStore();
 
     QString value(const QString &key, const QString &defaultValue = QString());
     void setValue(const QString &key, const QString &value);
@@ -64,4 +64,6 @@ public:
     inline void setIngressReconnectDelayTime(int value) { setValue("ingress.reconnectDelayTime", QString::number(value)); }
     inline int getIngressNetworkBufferSize() { return value("ingress.networkBufferSize", "1").toInt(); }
     inline void setIngressNetworkBufferSize(int value) { setValue("ingress.networkBufferSize", QString::number(value)); }
+    inline int getEgressScreenshotInterval() { return value("egress.screenshotInterval", "5").toInt(); }
+    inline void setEgressScreenshotInterval(int value) { setValue("egress.screenshotInterval", QString::number(value)); }
 };
