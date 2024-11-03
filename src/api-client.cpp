@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <obs-module.h>
 #include <util/platform.h>
 
 #include <QMessageBox>
@@ -38,7 +39,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "api-websocket.hpp"
 #include "utils.hpp"
 
-#define LOCAL_DEBUG
+//#define LOCAL_DEBUG
 #define SCOPE "read write"
 #define SCREENSHOT_QUALITY 75
 
@@ -416,40 +417,23 @@ const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::putDownlink(
-    const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
-    const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
-    const int width, const int height, const int revision
-)
+const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, const DownlinkRequestBody &params)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    QJsonObject body;
-    body["stage_id"] = stageId;
-    body["seat_name"] = seatName;
-    body["source_name"] = sourceName;
-    body["protocol"] = protocol;
-    body["port"] = port;
-    body["parameters"] = parameters;
-    body["max_bitrate"] = maxBitrate;
-    body["min_bitrate"] = minBitrate;
-    body["width"] = width;
-    body["height"] = height;
-    body["revision"] = revision;
-
-    obs_log(LOG_DEBUG, "client: Putting downlink: %s rev.%d", qPrintable(sourceUuid), revision);
+    obs_log(LOG_DEBUG, "client: Putting downlink: %s rev.%d", qPrintable(sourceUuid), params.getRevision());
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
-        [this, sourceUuid, revision](QNetworkReply::NetworkError error, QByteArray replyData) {
+        [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
                 if (error == QNetworkReply::ContentOperationNotPermittedError) {
                     obs_log(
-                        LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid), revision,
-                        error
+                        LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid),
+                        params.getRevision(), error
                     );
                     emit putDownlinkFailed(sourceUuid);
                     return;
@@ -459,7 +443,7 @@ const RequestInvoker *SRLinkApiClient::putDownlink(
             downlinks[sourceUuid] = QJsonDocument::fromJson(replyData).object();
             obs_log(
                 LOG_DEBUG, "client: Put downlink %s rev.%d succeeded",
-                qPrintable(downlinks[sourceUuid].getConnection().getId()), revision
+                qPrintable(downlinks[sourceUuid].getConnection().getId()), params.getRevision()
             );
 
             websocket->subscribe("downlink", {{"uuid", sourceUuid}});
@@ -467,7 +451,7 @@ const RequestInvoker *SRLinkApiClient::putDownlink(
             emit putDownlinkSucceeded(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument(body).toJson());
+    invoker->put(req, QJsonDocument(params).toJson());
 
     return invoker;
 }

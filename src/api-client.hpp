@@ -137,11 +137,7 @@ public slots:
     const RequestInvoker *requestStages();
     const RequestInvoker *requestUplink();
     const RequestInvoker *requestDownlink(const QString &sourceUuid);
-    const RequestInvoker *putDownlink(
-        const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
-        const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
-        const int width, const int height, const int revision = 0
-    );
+    const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
     const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
     const RequestInvoker *putUplink(const bool force = false);
     const RequestInvoker *putUplinkStatus();

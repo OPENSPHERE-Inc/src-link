@@ -133,27 +133,40 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, bool remote
 
     if (protocol == "srt") {
         // Generate SRT parameters
-        auto mode = apiSettings->getIngressSrtMode();
-        if (remote) {
-            // Invert mode for remote
-            if (mode == "listener") {
-                mode = "caller";
-            } else if (mode == "caller") {
-                mode = "listener";
-            }
-        }
-
         auto latency = apiSettings->getIngressSrtLatency();
         if (obs_data_get_bool(settings, "advanced_settings")) {
             latency = obs_data_get_int(settings, "srt_latency");
         }
 
-        parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
-                         .arg(mode)
-                         .arg(latency * 1000) // Convert to microseconds
-                         .arg(apiSettings->getIngressSrtPbkeylen())
-                         .arg(passphrase)
-                         .arg(streamId);
+        if (relay) {
+            auto call = remote ? "publish" : "play";
+
+            // FIXME: Currently encryption not supported !
+            parameters = QString("mode=caller&latency=%1&streamid=%2/%3/%4")
+                             .arg(latency * 1000) // Convert to microseconds
+                             .arg(call)
+                             .arg(streamId)
+                             .arg(passphrase);
+
+        } else {
+            auto mode = apiSettings->getIngressSrtMode();
+            if (remote) {
+                // Invert mode for remote
+                // NOTE: We cannot use rendezvous mode. It won't work most environment.
+                if (mode == "listener") {
+                    mode = "caller";
+                } else if (mode == "caller") {
+                    mode = "listener";
+                }
+            }
+
+            parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
+                             .arg(mode)
+                             .arg(latency * 1000) // Convert to microseconds
+                             .arg(apiSettings->getIngressSrtPbkeylen())
+                             .arg(passphrase)
+                             .arg(streamId);
+        }
     }
 
     return parameters;
@@ -191,6 +204,7 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     height = obs_data_get_int(settings, "height");
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
+    relay = obs_data_get_bool(settings, "relay");
 
     if (obs_data_get_bool(settings, "advanced_settings")) {
         reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
@@ -215,9 +229,25 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 {
     auto decoderSettings = obs_data_create();
 
-    if (populatedSeat && protocol == "srt" && port > 0) {
-        auto input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
+    if (populatedSeat && protocol == "srt") {
+        QString input;
+
+        if (relay) {
+            auto quota = apiClient->getAccountInfo().getSubscriptionQuota();
+            auto facility = apiClient->getAccountInfo().getFacility();
+
+            if (!facility.getSrtRelayServer().isEmpty() && quota.getMaxRelayConnections() > 0) {
+                input = QString("srt://%1:%2?%3")
+                            .arg(facility.getSrtRelayServer())
+                            .arg(facility.getSrtRelayPort())
+                            .arg(localParameters);
+            }
+        } else if (port > 0) {
+            input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
+        }
+
         obs_data_set_string(decoderSettings, "input", qPrintable(input));
+
     } else {
         obs_data_set_string(decoderSettings, "input", "");
     }
@@ -239,11 +269,23 @@ void IngressLinkSource::handleConnection()
     if (port > 0 && !stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
         // Note: apiClient instance might live in a different thread
-        QMetaObject::invokeMethod(
-            apiClient, "putDownlink", Q_ARG(QString, uuid), Q_ARG(QString, stageId), Q_ARG(QString, seatName),
-            Q_ARG(QString, sourceName), Q_ARG(QString, protocol), Q_ARG(int, port), Q_ARG(QString, remoteParameters),
-            Q_ARG(int, maxBitrate), Q_ARG(int, minBitrate), Q_ARG(int, width), Q_ARG(int, height), Q_ARG(int, revision)
-        );
+        DownlinkRequestBody params;
+        params.setStageId(stageId);
+        params.setSeatName(seatName);
+        params.setSourceName(sourceName);
+        params.setProtocol(protocol);
+        params.setPort(port);
+        params.setStreamId(streamId);
+        params.setPassphrase(passphrase);
+        params.setParameters(remoteParameters);
+        params.setRelay(relay);
+        params.setMaxBitrate(maxBitrate);
+        params.setMinBitrate(minBitrate);
+        params.setWidth(width);
+        params.setHeight(height);
+        params.setRevision(revision);
+
+        QMetaObject::invokeMethod(apiClient, "putDownlink", Q_ARG(QString, uuid), Q_ARG(DownlinkRequestBody, params));
     } else {
         // Unregister connection if no stage/seat/source selected.
         // Note: apiClient instance might live in a different thread
@@ -305,7 +347,8 @@ obs_properties_t *IngressLinkSource::getProperties()
                 return true;
             }
 
-            auto stage = apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
+            auto stage =
+                apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
 
             if (!stage.getSeats().size()) {
                 obs_property_list_add_string(seatList, "", "");
@@ -319,9 +362,7 @@ obs_properties_t *IngressLinkSource::getProperties()
             }
 
             foreach (auto &seat, stage.getSeats().values()) {
-                obs_property_list_add_string(
-                    seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName())
-                );
+                obs_property_list_add_string(seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName()));
             }
             foreach (auto &source, stage.getSources().values()) {
                 obs_property_list_add_string(
@@ -366,6 +407,10 @@ obs_properties_t *IngressLinkSource::getProperties()
         },
         this
     );
+
+    // Connection group -> Relay checkbox
+    auto relay = obs_properties_add_bool(connectionGroup, "relay", obs_module_text("UseRelayServer"));
+    obs_property_set_enabled(relay, apiClient->getAccountInfo().getSubscriptionQuota().getMaxRelayConnections() > 0);
 
     // Other stage settings
     auto maxBitrate = obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);

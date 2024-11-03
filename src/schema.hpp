@@ -60,6 +60,63 @@ public:
     T operator[](qsizetype i) const { return at(i).toObject(); }
 };
 
+class SubscriptionQuota : public QJsonObject {
+public:
+    SubscriptionQuota() = default;
+    SubscriptionQuota(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline int getMaxStages() const { return value("max_stages").toInt(); }
+    inline void setMaxStages(int value) { insert("max_stages", value); }
+    inline int getMaxParties() const { return value("max_parties").toInt(); }
+    inline void setMaxParties(int value) { insert("max_parties", value); }
+    inline int getMaxConcurrentPartyEvents() const { return value("max_concurrent_party_events").toInt(); }
+    inline void setMaxConcurrentPartyEvents(int value) { insert("max_concurrent_party_events", value); }
+    inline int getMaxSourcesPerStageSeat() const { return value("max_sources_per_stage_seat").toInt(); }
+    inline void setMaxSourcesPerStageSeat(int value) { insert("max_sources_per_stage_seat", value); }
+    inline int getMaxSeatsPerStage() const { return value("max_seats_per_stage").toInt(); }
+    inline void setMaxSeatsPerStage(int value) { insert("max_seats_per_stage", value); }
+    inline int getMaxMembersPerParty() const { return value("max_members_per_party").toInt(); }
+    inline void setMaxMembersPerParty(int value) { insert("max_members_per_party", value); }
+    inline int getMaxParticipantsPerPartyEvent() const { return value("max_participants_per_party_event").toInt(); }
+    inline void setMaxParticipantsPerPartyEvent(int value) { insert("max_participants_per_party_event", value); }
+    inline int getMaxUplinkDuration() const { return value("max_uplink_duration").toInt(); }
+    inline void setMaxUplinkDuration(int value) { insert("max_uplink_duration", value); }
+    inline QString getUiType() const { return value("ui_type").toString(); }
+    inline void setUiType(const QString &value) { insert("ui_type", value); }
+    inline bool getByolAbility() const { return value("byol_ability").toBool(); }
+    inline void setByolAbility(bool value) { insert("byol_ability", value); }
+    inline int getMaxRelayConnections() const { return value("max_relay_connections").toInt(); }
+    inline void setMaxRelayConnections(int value) { insert("max_relay_connections", value); }
+};
+
+class AccountResourceUsage : public QJsonObject {
+public:
+    AccountResourceUsage() = default;
+    AccountResourceUsage(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline int getStages() const { return value("stages").toInt(); }
+    inline void setStages(int value) { insert("stages", value); }
+    inline int getParties() const { return value("parties").toInt(); }
+    inline void setParties(int value) { insert("parties", value); }
+    inline int getPartyEvents() const { return value("party_events").toInt(); }
+    inline void setPartyEvents(int value) { insert("party_events", value); }
+    inline int getConcurrentPartyEvents() const { return value("concurrent_party_events").toInt(); }
+    inline void setConcurrentPartyEvents(int value) { insert("concurrent_party_events", value); }
+    inline int getRelayConnections() const { return value("relay_connections").toInt(); }
+    inline void setRelayConnections(int value) { insert("relay_connections", value); }
+};
+
+class AccountFacility : public QJsonObject {
+public:
+    AccountFacility() = default;
+    AccountFacility(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getSrtRelayServer() const { return value("srt_relay_server").toString(); }
+    inline void setSrtRelayServer(const QString &value) { insert("srt_relay_server", value); }
+    inline int getSrtRelayPort() const { return value("srt_relay_port").toInt(); }
+    inline void setSrtRelayPort(const int value) { insert("srt_relay_port", value); }
+};
+
 class AccountInfo : public QJsonObject {
 public:
     AccountInfo() = default;
@@ -71,6 +128,13 @@ public:
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
     inline QString getPictureId() const { return value("picture_id").toString(); }
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
+
+    inline SubscriptionQuota getSubscriptionQuota() const { return value("subscription_quota").toObject(); }
+    inline void setSubscriptionQuota(const SubscriptionQuota &value) { insert("subscription_quota", value); }
+    inline AccountResourceUsage getResourceUsage() const { return value("resource_usage").toObject(); }
+    inline void setResourceUsage(const AccountResourceUsage &value) { insert("resource_usage", value); }
+    inline AccountFacility getFacility() const { return value("facility").toObject(); }
+    inline void setFacility(const AccountFacility &value) { insert("facility", value); }
 };
 
 class StageSource : public QJsonObject {
@@ -275,6 +339,8 @@ public:
     inline void setAccountView(const AccountView &value) { insert("account_view", value); }
     inline StageSeatView getStageSeatView() const { return value("stage_seat_view").toObject(); }
     inline void setStageSeatView(const StageSeatView &value) { insert("stage_seat_view", value); }
+    inline bool getByol() const { return value("byol").toBool(); }
+    inline void setByol(bool value) { insert("byol", value); }
 };
 
 typedef TypedJsonArray<PartyEventParticipant> PartyEventParticipantArray;
@@ -298,8 +364,14 @@ public:
     inline void setServer(const QString &value) { insert("server", value); }
     inline int getPort() const { return value("port").toInt(); }
     inline void setPort(int value) { insert("port", value); }
+    inline QString getStreamId() const { return value("stream_id").toString(); }
+    inline void setStreamId(const QString &value) { insert("stream_id", value); }
+    inline QString getPassphrase() const { return value("passphrase").toString(); }
+    inline void setPassphrase(const QString &value) { insert("passphrase", value); }
     inline QString getParameters() const { return value("parameters").toString(); }
     inline void setParameters(const QString &value) { insert("parameters", value); }
+    inline bool getRelay() const { return value("relay").toBool(); }
+    inline void setRelay(bool value) { insert("relay", value); }
     inline int getMaxBitrate() const { return value("max_bitrate").toInt(); }
     inline void setMaxBitrate(int value) { insert("max_bitrate", value); }
     inline int getMinBitrate() const { return value("min_bitrate").toInt(); }
@@ -378,4 +450,39 @@ public:
     inline void setId(const QString &value) { insert("id", value); }
     inline QJsonObject getPayload() const { return value("payload").toObject(); }
     inline void setPayload(const QJsonObject &value) { insert("payload", value); }
+};
+
+class DownlinkRequestBody : public QJsonObject {
+public:
+    DownlinkRequestBody() = default;
+    DownlinkRequestBody(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getStageId() const { return value("stage_id").toString(); }
+    inline void setStageId(const QString &value) { insert("stage_id", value); }
+    inline QString getSeatName() const { return value("seat_name").toString(); }
+    inline void setSeatName(const QString &value) { insert("seat_name", value); }
+    inline QString getSourceName() const { return value("source_name").toString(); }
+    inline void setSourceName(const QString &value) { insert("source_name", value); }
+    inline QString getProtocol() const { return value("protocol").toString(); }
+    inline void setProtocol(const QString &value) { insert("protocol", value); }
+    inline int getPort() const { return value("port").toInt(); }
+    inline void setPort(int value) { insert("port", value); }
+    inline QString getStreamId() const { return value("stream_id").toString(); }
+    inline void setStreamId(const QString &value) { insert("stream_id", value); }
+    inline QString getPassphrase() const { return value("passphrase").toString(); }
+    inline void setPassphrase(const QString &value) { insert("passphrase", value); }
+    inline QString getParameters() const { return value("parameters").toString(); }
+    inline void setParameters(const QString &value) { insert("parameters", value); }
+    inline bool getRelay() const { return value("relay").toBool(); }
+    inline void setRelay(bool value) { insert("relay", value); }
+    inline int getMaxBitrate() const { return value("max_bitrate").toInt(); }
+    inline void setMaxBitrate(int value) { insert("max_bitrate", value); }
+    inline int getMinBitrate() const { return value("min_bitrate").toInt(); }
+    inline void setMinBitrate(int value) { insert("min_bitrate", value); }
+    inline int getWidth() const { return value("width").toInt(); }
+    inline void setWidth(int value) { insert("width", value); }
+    inline int getHeight() const { return value("height").toInt(); }
+    inline void setHeight(int value) { insert("height", value); }
+    inline int getRevision() const { return value("revision").toInt(); }
+    inline void setRevision(int value) { insert("revision", value); }
 };

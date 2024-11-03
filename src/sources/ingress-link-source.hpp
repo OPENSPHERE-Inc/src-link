@@ -55,6 +55,7 @@ class IngressLinkSource : public QObject {
     int bufferingMb;
     bool hwDecode;
     bool clearOnMediaEnd;
+    bool relay;
     int revision; // Connection revision
 
     SRLinkApiClient *apiClient;
