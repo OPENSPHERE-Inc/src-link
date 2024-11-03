@@ -162,8 +162,14 @@ SRLinkApiClient::SRLinkApiClient(QObject *parent)
     } else {
         connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
             if (error == QNetworkReply::NoError) {
-                websocket->start();
                 resyncOnlineResources();
+
+                connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
+                    if (error != QNetworkReply::NoError) {
+                        return;
+                    }
+                    websocket->start();
+                });
             }
         });
 
@@ -233,7 +239,6 @@ void SRLinkApiClient::resyncOnlineResources()
     requestPartyEvents();
     requestParticipants();
     requestStages();
-    putUplink();
 }
 
 void SRLinkApiClient::clearOnlineResources()
@@ -430,7 +435,7 @@ const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, co
         invoker, &RequestInvoker::finished,
         [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                if (error == QNetworkReply::ContentOperationNotPermittedError) {
+                if (error != QNetworkReply::NoError) {
                     obs_log(
                         LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid),
                         params.getRevision(), error
@@ -653,10 +658,18 @@ void SRLinkApiClient::onO2LinkingSucceeded()
         obs_log(LOG_DEBUG, "client: The API client has linked up.");
 
         connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-            if (error == QNetworkReply::NoError) {
-                websocket->start();
-                resyncOnlineResources();
+            if (error != QNetworkReply::NoError) {
+                return;
             }
+
+            resyncOnlineResources();
+
+            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
+                if (error != QNetworkReply::NoError) {
+                    return;
+                }
+                websocket->start();
+            });
         });
 
         emit loginSucceeded();

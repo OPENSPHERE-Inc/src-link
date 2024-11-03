@@ -97,7 +97,7 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiCl
       settings(nullptr),
       storedSettingsRev(0),
       activeSettingsRev(0),
-      status(LINKED_OUTPUT_STATUS_INACTIVE)
+      status(EGRESS_LINK_OUTPUT_STATUS_INACTIVE)
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qPrintable(name));
 
@@ -456,14 +456,14 @@ void EgressLinkOutput::start()
 
     QMutexLocker locker(&outputMutex);
     auto innerFunc = [&]() {
-        if (status != LINKED_OUTPUT_STATUS_INACTIVE) {
+        if (status != EGRESS_LINK_OUTPUT_STATUS_INACTIVE) {
             return;
         }
 
         activeSettingsRev = storedSettingsRev;
         activeSourceUuid = obs_data_get_string(settings, "source_uuid");
         if (activeSourceUuid == "disabled" || !obs_data_get_bool(settings, "visible")) {
-            setStatus(LINKED_OUTPUT_STATUS_DISABLED);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
             return;
         }
 
@@ -472,7 +472,7 @@ void EgressLinkOutput::start()
             source = obs_get_source_by_uuid(qPrintable(activeSourceUuid));
             if (!source) {
                 obs_log(LOG_ERROR, "%s: Source not found: %s", qPrintable(name), qPrintable(activeSourceUuid));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
             }
             // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
@@ -490,7 +490,7 @@ void EgressLinkOutput::start()
         }
 
         if (connection.isEmpty()) {
-            setStatus(LINKED_OUTPUT_STATUS_STAND_BY);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
             apiClient->incrementStandByOutputs();
             return;
         }
@@ -504,7 +504,7 @@ void EgressLinkOutput::start()
         OBSDataAutoRelease egressSettings = createEgressSettings(connection);
         if (!egressSettings) {
             obs_log(LOG_ERROR, "%s: Unsupported connection for", qPrintable(name));
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
@@ -512,7 +512,7 @@ void EgressLinkOutput::start()
         service = obs_service_create("rtmp_custom", qPrintable(name), egressSettings, nullptr);
         if (!service) {
             obs_log(LOG_ERROR, "%s: Failed to create service", qPrintable(name));
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
@@ -520,7 +520,7 @@ void EgressLinkOutput::start()
         output = obs_output_create("ffmpeg_mpegts_muxer", qPrintable(name), egressSettings, nullptr);
         if (!output) {
             obs_log(LOG_ERROR, "%s: Failed to create output", qPrintable(name));
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
@@ -540,7 +540,7 @@ void EgressLinkOutput::start()
             if (!obs_get_video_info(&ovi)) {
                 // Abort when no video situation
                 obs_log(LOG_ERROR, "%s: Failed to get video info", qPrintable(name));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
             }
 
@@ -551,14 +551,14 @@ void EgressLinkOutput::start()
 
             if (ovi.base_width == 0 || ovi.base_height == 0 || ovi.output_width == 0 || ovi.output_height == 0) {
                 obs_log(LOG_ERROR, "%s: Invalid video spec", qPrintable(name));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
             }
 
             sourceVideo = obs_view_add2(sourceView, &ovi);
             if (!sourceVideo) {
                 obs_log(LOG_ERROR, "%s: Failed to create source video", qPrintable(name));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
             }
             video = sourceVideo;
@@ -575,7 +575,7 @@ void EgressLinkOutput::start()
             audioSilence = createSilenceAudio();
             if (!audioSilence) {
                 obs_log(LOG_ERROR, "%s: Failed to create silence audio", qPrintable(name));
-                setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
             }
             audio = audioSilence;
@@ -586,7 +586,7 @@ void EgressLinkOutput::start()
                 obs_audio_info ai = {0};
                 if (!obs_get_audio_info(&ai)) {
                     obs_log(LOG_ERROR, "%s: Failed to get audio info", qPrintable(name));
-                    setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                    setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                     return;
                 }
 
@@ -596,7 +596,7 @@ void EgressLinkOutput::start()
                     obs_log(LOG_ERROR, "%s: Failed to create audio source", qPrintable(name));
                     delete audioSource;
                     audioSource = nullptr;
-                    setStatus(LINKED_OUTPUT_STATUS_ERROR);
+                    setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                     return;
                 }
             }
@@ -604,11 +604,16 @@ void EgressLinkOutput::start()
 
         // Setup video encoder
         auto videoEncoderId = obs_data_get_string(egressSettings, "video_encoder");
+        if (!videoEncoderId) {
+            obs_log(LOG_ERROR, "%s: Video encoder did't set", qPrintable(name));
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+            return;
+        }
         obs_log(LOG_DEBUG, "%s: Video encoder: %s", qPrintable(name), videoEncoderId);
         videoEncoder = obs_video_encoder_create(videoEncoderId, qPrintable(name), egressSettings, nullptr);
         if (!videoEncoder) {
             obs_log(LOG_ERROR, "%s: Failed to create video encoder: %s", qPrintable(name), videoEncoderId);
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
@@ -621,6 +626,11 @@ void EgressLinkOutput::start()
 
         // Setup audio encoder
         auto audioEncoderId = obs_data_get_string(egressSettings, "audio_encoder");
+        if (!audioEncoderId) {
+            obs_log(LOG_ERROR, "%s: Audio encoder did't set", qPrintable(name));
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+            return;
+        }
         obs_log(LOG_DEBUG, "%s: Audio encoder: %s", qPrintable(name), audioEncoderId);
         auto audioBitrate = obs_data_get_int(egressSettings, "audio_bitrate");
         OBSDataAutoRelease audioEncoderSettings = obs_encoder_defaults(audioEncoderId);
@@ -637,7 +647,7 @@ void EgressLinkOutput::start()
             obs_audio_encoder_create(audioEncoderId, qPrintable(name), audioEncoderSettings, audioTrack, nullptr);
         if (!audioEncoder) {
             obs_log(LOG_ERROR, "%s: Failed to create audio encoder: %s", qPrintable(name), audioEncoderId);
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
@@ -647,12 +657,12 @@ void EgressLinkOutput::start()
         // Start output
         if (!obs_output_start(output)) {
             obs_log(LOG_ERROR, "%s: Failed to start output", qPrintable(name));
-            setStatus(LINKED_OUTPUT_STATUS_ERROR);
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             return;
         }
 
         obs_log(LOG_INFO, "%s: Activated output", qPrintable(name));
-        setStatus(LINKED_OUTPUT_STATUS_ACTIVE);
+        setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
         apiClient->incrementActiveOutputs();
     };
     innerFunc();
@@ -671,7 +681,7 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
         source = nullptr;
 
         if (output) {
-            if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
+            if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
                 obs_output_stop(output);
             }
         }
@@ -695,17 +705,17 @@ void EgressLinkOutput::releaseResources(bool stopStatus)
 
         sourceView = nullptr;
 
-        if (stopStatus && status != LINKED_OUTPUT_STATUS_INACTIVE) {
+        if (stopStatus && status != EGRESS_LINK_OUTPUT_STATUS_INACTIVE) {
             obs_log(LOG_INFO, "%s: Inactivated output", qPrintable(name));
         }
 
-        if (status == LINKED_OUTPUT_STATUS_STAND_BY) {
+        if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
             apiClient->decrementStandByOutputs();
-        } else if (status == LINKED_OUTPUT_STATUS_ACTIVE) {
+        } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
             apiClient->decrementActiveOutputs();
         }
 
-        setStatus(LINKED_OUTPUT_STATUS_INACTIVE);
+        setStatus(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
     }
     locker.unlock();
 }
@@ -719,7 +729,7 @@ void EgressLinkOutput::stop()
 // Called every OUTPUT_SNAPSHOT_INTERVAL_MSECS
 void EgressLinkOutput::onSnapshotTimerTimeout()
 {
-    if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
+    if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
         return;
     }
 
@@ -739,7 +749,7 @@ void EgressLinkOutput::onSnapshotTimerTimeout()
 void EgressLinkOutput::onMonitoringTimerTimeout()
 {
     auto interlockType = apiClient->getSettings()->value("interlock_type");
-    if (status != LINKED_OUTPUT_STATUS_ACTIVE && status != LINKED_OUTPUT_STATUS_STAND_BY) {
+    if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
         if (interlockType == "always_on") {
             start();
         } else if (interlockType == "streaming") {
@@ -791,7 +801,7 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
 
         auto outputOnLive = output && obs_output_active(output);
         if (!outputOnLive) {
-            if (status != LINKED_OUTPUT_STATUS_STAND_BY) {
+            if (status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
                 obs_log(LOG_DEBUG, "%s: Attempting reactivate output", qPrintable(name));
             }
             start();

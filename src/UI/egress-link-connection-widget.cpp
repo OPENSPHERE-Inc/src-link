@@ -41,7 +41,7 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);
     ui->visibilityCheckBox->setChecked(output->getVisible());
 
-    onOutputStatusChanged(LINKED_OUTPUT_STATUS_INACTIVE);
+    onOutputStatusChanged(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
     updateSourceList();
 
     if (output->getSourceUuid().isEmpty()) {
@@ -97,23 +97,23 @@ void EgressLinkConnectionWidget::onVideoSourceChanged(int)
 void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
 {
     switch (status) {
-    case LINKED_OUTPUT_STATUS_ACTIVE:
+    case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
         ui->statusValueLabel->setText(obs_module_text("Active"));
         setThemeID(ui->statusValueLabel, "good");
         break;
-    case LINKED_OUTPUT_STATUS_STAND_BY:
+    case EGRESS_LINK_OUTPUT_STATUS_STAND_BY:
         ui->statusValueLabel->setText(obs_module_text("StandBy"));
         setThemeID(ui->statusValueLabel, "good");
         break;
-    case LINKED_OUTPUT_STATUS_ERROR:
+    case EGRESS_LINK_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(obs_module_text("Error"));
         setThemeID(ui->statusValueLabel, "error");
         break;
-    case LINKED_OUTPUT_STATUS_INACTIVE:
+    case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
         ui->statusValueLabel->setText(obs_module_text("Inactive"));
         setThemeID(ui->statusValueLabel, "");
         break;
-    case LINKED_OUTPUT_STATUS_DISABLED:
+    case EGRESS_LINK_OUTPUT_STATUS_DISABLED:
         ui->statusValueLabel->setText(obs_module_text("Disabled"));
         setThemeID(ui->statusValueLabel, "");
         break;

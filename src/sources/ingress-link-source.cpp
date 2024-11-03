@@ -92,6 +92,7 @@ IngressLinkSource::IngressLinkSource(
     connect(apiClient, &SRLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
     connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
     connect(apiClient, SIGNAL(webSocketReady(bool)), this, SLOT(onWebSocketReady(bool)));
+    connect(this, SIGNAL(settingsUpdate(obs_data_t *)), this, SLOT(onSettingsUpdate(obs_data_t *)));
 
     renameSignal.Connect(
         obs_source_get_signal_handler(_source), "rename",
@@ -204,7 +205,11 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     height = obs_data_get_int(settings, "height");
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
-    relay = obs_data_get_bool(settings, "relay");
+    if (apiClient->getAccountInfo().getSubscriptionQuota().getMaxRelayConnections() > 0) {
+        relay = obs_data_get_bool(settings, "relay");
+    } else {
+        relay = false;
+    }
 
     if (obs_data_get_bool(settings, "advanced_settings")) {
         reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
@@ -264,11 +269,10 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
     return decoderSettings;
 }
 
-void IngressLinkSource::handleConnection()
+const RequestInvoker *IngressLinkSource::handleConnection()
 {
     if (port > 0 && !stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
-        // Note: apiClient instance might live in a different thread
         DownlinkRequestBody params;
         params.setStageId(stageId);
         params.setSeatName(seatName);
@@ -285,11 +289,11 @@ void IngressLinkSource::handleConnection()
         params.setHeight(height);
         params.setRevision(revision);
 
-        QMetaObject::invokeMethod(apiClient, "putDownlink", Q_ARG(QString, uuid), Q_ARG(DownlinkRequestBody, params));
+        return apiClient->putDownlink(uuid, params);
+
     } else {
         // Unregister connection if no stage/seat/source selected.
-        // Note: apiClient instance might live in a different thread
-        QMetaObject::invokeMethod(apiClient, "deleteDownlink", Q_ARG(QString, uuid));
+        return apiClient->deleteDownlink(uuid);
     }
 }
 
@@ -497,20 +501,26 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
     }
 }
 
-void IngressLinkSource::update(obs_data_t *settings)
+void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
 {
     obs_log(LOG_DEBUG, "%s: Source updating", qPrintable(name));
 
     captureSettings(settings);
-    handleConnection();
+    connect(handleConnection(), &RequestInvoker::finished, [this, settings](QNetworkReply::NetworkError error, QByteArray) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "%s: Source update failed", qPrintable(name));
+            return;
+        }
 
-    OBSDataAutoRelease decoderSettings = createDecoderSettings();
-    obs_source_update(decoderSource, decoderSettings);
+        // Update decoder settings
+        OBSDataAutoRelease decoderSettings = createDecoderSettings();
+        obs_source_update(decoderSource, decoderSettings);
 
-    // Store settings to file as recently settings.
-    saveSettings(settings);
+        // Store settings to file as recently settings.
+        saveSettings(settings);
 
-    obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
+        obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
+    });
 }
 
 void IngressLinkSource::onPutDownlinkFailed(const QString &_uuid)
@@ -577,8 +587,14 @@ void IngressLinkSource::reactivate()
     apiClient->releasePort(port);
     port = apiClient->getFreePort();
 
-    update(settings);
+    onSettingsUpdate(settings);
     obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qPrintable(name), revision);
+}
+
+void IngressLinkSource::updateCallback(obs_data_t *settings)
+{
+     // Note: apiClient instance might live in a different thread
+     emit settingsUpdate(settings);
 }
 
 //--- SourceLinkAudioThread class ---//
@@ -705,7 +721,7 @@ void videoRender(void *data, gs_effect_t *effect)
 void update(void *data, obs_data_t *settings)
 {
     auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
-    ingressLinkSource->update(settings);
+    ingressLinkSource->updateCallback(settings);
 }
 
 obs_source_info createLinkedSourceInfo()

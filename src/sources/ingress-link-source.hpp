@@ -73,10 +73,13 @@ class IngressLinkSource : public QObject {
     // Return value must be release via obs_data_release()
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
-    void handleConnection();
+    const RequestInvoker *handleConnection();
     QString compositeParameters(obs_data_t *settings, bool remote = false);
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);
+
+signals:
+    void settingsUpdate(obs_data_t *settings);
 
 private slots:
     void onPutDownlinkFailed(const QString &uuid);
@@ -85,7 +88,9 @@ private slots:
     void onLoginSucceeded();
     void onLogoutSucceeded();
     void onWebSocketReady(bool reconnect);
-
+    void onSettingsUpdate(obs_data_t *settings);
+    void reactivate();
+    
 public:
     explicit IngressLinkSource(
         obs_data_t *settings, obs_source_t *source, SRLinkApiClient *_apiClient, QObject *parent = nullptr
@@ -95,10 +100,8 @@ public:
     obs_properties_t *getProperties();
     inline uint32_t getWidth() { return width; }
     inline uint32_t getHeight() { return height; }
-    void update(obs_data_t *settings);
-    void reactivate();
-
     void videoRenderCallback(gs_effect_t* effect);
+    void updateCallback(obs_data_t *settings);
 
     static void getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient);
 };
