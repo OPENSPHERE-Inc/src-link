@@ -118,7 +118,7 @@ void SettingsDialog::onLinkingFailed()
 void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
 {
     setClientActive(true);
-    ui->accountName->setText(QString("Logged in: %1").arg(accountInfo.getDisplayName()));
+    ui->accountName->setText(QString("Logged in: %1").arg(accountInfo.getAccount().getDisplayName()));
 }
 
 void SettingsDialog::saveSettings()

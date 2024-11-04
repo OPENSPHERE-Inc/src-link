@@ -38,25 +38,12 @@ class IngressLinkSource : public QObject {
 
     QString uuid;
     QString name;
-    int port;
-    QString stageId;
-    QString seatName;
-    QString sourceName;
-    QString protocol;
-    QString passphrase;
-    QString streamId;
     QString localParameters;
-    QString remoteParameters;
-    int maxBitrate;
-    int minBitrate;
-    int width;
-    int height;
     int reconnectDelaySec;
     int bufferingMb;
     bool hwDecode;
     bool clearOnMediaEnd;
-    bool relay;
-    int revision; // Connection revision
+    DownlinkRequestBody connRequest;
 
     SRLinkApiClient *apiClient;
     OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
@@ -64,17 +51,17 @@ class IngressLinkSource : public QObject {
     ImageRenderer *fillerRenderer;
     speaker_layout speakers;
     uint32_t samplesPerSec;
-    bool active;
     SourceAudioThread *audioThread;
     OBSSignal renameSignal;
-    bool populatedSeat;
+    int revision;
+    StageConnection connection;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
-    const RequestInvoker *handleConnection();
-    QString compositeParameters(obs_data_t *settings, bool remote = false);
+    const RequestInvoker *putConnection();
+    QString compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req, bool remote = false);
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);
 
@@ -98,8 +85,8 @@ public:
     ~IngressLinkSource();
 
     obs_properties_t *getProperties();
-    inline uint32_t getWidth() { return width; }
-    inline uint32_t getHeight() { return height; }
+    inline uint32_t getWidth() { return connRequest.getWidth(); }
+    inline uint32_t getHeight() { return connRequest.getHeight(); }
     void videoRenderCallback(gs_effect_t* effect);
     void updateCallback(obs_data_t *settings);
 

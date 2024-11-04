@@ -37,18 +37,15 @@ IngressLinkSource::IngressLinkSource(
     : QObject(parent),
       weakSource(obs_source_get_weak_source(_source)),
       apiClient(_apiClient),
-      active(false),
       uuid(obs_source_get_uuid(_source)),
-      port(0),
-      revision(0),
       audioThread(nullptr),
-      populatedSeat(false)
+      revision(0)
 {
     name = obs_source_get_name(_source);
     obs_log(LOG_DEBUG, "%s: Source creating", qPrintable(name));
 
     // Allocate port
-    port = apiClient->getFreePort();
+    connRequest.setPort(apiClient->getFreePort());
 
     if (!strcmp(obs_data_get_json(settings), "{}")) {
         // Initial creation -> Load recently settings from file
@@ -69,7 +66,7 @@ IngressLinkSource::IngressLinkSource(
     fillerRenderer = new ImageRenderer(false, fillerFile, this);
 
     // Register connection to server
-    handleConnection();
+    putConnection();
 
     // Start audio handling
     obs_audio_info ai = {0};
@@ -115,7 +112,7 @@ IngressLinkSource::~IngressLinkSource()
     disconnect(this);
 
     apiClient->deleteDownlink(uuid, true);
-    apiClient->releasePort(port);
+    apiClient->releasePort(connRequest.getPort());
 
     // Destroy decoder private source
     audioThread->requestInterruption();
@@ -127,27 +124,27 @@ IngressLinkSource::~IngressLinkSource()
     obs_log(LOG_INFO, "%s: Source destroyed", qPrintable(name));
 }
 
-QString IngressLinkSource::compositeParameters(obs_data_t *settings, bool remote)
+QString IngressLinkSource::compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req, bool remote)
 {
     auto apiSettings = apiClient->getSettings();
     QString parameters;
 
-    if (protocol == "srt") {
+    if (req.getProtocol() == "srt") {
         // Generate SRT parameters
         auto latency = apiSettings->getIngressSrtLatency();
         if (obs_data_get_bool(settings, "advanced_settings")) {
             latency = obs_data_get_int(settings, "srt_latency");
         }
 
-        if (relay) {
+        if (req.getRelay()) {
             auto call = remote ? "publish" : "play";
 
             // FIXME: Currently encryption not supported !
             parameters = QString("mode=caller&latency=%1&streamid=%2/%3/%4")
                              .arg(latency * 1000) // Convert to microseconds
                              .arg(call)
-                             .arg(streamId)
-                             .arg(passphrase);
+                             .arg(req.getStreamId())
+                             .arg(req.getPassphrase());
 
         } else {
             auto mode = apiSettings->getIngressSrtMode();
@@ -165,8 +162,8 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, bool remote
                              .arg(mode)
                              .arg(latency * 1000) // Convert to microseconds
                              .arg(apiSettings->getIngressSrtPbkeylen())
-                             .arg(passphrase)
-                             .arg(streamId);
+                             .arg(req.getPassphrase())
+                             .arg(req.getStreamId());
         }
     }
 
@@ -194,21 +191,24 @@ void IngressLinkSource::saveSettings(obs_data_t *settings)
 
 void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
-    protocol = apiClient->getSettings()->getIngressProtocol();
+    auto newRequest = connRequest;
+    newRequest.setProtocol(apiClient->getSettings()->getIngressProtocol());
+    newRequest.setStageId(obs_data_get_string(settings, "stage_id"));
+    newRequest.setSeatName(obs_data_get_string(settings, "seat_name"));
+    newRequest.setSourceName(obs_data_get_string(settings, "source_name"));
+    newRequest.setMaxBitrate(obs_data_get_int(settings, "max_bitrate"));
+    newRequest.setMinBitrate(obs_data_get_int(settings, "min_bitrate"));
+    newRequest.setWidth(obs_data_get_int(settings, "width"));
+    newRequest.setHeight(obs_data_get_int(settings, "height"));
 
-    stageId = obs_data_get_string(settings, "stage_id");
-    seatName = obs_data_get_string(settings, "seat_name");
-    sourceName = obs_data_get_string(settings, "source_name");
-    maxBitrate = obs_data_get_int(settings, "max_bitrate");
-    minBitrate = obs_data_get_int(settings, "min_bitrate");
-    width = obs_data_get_int(settings, "width");
-    height = obs_data_get_int(settings, "height");
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
-    if (apiClient->getAccountInfo().getSubscriptionQuota().getMaxRelayConnections() > 0) {
-        relay = obs_data_get_bool(settings, "relay");
+
+    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
+    if (quota.getMaxRelayConnections() > 0) {
+        newRequest.setRelay(obs_data_get_bool(settings, "relay"));
     } else {
-        relay = false;
+        newRequest.setRelay(false);
     }
 
     if (obs_data_get_bool(settings, "advanced_settings")) {
@@ -220,35 +220,37 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     }
 
     // Generate new passphrase and stream ID here
-    passphrase = generatePassword(16, "");
-    streamId = generatePassword(32, "");
+    newRequest.setPassphrase(generatePassword(16, ""));
+    newRequest.setStreamId(generatePassword(32, ""));
 
-    localParameters = compositeParameters(settings);
-    remoteParameters = compositeParameters(settings, true);
+    localParameters = compositeParameters(settings, newRequest);
+    newRequest.setParameters(compositeParameters(settings, newRequest, true));
 
-    // Increment connection revision
-    revision++;
+    // Increment revision when we have some changes
+    if (newRequest != connRequest) {
+        revision++;
+    }
+    newRequest.setRevision(revision);
+
+    connRequest = newRequest;
 }
 
 obs_data_t *IngressLinkSource::createDecoderSettings()
 {
     auto decoderSettings = obs_data_create();
 
-    if (populatedSeat && protocol == "srt") {
+    if (!connection.getAllocationId().isEmpty() && connection.getProtocol() == "srt") {
         QString input;
 
-        if (relay) {
-            auto quota = apiClient->getAccountInfo().getSubscriptionQuota();
-            auto facility = apiClient->getAccountInfo().getFacility();
+        if (connection.getRelay()) {
+            auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
 
-            if (!facility.getSrtRelayServer().isEmpty() && quota.getMaxRelayConnections() > 0) {
-                input = QString("srt://%1:%2?%3")
-                            .arg(facility.getSrtRelayServer())
-                            .arg(facility.getSrtRelayPort())
-                            .arg(localParameters);
+            if (quota.getMaxRelayConnections() > 0) {
+                input =
+                    QString("srt://%1:%2?%3").arg(connection.getServer()).arg(connection.getPort()).arg(localParameters);
             }
-        } else if (port > 0) {
-            input = QString("srt://0.0.0.0:%1?%2").arg(port).arg(localParameters);
+        } else {
+            input = QString("srt://0.0.0.0:%1?%2").arg(connection.getPort()).arg(localParameters);
         }
 
         obs_data_set_string(decoderSettings, "input", qPrintable(input));
@@ -269,28 +271,17 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
     return decoderSettings;
 }
 
-const RequestInvoker *IngressLinkSource::handleConnection()
+const RequestInvoker *IngressLinkSource::putConnection()
 {
-    if (port > 0 && !stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
+    auto port = connRequest.getPort();
+    auto relay = connRequest.getRelay();
+    auto stageId = connRequest.getStageId();
+    auto seatName = connRequest.getSeatName();
+    auto sourceName = connRequest.getSourceName();
+
+    if ((port > 0 || relay) && !stageId.isEmpty() && !seatName.isEmpty() && !sourceName.isEmpty()) {
         // Register connection to server
-        DownlinkRequestBody params;
-        params.setStageId(stageId);
-        params.setSeatName(seatName);
-        params.setSourceName(sourceName);
-        params.setProtocol(protocol);
-        params.setPort(port);
-        params.setStreamId(streamId);
-        params.setPassphrase(passphrase);
-        params.setParameters(remoteParameters);
-        params.setRelay(relay);
-        params.setMaxBitrate(maxBitrate);
-        params.setMinBitrate(minBitrate);
-        params.setWidth(width);
-        params.setHeight(height);
-        params.setRevision(revision);
-
-        return apiClient->putDownlink(uuid, params);
-
+        return apiClient->putDownlink(uuid, connRequest);
     } else {
         // Unregister connection if no stage/seat/source selected.
         return apiClient->deleteDownlink(uuid);
@@ -414,7 +405,8 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -> Relay checkbox
     auto relay = obs_properties_add_bool(connectionGroup, "relay", obs_module_text("UseRelayServer"));
-    obs_property_set_enabled(relay, apiClient->getAccountInfo().getSubscriptionQuota().getMaxRelayConnections() > 0);
+    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
+    obs_property_set_enabled(relay, quota.getMaxRelayConnections() > 0);
 
     // Other stage settings
     auto maxBitrate = obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);
@@ -493,7 +485,7 @@ void IngressLinkSource::getDefaults(obs_data_t *settings, SRLinkApiClient *apiCl
 void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 {
     // Just pass through the video
-    if (active) {
+    if (!connection.isEmpty()) {
         obs_source_video_render(decoderSource);
     } else {
         // Display filler image
@@ -506,21 +498,32 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
     obs_log(LOG_DEBUG, "%s: Source updating", qPrintable(name));
 
     captureSettings(settings);
-    connect(handleConnection(), &RequestInvoker::finished, [this, settings](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "%s: Source update failed", qPrintable(name));
-            return;
+    connect(
+        putConnection(), &RequestInvoker::finished,
+        [this, settings](QNetworkReply::NetworkError error, QByteArray replyData) {
+            if (error != QNetworkReply::NoError) {
+                obs_log(LOG_ERROR, "%s: Source update failed", qPrintable(name));
+                return;
+            }
+
+            DownlinkInfo downlink = QJsonDocument::fromJson(replyData).object();
+            if (!downlink.isValid()) {
+                // Downlink deleted
+                return;
+            }
+
+            connection = downlink.getConnection();
+
+            // Update decoder settings
+            OBSDataAutoRelease decoderSettings = createDecoderSettings();
+            obs_source_update(decoderSource, decoderSettings);
+
+            // Store settings to file as recently settings.
+            saveSettings(settings);
+
+            obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
         }
-
-        // Update decoder settings
-        OBSDataAutoRelease decoderSettings = createDecoderSettings();
-        obs_source_update(decoderSource, decoderSettings);
-
-        // Store settings to file as recently settings.
-        saveSettings(settings);
-
-        obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
-    });
+    );
 }
 
 void IngressLinkSource::onPutDownlinkFailed(const QString &_uuid)
@@ -528,7 +531,7 @@ void IngressLinkSource::onPutDownlinkFailed(const QString &_uuid)
     if (_uuid != uuid) {
         return;
     }
-    active = false;
+    connection = StageConnection();
 }
 
 void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &_uuid)
@@ -536,7 +539,7 @@ void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &_uuid)
     if (_uuid != uuid) {
         return;
     }
-    active = false;
+    connection = StageConnection();
 }
 
 void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
@@ -545,14 +548,14 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
         return;
     }
 
-    active = true;
-    auto reactivateNeeded = populatedSeat != !downlink.getConnection().getAllocationId().isEmpty() ||
+    auto populated = !connection.getAllocationId().isEmpty();
+    auto reactivateNeeded = populated != !downlink.getConnection().getAllocationId().isEmpty() ||
                             revision < downlink.getConnection().getRevision();
 
     if (reactivateNeeded) {
-        populatedSeat = !downlink.getConnection().getAllocationId().isEmpty();
+        // Don't capture connection here.
+        // Prevent infinite loop
         revision = downlink.getConnection().getRevision();
-
         // Reconnect occurres
         reactivate();
     }
@@ -562,18 +565,18 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
 void IngressLinkSource::onLoginSucceeded()
 {
     // Re-put connection
-    handleConnection();
+    putConnection();
 }
 
 void IngressLinkSource::onLogoutSucceeded()
 {
-    active = false;
+    connection = StageConnection();
 }
 
 void IngressLinkSource::onWebSocketReady(bool reconnect)
 {
     if (reconnect) {
-        handleConnection();
+        putConnection();
     }
 }
 
@@ -584,8 +587,8 @@ void IngressLinkSource::reactivate()
     OBSDataAutoRelease settings = obs_source_get_settings(source);
 
     // Re-allocate port
-    apiClient->releasePort(port);
-    port = apiClient->getFreePort();
+    apiClient->releasePort(connRequest.getPort());
+    connRequest.setPort(apiClient->getFreePort());
 
     onSettingsUpdate(settings);
     obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qPrintable(name), revision);
@@ -593,8 +596,8 @@ void IngressLinkSource::reactivate()
 
 void IngressLinkSource::updateCallback(obs_data_t *settings)
 {
-     // Note: apiClient instance might live in a different thread
-     emit settingsUpdate(settings);
+    // Note: apiClient instance might live in a different thread
+    emit settingsUpdate(settings);
 }
 
 //--- SourceLinkAudioThread class ---//

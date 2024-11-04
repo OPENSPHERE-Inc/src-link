@@ -279,8 +279,16 @@ const RequestInvoker *SRLinkApiClient::requestAccountInfo()
     connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(accountInfoFailed, "client: Requesting account info failed: %d", error);
 
-        accountInfo = QJsonDocument::fromJson(replyData).object();
-        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getDisplayName()));
+        AccountInfo newAccountInfo = QJsonDocument::fromJson(replyData).object();
+        if (!newAccountInfo.isValid()) {
+            obs_log(LOG_ERROR, "client: Received malformed account info data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit accountInfoFailed();
+            return;
+        }
+
+        accountInfo = newAccountInfo;
+        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getAccount().getDisplayName()));
 
         emit accountInfoReady(accountInfo);
     });
@@ -298,7 +306,15 @@ const RequestInvoker *SRLinkApiClient::requestParties()
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(partiesFailed, "client: Requesting parties failed: %d", error);
 
-        parties = QJsonDocument::fromJson(replyData).array();
+        PartyArray newParties = QJsonDocument::fromJson(replyData).array();
+        if (!newParties.every([](const Party &party) { return party.isValid(); })) {
+            obs_log(LOG_ERROR, "client: Received malformed parties data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit partiesFailed();
+            return;
+        }
+
+        parties = newParties;
         obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
 
         if (settings->getPartyId().isEmpty() && parties.size() > 0) {
@@ -321,7 +337,15 @@ const RequestInvoker *SRLinkApiClient::requestPartyEvents()
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(partyEventsFailed, "client: Requesting party events failed: %d", error);
 
-        partyEvents = QJsonDocument::fromJson(replyData).array();
+        PartyEventArray newPartyEvents = QJsonDocument::fromJson(replyData).array();
+        if (!newPartyEvents.every([](const PartyEvent &event) { return event.isValid(); })) {
+            obs_log(LOG_ERROR, "client: Received malformed party events data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit partyEventsFailed();
+            return;
+        }
+
+        partyEvents = newPartyEvents;
         obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
 
         emit partyEventsReady(partyEvents);
@@ -340,7 +364,15 @@ const RequestInvoker *SRLinkApiClient::requestParticipants()
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(participantsFailed, "client: Requesting participants failed: %d", error);
 
-        participants = QJsonDocument::fromJson(replyData).array();
+        PartyEventParticipantArray newParticipants = QJsonDocument::fromJson(replyData).array();
+        if (!newParticipants.every([](const PartyEventParticipant &participant) { return participant.isValid(); })) {
+            obs_log(LOG_ERROR, "client: Received malformed participants data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit participantsFailed();
+            return;
+        }
+
+        participants = newParticipants;
         obs_log(LOG_DEBUG, "client: Received %d participants", participants.size());
 
         if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
@@ -363,7 +395,15 @@ const RequestInvoker *SRLinkApiClient::requestStages()
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         CHECK_RESPONSE_NOERROR(stagesFailed, "client: Requesting receivers failed: %d", error);
 
-        stages = QJsonDocument::fromJson(replyData).array();
+        StageArray newStages = QJsonDocument::fromJson(replyData).array();
+        if (!newStages.every([](const Stage &stage) { return stage.isValid(); })) {
+            obs_log(LOG_ERROR, "client: Received malformed receivers data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit stagesFailed();
+            return;
+        }
+
+        stages = newStages;
         obs_log(LOG_DEBUG, "client: Received %d receivers", stages.size());
 
         emit stagesReady(stages);
@@ -387,7 +427,15 @@ const RequestInvoker *SRLinkApiClient::requestUplink()
         }
         obs_log(LOG_DEBUG, "client: Received uplink for %s", qPrintable(uuid));
 
-        uplink = QJsonDocument::fromJson(replyData).object();
+        UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
+        if (!newUplink.isValid()) {
+            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit uplinkFailed(uuid);
+            return;
+        }
+
+        uplink = newUplink;
 
         emit uplinkReady(uplink);
     });
@@ -412,7 +460,15 @@ const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid
             }
             obs_log(LOG_DEBUG, "client: Received downlink for %s", qPrintable(sourceUuid));
 
-            downlinks[sourceUuid] = QJsonDocument::fromJson(replyData).object();
+            DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
+            if (!newDownlink.isValid()) {
+                obs_log(LOG_ERROR, "client: Received malformed downlink data.");
+                obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+                emit downlinkFailed(sourceUuid);
+                return;
+            }
+
+            downlinks[sourceUuid] = newDownlink;
 
             emit downlinkReady(downlinks[sourceUuid]);
         }
@@ -435,17 +491,23 @@ const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, co
         invoker, &RequestInvoker::finished,
         [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                if (error != QNetworkReply::NoError) {
-                    obs_log(
-                        LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid),
-                        params.getRevision(), error
-                    );
-                    emit putDownlinkFailed(sourceUuid);
-                    return;
-                }
+                obs_log(
+                    LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid),
+                    params.getRevision(), error
+                );
+                emit putDownlinkFailed(sourceUuid);
+                return;
             }
 
-            downlinks[sourceUuid] = QJsonDocument::fromJson(replyData).object();
+            DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
+            if (!newDownlink.isValid()) {
+                obs_log(LOG_ERROR, "client: Received malformed downlink data.");
+                obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+                emit putDownlinkFailed(sourceUuid);
+                return;
+            }
+
+            downlinks[sourceUuid] = newDownlink;
             obs_log(
                 LOG_DEBUG, "client: Put downlink %s rev.%d succeeded",
                 qPrintable(downlinks[sourceUuid].getConnection().getId()), params.getRevision()
@@ -514,7 +576,16 @@ const RequestInvoker *SRLinkApiClient::putUplink(const bool force)
         }
         obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qPrintable(uuid));
 
-        uplink = QJsonDocument::fromJson(replyData).object();
+        UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
+        if (!newUplink.isValid()) {
+            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit putUplinkFailed(uuid);
+            emit uplinkFailed(uuid);
+            return;
+        }
+
+        uplink = newUplink;
 
         websocket->subscribe("uplink", {{"uuid", uuid}});
 
@@ -549,7 +620,16 @@ const RequestInvoker *SRLinkApiClient::putUplinkStatus()
         }
         obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qPrintable(uuid));
 
-        uplink = QJsonDocument::fromJson(replyData).object();
+        UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
+        if (!newUplink.isValid()) {
+            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
+            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            emit putUplinkStatusFailed(uuid);
+            emit uplinkFailed(uuid);
+            return;
+        }
+
+        uplink = newUplink;
 
         emit putUplinkStatusSucceeded(uplink);
         emit uplinkReady(uplink);
@@ -710,6 +790,7 @@ void SRLinkApiClient::onWebSocketReady(bool reconnect)
     websocket->subscribe("uplink", {{"uuid", uuid}});
     websocket->subscribe("stages");
     websocket->subscribe("participants");
+    websocket->subscribe("accounts");
 
     foreach (auto sourceUuid, downlinks.keys()) {
         websocket->subscribe("downlink", {{"uuid", sourceUuid}});
@@ -733,51 +814,123 @@ void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString 
     obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qPrintable(name), qPrintable(id));
 
     if (name == "uplink.allocations") {
-        uplink.setAllocation(payload);
+        StageSeatAllocation newAllocation = payload;
+        if (!newAllocation.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed allocation data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
+        uplink.setAllocation(newAllocation);
         emit uplinkReady(uplink);
 
     } else if (name == "uplink.stages") {
-        uplink.setStage(payload);
+        Stage newStage = payload;
+        if (!newStage.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed stage data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
+        uplink.setStage(newStage);
         emit uplinkReady(uplink);
 
     } else if (name == "uplink.connections") {
+        StageConnection newConnection = payload;
+        if (!newConnection.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed connection data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
         auto connections = uplink.getConnections();
         auto index =
             connections.findIndex([id](const StageConnection &connection) { return connection.getId() == id; });
         if (index >= 0) {
-            connections.replace(index, payload);
+            connections.replace(index, newConnection);
         } else {
-            connections.append(payload);
+            connections.append(newConnection);
         }
         uplink["connections"] = connections;
         emit uplinkReady(uplink);
 
     } else if (name == "downlink.connections") {
         StageConnection newConnection = payload;
+        if (!newConnection.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed connection data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
         downlinks[id]["connection"] = newConnection;
         emit downlinkReady(downlinks[id]);
 
     } else if (name == "stages") {
-        Stage stage = payload;
+        Stage newStage = payload;
+        if (!newStage.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed stage data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
         auto index = stages.findIndex([id](const Stage &stage) { return stage.getId() == id; });
         if (index >= 0) {
-            stages.replace(index, stage);
+            stages.replace(index, newStage);
         } else {
-            stages.append(stage);
+            stages.append(newStage);
         }
         emit stagesReady(stages);
 
     } else if (name == "participants") {
-        PartyEventParticipant participant = payload;
+        PartyEventParticipant newParticipant = payload;
+        if (!newParticipant.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed participant data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
         auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
             return participant.getId() == id;
         });
         if (index >= 0) {
-            participants.replace(index, participant);
+            participants.replace(index, newParticipant);
         } else {
-            participants.append(participant);
+            participants.append(newParticipant);
         }
         emit participantsReady(participants);
+
+    } else if (name == "accounts") {
+        Account newAccount = payload;
+        if (!newAccount.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed account data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
+        accountInfo.setAccount(newAccount);
+        emit accountInfoReady(accountInfo);
+
+    } else if (name == "accounts.licenses") {
+        SubscriptionLicense newLicense = payload;
+        if (!newLicense.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed license data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
+        accountInfo.setSubscriptionLicense(newLicense);
+        emit accountInfoReady(accountInfo);
+
+    } else if (name == "accounts.resourceUsage") {
+        AccountResourceUsage newResourceUsage = payload;
+        if (!newResourceUsage.isValid()) {
+            obs_log(LOG_ERROR, "client: Malformed resource usage data received.");
+            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            return;
+        }
+
+        accountInfo.setResourceUsage(newResourceUsage);
+        emit accountInfoReady(accountInfo);
     }
 }
 
@@ -828,5 +981,12 @@ void SRLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString 
             participants.removeAt(index);
             emit participantsReady(participants);
         }
+
+    } else if (name == "accounts.licenses" || name == "accounts.resourceUsage") {
+        // Do nothing
+
+    } else if (name == "accounts") {
+        // Account removed -> logout immediately
+        logout();
     }
 }

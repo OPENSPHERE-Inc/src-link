@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QMainWindow>
+#include <QDir>
 
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"

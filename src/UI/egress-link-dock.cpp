@@ -87,11 +87,12 @@ EgressLinkDock::~EgressLinkDock()
 
 void EgressLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
 {
-    ui->accountNameLabel->setText(accountInfo.getDisplayName());
-    ui->accountPictureLabel->setProperty("pictureId", accountInfo.getPictureId());
+    auto account = accountInfo.getAccount();
+    ui->accountNameLabel->setText(account.getDisplayName());
+    ui->accountPictureLabel->setProperty("pictureId", account.getPictureId());
 
-    if (!accountInfo.getPictureId().isEmpty()) {
-        apiClient->getPicture(accountInfo.getPictureId());
+    if (!account.getPictureId().isEmpty()) {
+        apiClient->getPicture(account.getPictureId());
     } else {
         ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     }
