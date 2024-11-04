@@ -39,8 +39,7 @@ class EgressLinkConnectionWidget : public QWidget {
     OBSSignal sourceRemoveSignal;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
-
-    void setEnableVideoSourceChangeEvent(bool enabled);
+    static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 
 private slots:
     void onSettingsButtonClick();

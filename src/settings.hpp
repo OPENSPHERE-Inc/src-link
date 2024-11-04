@@ -49,8 +49,6 @@ public:
     inline void setIngressPortMin(int value) { setValue("ingress.portMin", QString::number(value)); }
     inline QString getIngressProtocol() { return value("ingress.protocol", "srt"); }
     inline void setIngressProtocol(const QString &value) { setValue("ingress.protocol", value); }
-    inline QString getIngressSrtMode() { return value("ingress.srtMode", "listener"); }
-    inline void setIngressSrtMode(const QString &value) { setValue("ingress.srtMode", value); }
     inline int getIngressSrtLatency() { return value("ingress.srtLatency", "200").toInt(); }
     inline void setIngressSrtLatency(int value) { setValue("ingress.srtLatency", QString::number(value)); }
     inline int getIngressSrtPbkeylen() { return value("ingress.srtPbkeylen", "16").toInt(); }

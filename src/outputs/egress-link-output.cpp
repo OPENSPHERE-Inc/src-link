@@ -116,6 +116,8 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiCl
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
     connect(apiClient, &SRLinkApiClient::egressRefreshNeeded, this, [this]() { refresh(); });
 
+    obs_frontend_add_event_callback(onOBSFrontendEvent, this);
+
     obs_log(LOG_INFO, "%s: Output created", qUtf8Printable(name));
 }
 
@@ -127,7 +129,18 @@ EgressLinkOutput::~EgressLinkOutput()
 
     stop();
 
+    obs_frontend_remove_event_callback(onOBSFrontendEvent, this);
+
     obs_log(LOG_INFO, "%s: Output destroyed", qUtf8Printable(name));
+}
+
+void EgressLinkOutput::onOBSFrontendEvent(enum obs_frontend_event event, void *param)
+{
+    auto output = (EgressLinkOutput *)param;
+    // Force stop on shutdown
+    if (event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN) {
+        output->stop();
+    }
 }
 
 void EgressLinkOutput::refresh()
@@ -267,8 +280,8 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 const auto format = obs_property_list_format(encoderBitrateProp);
                 if (format != OBS_COMBO_FORMAT_INT) {
                     obs_log(
-                        LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s", qUtf8Printable(output->getName()),
-                        encoderId
+                        LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s",
+                        qUtf8Printable(output->getName()), encoderId
                     );
                     result = false;
                     break;
@@ -390,7 +403,7 @@ void EgressLinkOutput::setSourceUuid(const QString &value)
 
     obs_log(LOG_INFO, "%s: Source changed: %s", qUtf8Printable(name), qUtf8Printable(value));
 
-    obs_data_set_string(settings, "source_uuid", qPrintable(value));
+    obs_data_set_string(settings, "source_uuid", qUtf8Printable(value));
     saveSettings();
 
     // Increment revision to restart output
@@ -405,7 +418,7 @@ void EgressLinkOutput::loadSettings()
     getDefaults(settings);
 
     // Load settings from json
-    OBSString path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    OBSString path = obs_module_get_config_path(obs_current_module(), qUtf8Printable(QString("%1.json").arg(name)));
     OBSDataAutoRelease data = obs_data_create_from_json_file(path);
 
     if (data) {
@@ -419,7 +432,7 @@ void EgressLinkOutput::loadSettings()
 void EgressLinkOutput::saveSettings()
 {
     // Save settings to json file
-    OBSString path = obs_module_get_config_path(obs_current_module(), qPrintable(QString("%1.json").arg(name)));
+    OBSString path = obs_module_get_config_path(obs_current_module(), qUtf8Printable(QString("%1.json").arg(name)));
     obs_data_save_json_safe(settings, path, "tmp", "bak");
 }
 
@@ -434,7 +447,7 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connec
                           .arg(connection.getPort())
                           .arg(connection.getParameters());
         obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server));
-        obs_data_set_string(egressSettings, "server", qPrintable(server));
+        obs_data_set_string(egressSettings, "server", qUtf8Printable(server));
     } else {
         return nullptr;
     }
@@ -470,7 +483,7 @@ void EgressLinkOutput::start()
 
         if (!activeSourceUuid.isEmpty()) {
             // Get reference for specific source
-            source = obs_get_source_by_uuid(qPrintable(activeSourceUuid));
+            source = obs_get_source_by_uuid(qUtf8Printable(activeSourceUuid));
             if (!source) {
                 obs_log(LOG_ERROR, "%s: Source not found: %s", qUtf8Printable(name), qUtf8Printable(activeSourceUuid));
                 setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
@@ -478,6 +491,10 @@ void EgressLinkOutput::start()
             }
             // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
             obs_source_inc_showing(source);
+
+            obs_log(
+                LOG_DEBUG, "%s: Video source is %s", qUtf8Printable(name), qUtf8Printable(obs_source_get_name(source))
+            );
         }
 
         // Retrieve connection
@@ -510,7 +527,7 @@ void EgressLinkOutput::start()
         }
 
         // Service : always use rtmp_custom
-        service = obs_service_create("rtmp_custom", qPrintable(name), egressSettings, nullptr);
+        service = obs_service_create("rtmp_custom", qUtf8Printable(name), egressSettings, nullptr);
         if (!service) {
             obs_log(LOG_ERROR, "%s: Failed to create service", qUtf8Printable(name));
             setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
@@ -518,7 +535,7 @@ void EgressLinkOutput::start()
         }
 
         // Output : always use ffmpeg_mpegts_muxer
-        output = obs_output_create("ffmpeg_mpegts_muxer", qPrintable(name), egressSettings, nullptr);
+        output = obs_output_create("ffmpeg_mpegts_muxer", qUtf8Printable(name), egressSettings, nullptr);
         if (!output) {
             obs_log(LOG_ERROR, "%s: Failed to create output", qUtf8Printable(name));
             setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
@@ -573,6 +590,7 @@ void EgressLinkOutput::start()
         }
         if (audioSourceUuid == "no_audio") {
             // Silence
+            obs_log(LOG_DEBUG, "%s: Audio source: silence", qUtf8Printable(name));
             audioSilence = createSilenceAudio();
             if (!audioSilence) {
                 obs_log(LOG_ERROR, "%s: Failed to create silence audio", qUtf8Printable(name));
@@ -582,8 +600,12 @@ void EgressLinkOutput::start()
             audio = audioSilence;
         } else if (!audioSourceUuid.isEmpty() && audioSourceUuid != "master_track") {
             // Not master audio
-            OBSSourceAutoRelease source = obs_get_source_by_uuid(qPrintable(audioSourceUuid));
-            if (source) {
+            OBSSourceAutoRelease customSource = obs_get_source_by_uuid(qUtf8Printable(audioSourceUuid));
+            if (customSource) {
+                obs_log(
+                    LOG_DEBUG, "%s: Audio source: %s", qUtf8Printable(name),
+                    qUtf8Printable(obs_source_get_name(customSource))
+                );
                 obs_audio_info ai = {0};
                 if (!obs_get_audio_info(&ai)) {
                     obs_log(LOG_ERROR, "%s: Failed to get audio info", qUtf8Printable(name));
@@ -591,7 +613,7 @@ void EgressLinkOutput::start()
                     return;
                 }
 
-                audioSource = new OutputAudioSource(source, ai.samples_per_sec, ai.speakers, this);
+                audioSource = new OutputAudioSource(customSource, ai.samples_per_sec, ai.speakers, this);
                 audio = audioSource->getAudio();
                 if (!audio) {
                     obs_log(LOG_ERROR, "%s: Failed to create audio source", qUtf8Printable(name));
@@ -611,7 +633,7 @@ void EgressLinkOutput::start()
             return;
         }
         obs_log(LOG_DEBUG, "%s: Video encoder: %s", qUtf8Printable(name), videoEncoderId);
-        videoEncoder = obs_video_encoder_create(videoEncoderId, qPrintable(name), egressSettings, nullptr);
+        videoEncoder = obs_video_encoder_create(videoEncoderId, qUtf8Printable(name), egressSettings, nullptr);
         if (!videoEncoder) {
             obs_log(LOG_ERROR, "%s: Failed to create video encoder: %s", qUtf8Printable(name), videoEncoderId);
             setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
@@ -642,10 +664,11 @@ void EgressLinkOutput::start()
         if (audioSourceUuid == "master_track") {
             size_t value = obs_data_get_int(egressSettings, "audio_track");
             audioTrack = value - 1;
+            obs_log(LOG_DEBUG, "%s: Audio source: Master track %d", qUtf8Printable(name), value);
         }
 
         audioEncoder =
-            obs_audio_encoder_create(audioEncoderId, qPrintable(name), audioEncoderSettings, audioTrack, nullptr);
+            obs_audio_encoder_create(audioEncoderId, qUtf8Printable(name), audioEncoderSettings, audioTrack, nullptr);
         if (!audioEncoder) {
             obs_log(LOG_ERROR, "%s: Failed to create audio encoder: %s", qUtf8Printable(name), audioEncoderId);
             setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);

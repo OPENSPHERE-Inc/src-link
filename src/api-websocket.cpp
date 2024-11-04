@@ -99,7 +99,7 @@ void SRLinkWebSocketClient::onTextMessageReceived(QString message)
     } else if (messageObj.getEvent() == "removed") {
         emit removed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else {
-        obs_log(LOG_WARNING, "WebSocket unknown message: %s", qPrintable(message));
+        obs_log(LOG_WARNING, "WebSocket unknown message: %s", qUtf8Printable(message));
     }
 }
 
@@ -121,7 +121,7 @@ void SRLinkWebSocketClient::start()
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket connecting: %s", qPrintable(url.toString()));
+    obs_log(LOG_DEBUG, "WebSocket connecting: %s", qUtf8Printable(url.toString()));
     started = true;
     reconnectCount = 0;
     open();
@@ -144,7 +144,7 @@ void SRLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &pa
         return;
     }
     
-    obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qPrintable(name));
+    obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qUtf8Printable(name));
 
     QJsonObject message;
     message["event"] = "subscribe";
@@ -160,7 +160,7 @@ void SRLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket unsubscribe: %s", qPrintable(name));
+    obs_log(LOG_DEBUG, "WebSocket unsubscribe: %s", qUtf8Printable(name));
 
     QJsonObject message;
     message["event"] = "unsubscribe";

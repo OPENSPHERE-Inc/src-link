@@ -21,6 +21,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "request-invoker.hpp"
 #include "plugin-support.h"
 
+//#define LOG_REQUEST_QUEUE_TRACE
+
+#ifdef LOG_REQUEST_QUEUE_TRACE
+#  define TRACE(...) obs_log(LOG_DEBUG, __VA_ARGS__)
+#else
+#  define TRACE(...) 
+#endif
+
 //--- RequestSequencer class ---//
 
 RequestSequencer::RequestSequencer(QNetworkAccessManager *_networkManager, O2 *_client, QObject *parent)
@@ -28,7 +36,7 @@ RequestSequencer::RequestSequencer(QNetworkAccessManager *_networkManager, O2 *_
       networkManager(_networkManager),
       client(_client)
 {
-    obs_log(LOG_DEBUG, "RequestSequencer created");
+    TRACE("RequestSequencer created");
 }
 
 RequestSequencer::~RequestSequencer()
@@ -37,14 +45,14 @@ RequestSequencer::~RequestSequencer()
         obs_log(LOG_WARNING, "Remaining %d requests in queue.", requestQueue.size());
     }
 
-    obs_log(LOG_DEBUG, "RequestSequencer destroyed");
+    TRACE("RequestSequencer destroyed");
 }
 
 //--- RequestInvoker class ---//
 
 RequestInvoker::RequestInvoker(RequestSequencer *_sequencer, QObject *parent) : QObject(parent), sequencer(_sequencer)
 {
-    obs_log(LOG_DEBUG, "RequestInvoker created (Sequential)");
+    TRACE("RequestInvoker created (Sequential)");
 }
 
 RequestInvoker::RequestInvoker(QNetworkAccessManager *networkManager, O2 *client, QObject *parent)
@@ -52,13 +60,13 @@ RequestInvoker::RequestInvoker(QNetworkAccessManager *networkManager, O2 *client
       sequencer(nullptr)
 {
     sequencer = new RequestSequencer(networkManager, client, this);
-    obs_log(LOG_DEBUG, "RequestInvoker created (Parallel)");
+    TRACE("RequestInvoker created (Parallel)");
 }
 
 RequestInvoker::~RequestInvoker()
 {
     disconnect(this);
-    obs_log(LOG_DEBUG, "RequestInvoker destroyed");
+    TRACE("RequestInvoker destroyed");
 }
 
 template<class Func> void RequestInvoker::queue(Func invoker)
@@ -75,7 +83,7 @@ template<class Func> void RequestInvoker::queue(Func invoker)
             connect(sequencer->requestQueue.last(), &RequestInvoker::finished, invoker);
             sequencer->requestQueue.append(this);
         }
-        obs_log(LOG_DEBUG, "Queue request: size=%d", sequencer->requestQueue.size());
+        TRACE("Queue request: size=%d", sequencer->requestQueue.size());
     }
     locker.unlock();
 }
@@ -87,7 +95,7 @@ void RequestInvoker::refresh()
         SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
     );
     queue([this]() {
-        obs_log(LOG_DEBUG, "Invoke refresh token");
+        TRACE("Invoke refresh token");
         sequencer->client->refresh();
     });
 }
@@ -150,7 +158,7 @@ void RequestInvoker::customRequest(
 
 void RequestInvoker::onRequestorFinished(int _requestId, QNetworkReply::NetworkError error, QByteArray data)
 {
-    obs_log(LOG_DEBUG, "Request finished: %d", _requestId);
+    TRACE("Request finished: %d", _requestId);
 
     QMutexLocker locker(&sequencer->mutex);
     {
@@ -167,7 +175,7 @@ void RequestInvoker::onO2RefreshFinished(QNetworkReply::NetworkError error)
     if (error != QNetworkReply::NoError) {
         obs_log(LOG_ERROR, "Refresh failed: %d", error);
     } else {
-        obs_log(LOG_DEBUG, "Refresh finished");
+        TRACE("Refresh finished");
     }
 
     QMutexLocker locker(&sequencer->mutex);

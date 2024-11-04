@@ -637,7 +637,8 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getAllocation().isValid() && getStage().isValid() && (*this)["connections"].isArray() &&
+        auto valid = maybe((*this)["allocation"], getAllocation().isValid()) && getStage().isValid() &&
+                     (*this)["connections"].isArray() &&
                      getConnections().every([](const StageConnection &value) { return value.isValid(); });
         return valid;
     }

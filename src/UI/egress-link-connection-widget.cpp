@@ -55,10 +55,12 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     );
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
-    setEnableVideoSourceChangeEvent(true);
+    connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
 
     sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
-    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_dstroy", onOBSSourcesChanged, this);
+
+    obs_frontend_add_event_callback(onOBSFrontendEvent, this);
 
     obs_log(LOG_DEBUG, "EgressLinkConnectionWidget created");
 }
@@ -70,17 +72,26 @@ EgressLinkConnectionWidget::~EgressLinkConnectionWidget()
     sourceCreateSignal.Disconnect();
     sourceRemoveSignal.Disconnect();
 
+    obs_frontend_remove_event_callback(onOBSFrontendEvent, this);
+
     delete output;
 
     obs_log(LOG_DEBUG, "EgressLinkConnectionWidget destroyed");
 }
 
-void EgressLinkConnectionWidget::setEnableVideoSourceChangeEvent(bool enabled)
+void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
 {
-    if (enabled) {
-        connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
-    } else {
-        disconnect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
+    auto widget = (EgressLinkConnectionWidget *)data;
+    widget->updateSourceList();
+}
+
+void EgressLinkConnectionWidget::onOBSFrontendEvent(enum obs_frontend_event event, void *param)
+{
+    auto widget = (EgressLinkConnectionWidget *)param;
+    // Prevent to reset output config
+    if (event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN) {
+        widget->sourceCreateSignal.Disconnect();
+        widget->sourceRemoveSignal.Disconnect();
     }
 }
 
@@ -91,6 +102,7 @@ void EgressLinkConnectionWidget::onSettingsButtonClick()
 
 void EgressLinkConnectionWidget::onVideoSourceChanged(int)
 {
+    obs_log(LOG_DEBUG, "Video source changed: %s", qUtf8Printable(ui->videoSourceComboBox->currentText()));
     output->setSourceUuid(ui->videoSourceComboBox->currentData().toString());
 }
 
@@ -98,23 +110,23 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
 {
     switch (status) {
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
-        ui->statusValueLabel->setText(obs_module_text("Active"));
+        ui->statusValueLabel->setText(QTStr("Active"));
         setThemeID(ui->statusValueLabel, "good");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_STAND_BY:
-        ui->statusValueLabel->setText(obs_module_text("StandBy"));
+        ui->statusValueLabel->setText(QTStr("StandBy"));
         setThemeID(ui->statusValueLabel, "good");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_ERROR:
-        ui->statusValueLabel->setText(obs_module_text("Error"));
+        ui->statusValueLabel->setText(QTStr("Error"));
         setThemeID(ui->statusValueLabel, "error");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
-        ui->statusValueLabel->setText(obs_module_text("Inactive"));
+        ui->statusValueLabel->setText(QTStr("Inactive"));
         setThemeID(ui->statusValueLabel, "");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_DISABLED:
-        ui->statusValueLabel->setText(obs_module_text("Disabled"));
+        ui->statusValueLabel->setText(QTStr("Disabled"));
         setThemeID(ui->statusValueLabel, "");
         break;
     }
@@ -123,12 +135,12 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
 void EgressLinkConnectionWidget::updateSourceList()
 {
     // Prevent event triggering during changing combo box items
-    setEnableVideoSourceChangeEvent(false);
+    ui->videoSourceComboBox->blockSignals(true);
     {
         auto selected = output->getSourceUuid(); // The output keeps current value
         ui->videoSourceComboBox->clear();
-        ui->videoSourceComboBox->addItem(obs_module_text("None"), "disabled");
-        ui->videoSourceComboBox->addItem(obs_module_text("ProgramOut"), "");
+        ui->videoSourceComboBox->addItem(QTStr("None"), "disabled");
+        ui->videoSourceComboBox->addItem(QTStr("ProgramOut"), "");
 
         obs_enum_sources(
             [](void *param, obs_source_t *source) {
@@ -154,7 +166,7 @@ void EgressLinkConnectionWidget::updateSourceList()
             onVideoSourceChanged(1);
         }
     }
-    setEnableVideoSourceChangeEvent(true);
+    ui->videoSourceComboBox->blockSignals(false);
 }
 
 void EgressLinkConnectionWidget::setSource(const StageSource &_source)
@@ -171,12 +183,6 @@ void EgressLinkConnectionWidget::setSource(const StageSource &_source)
 
     outputDialog->setWindowTitle(source.getDisplayName());
     output->setName(source.getName());
-}
-
-void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
-{
-    auto widget = (EgressLinkConnectionWidget *)data;
-    widget->updateSourceList();
 }
 
 void EgressLinkConnectionWidget::onVisibilityChanged(bool value)

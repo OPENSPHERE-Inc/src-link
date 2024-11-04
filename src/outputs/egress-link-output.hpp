@@ -78,6 +78,8 @@ class EgressLinkOutput : public QObject {
     void setStatus(EgressLinkOutputStatus value);
     void releaseResources(bool stopStatus = false);
 
+    static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
+
 signals:
     void statusChanged(EgressLinkOutputStatus status);
 

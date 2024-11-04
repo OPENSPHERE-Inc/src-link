@@ -39,11 +39,11 @@ EgressLinkDock::EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent)
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
 
-    ui->interlockTypeComboBox->addItem("Streaming", "streaming");
-    ui->interlockTypeComboBox->addItem("Recording", "recording");
-    ui->interlockTypeComboBox->addItem("Streaming or Recording", "streaming_recording");
-    ui->interlockTypeComboBox->addItem("Virtual Cam", "virtual_cam");
-    ui->interlockTypeComboBox->addItem("Always ON", "always_on");
+    ui->interlockTypeComboBox->addItem(QTStr("Streaming"), "streaming");
+    ui->interlockTypeComboBox->addItem(QTStr("Recording"), "recording");
+    ui->interlockTypeComboBox->addItem(QTStr("StreamingOrRecording"), "streaming_recording");
+    ui->interlockTypeComboBox->addItem(QTStr("VirtualCam"), "virtual_cam");
+    ui->interlockTypeComboBox->addItem(QTStr("AlwaysON"), "always_on");
 
     ui->interlockTypeComboBox->setCurrentIndex(
         ui->interlockTypeComboBox->findData(apiClient->getSettings()->value("interlock_type", "streaming"))
@@ -189,17 +189,17 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
     updateConnections(uplink.getStage());
 
     if (!uplink.getAllocation().isEmpty()) {
-        ui->seatAllocationStatus->setText(QString("Ready"));
+        ui->seatAllocationStatus->setText(QTStr("Ready"));
         setThemeID(ui->seatAllocationStatus, "good");
     } else {
-        ui->seatAllocationStatus->setText(QString("No slot"));
+        ui->seatAllocationStatus->setText(QTStr("NoSlot"));
         setThemeID(ui->seatAllocationStatus, "error");
     }
 }
 
 void EgressLinkDock::onUplinkFailed(const QString &)
 {
-    ui->seatAllocationStatus->setText(QString("No slot"));
+    ui->seatAllocationStatus->setText(QTStr("NoSlot"));
     setThemeID(ui->seatAllocationStatus, "error");
 
     qDeleteAll(connectionWidgets);
@@ -250,7 +250,8 @@ void EgressLinkDock::onInterlockTypeChanged(int)
 void EgressLinkDock::onLogoutButtonClicked()
 {
     int ret = QMessageBox::warning(
-        this, "Logout", "Are you sure you want to logout?", QMessageBox::Yes | QMessageBox::Cancel
+        // "Are you sure you want to logout?"
+        this, QTStr("Logout"), QTStr("LogoutConfirmation"), QMessageBox::Yes | QMessageBox::Cancel
     );
 
     if (ret == QMessageBox::Yes) {

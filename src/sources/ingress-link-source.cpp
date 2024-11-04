@@ -42,7 +42,7 @@ IngressLinkSource::IngressLinkSource(
       revision(0)
 {
     name = obs_source_get_name(_source);
-    obs_log(LOG_DEBUG, "%s: Source creating", qPrintable(name));
+    obs_log(LOG_DEBUG, "%s: Source creating", qUtf8Printable(name));
 
     // Allocate port
     connRequest.setPort(apiClient->getFreePort());
@@ -58,7 +58,7 @@ IngressLinkSource::IngressLinkSource(
     // Create decoder private source (SRT, RIST, etc.)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
     QString decoderName = QString("%1 (decoder)").arg(obs_source_get_name(_source));
-    decoderSource = obs_source_create_private("ffmpeg_source", qPrintable(decoderName), decoderSettings);
+    decoderSource = obs_source_create_private("ffmpeg_source", qUtf8Printable(decoderName), decoderSettings);
     obs_source_inc_active(decoderSource);
 
     // Create filler private source
@@ -100,12 +100,12 @@ IngressLinkSource::IngressLinkSource(
         this
     );
 
-    obs_log(LOG_INFO, "%s: Source created", qPrintable(name));
+    obs_log(LOG_INFO, "%s: Source created", qUtf8Printable(name));
 }
 
 IngressLinkSource::~IngressLinkSource()
 {
-    obs_log(LOG_DEBUG, "%s: Source destroying", qPrintable(name));
+    obs_log(LOG_DEBUG, "%s: Source destroying", qUtf8Printable(name));
 
     renameSignal.Disconnect();
 
@@ -121,7 +121,7 @@ IngressLinkSource::~IngressLinkSource()
 
     obs_source_dec_active(decoderSource);
 
-    obs_log(LOG_INFO, "%s: Source destroyed", qPrintable(name));
+    obs_log(LOG_INFO, "%s: Source destroyed", qUtf8Printable(name));
 }
 
 QString IngressLinkSource::compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req, bool remote)
@@ -147,17 +147,7 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, const Downl
                              .arg(req.getPassphrase());
 
         } else {
-            auto mode = apiSettings->getIngressSrtMode();
-            if (remote) {
-                // Invert mode for remote
-                // NOTE: We cannot use rendezvous mode. It won't work most environment.
-                if (mode == "listener") {
-                    mode = "caller";
-                } else if (mode == "caller") {
-                    mode = "listener";
-                }
-            }
-
+            auto mode = remote ? "caller" : "listener";
             parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
                              .arg(mode)
                              .arg(latency * 1000) // Convert to microseconds
@@ -253,7 +243,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
             input = QString("srt://0.0.0.0:%1?%2").arg(connection.getPort()).arg(localParameters);
         }
 
-        obs_data_set_string(decoderSettings, "input", qPrintable(input));
+        obs_data_set_string(decoderSettings, "input", qUtf8Printable(input));
 
     } else {
         obs_data_set_string(decoderSettings, "input", "");
@@ -290,7 +280,7 @@ const RequestInvoker *IngressLinkSource::putConnection()
 
 obs_properties_t *IngressLinkSource::getProperties()
 {
-    obs_log(LOG_DEBUG, "%s: Properties creating", qPrintable(name));
+    obs_log(LOG_DEBUG, "%s: Properties creating", qUtf8Printable(name));
     auto props = obs_properties_create();
     obs_properties_set_flags(props, OBS_PROPERTIES_DEFER_UPDATE);
 
@@ -304,7 +294,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     );
     obs_property_list_add_string(stageList, "", "");
     foreach (auto &stage, apiClient->getStages().values()) {
-        obs_property_list_add_string(stageList, qPrintable(stage.getName()), qPrintable(stage.getId()));
+        obs_property_list_add_string(stageList, qUtf8Printable(stage.getName()), qUtf8Printable(stage.getId()));
     }
 
     // Connection group -> Seat list
@@ -357,11 +347,13 @@ obs_properties_t *IngressLinkSource::getProperties()
             }
 
             foreach (auto &seat, stage.getSeats().values()) {
-                obs_property_list_add_string(seatList, qPrintable(seat.getDisplayName()), qPrintable(seat.getName()));
+                obs_property_list_add_string(
+                    seatList, qUtf8Printable(seat.getDisplayName()), qUtf8Printable(seat.getName())
+                );
             }
             foreach (auto &source, stage.getSources().values()) {
                 obs_property_list_add_string(
-                    sourceList, qPrintable(source.getDisplayName()), qPrintable(source.getName())
+                    sourceList, qUtf8Printable(source.getDisplayName()), qUtf8Printable(source.getName())
                 );
             }
 
@@ -456,7 +448,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     obs_property_int_set_suffix(srtLatency, " ms");
     obs_property_set_visible(srtLatency, apiClient->getSettings()->getIngressProtocol() == "srt");
 
-    obs_log(LOG_DEBUG, "%s: Properties created", qPrintable(name));
+    obs_log(LOG_DEBUG, "%s: Properties created", qUtf8Printable(name));
     return props;
 }
 
@@ -495,14 +487,14 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 
 void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
 {
-    obs_log(LOG_DEBUG, "%s: Source updating", qPrintable(name));
+    obs_log(LOG_DEBUG, "%s: Source updating", qUtf8Printable(name));
 
     captureSettings(settings);
     connect(
         putConnection(), &RequestInvoker::finished,
         [this, settings](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "%s: Source update failed", qPrintable(name));
+                obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
                 return;
             }
 
@@ -521,7 +513,7 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
             // Store settings to file as recently settings.
             saveSettings(settings);
 
-            obs_log(LOG_INFO, "%s: Source updated", qPrintable(name));
+            obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(name));
         }
     );
 }
@@ -582,7 +574,7 @@ void IngressLinkSource::onWebSocketReady(bool reconnect)
 
 void IngressLinkSource::reactivate()
 {
-    obs_log(LOG_DEBUG, "%s: Source reactivating with rev.%d", qPrintable(name), revision);
+    obs_log(LOG_DEBUG, "%s: Source reactivating with rev.%d", qUtf8Printable(name), revision);
     OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
     OBSDataAutoRelease settings = obs_source_get_settings(source);
 
@@ -591,7 +583,7 @@ void IngressLinkSource::reactivate()
     connRequest.setPort(apiClient->getFreePort());
 
     onSettingsUpdate(settings);
-    obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qPrintable(name), revision);
+    obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qUtf8Printable(name), revision);
 }
 
 void IngressLinkSource::updateCallback(obs_data_t *settings)
@@ -609,7 +601,7 @@ SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource)
           _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers, _linkedSource
       )
 {
-    obs_log(LOG_DEBUG, "%s: Audio thread creating.", qPrintable(ingressLinkSource->name));
+    obs_log(LOG_DEBUG, "%s: Audio thread creating.", qUtf8Printable(ingressLinkSource->name));
 }
 
 SourceAudioThread::~SourceAudioThread()
@@ -619,12 +611,12 @@ SourceAudioThread::~SourceAudioThread()
         wait();
     }
 
-    obs_log(LOG_DEBUG, "%s: Audio thread destroyed.", qPrintable(ingressLinkSource->name));
+    obs_log(LOG_DEBUG, "%s: Audio thread destroyed.", qUtf8Printable(ingressLinkSource->name));
 }
 
 void SourceAudioThread::run()
 {
-    obs_log(LOG_DEBUG, "%s: Audio thread started.", qPrintable(ingressLinkSource->name));
+    obs_log(LOG_DEBUG, "%s: Audio thread started.", qUtf8Printable(ingressLinkSource->name));
     active = true;
 
     while (!isInterruptionRequested()) {
@@ -673,7 +665,7 @@ void SourceAudioThread::run()
     }
 
     active = false;
-    obs_log(LOG_DEBUG, "%s: Audio thread stopped.", qPrintable(ingressLinkSource->name));
+    obs_log(LOG_DEBUG, "%s: Audio thread stopped.", qUtf8Printable(ingressLinkSource->name));
 }
 
 //--- Source registration ---//
@@ -736,7 +728,7 @@ obs_source_info createLinkedSourceInfo()
     sourceInfo.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE;
 
     sourceInfo.get_name = [](void *) {
-        return "Ingress Link";
+        return obs_module_text("DownlinkInput");
     };
     sourceInfo.create = createSource;
     sourceInfo.destroy = destroySource;

@@ -32,6 +32,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
+#define SR_LINK_EGRESS_DOCK_ID "SRLinkDock"
+
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
@@ -47,7 +49,7 @@ void registerSRLinkDock()
     if (mainWindow) {
         if (!sourceLinkDock) {
             sourceLinkDock = new EgressLinkDock(apiClient, mainWindow);
-            obs_frontend_add_dock_by_id("SRLinkDock", obs_module_text("SRLinkDock"), sourceLinkDock);
+            obs_frontend_add_dock_by_id(SR_LINK_EGRESS_DOCK_ID, obs_module_text("SRLinkUplinkDock"), sourceLinkDock);
         }
     }
 }
@@ -56,7 +58,7 @@ void unregisterSRLinkDock()
 {
     if (sourceLinkDock) {
         // The instance will be deleted by OBS (Do not call delete manually!)
-        obs_frontend_remove_dock("SRLinkDock");
+        obs_frontend_remove_dock(SR_LINK_EGRESS_DOCK_ID);
         sourceLinkDock = nullptr;
     }
 }

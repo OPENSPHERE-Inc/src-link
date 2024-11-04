@@ -30,6 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QTimer>
 #include <QByteArray>
 #include <QBuffer>
+#include <QFile>
 
 #include <o0settingsstore.h>
 #include <o0globals.h>
@@ -42,6 +43,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //#define LOCAL_DEBUG
 #define SCOPE "read write"
 #define SCREENSHOT_QUALITY 75
+#define REPLY_HTML_NAME "oauth-reply.html"
 
 // REST Endpoints
 #ifdef LOCAL_DEBUG
@@ -128,9 +130,15 @@ SRLinkApiClient::SRLinkApiClient(QObject *parent)
     client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
     client->setScope(QString::fromLatin1(SCOPE));
     client->setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
-    client->setReplyContent(
-        "<html><body><h2>Authorization complete. You can close this window and return to OBS Studio</h2></body></html>"
-    );
+
+    // Read reply content html
+    QString replyHtmlFile =
+        QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(QTStr(REPLY_HTML_NAME));
+    QFile replyContent(replyHtmlFile);
+    if (!replyContent.open(QIODevice::ReadOnly)) {
+        obs_log(LOG_ERROR, "client: Failed to read reply content html: %s", qUtf8Printable(replyHtmlFile));
+    }
+    client->setReplyContent(replyContent.readAll());
 
     connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
     connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));
@@ -190,7 +198,8 @@ SRLinkApiClient::~SRLinkApiClient()
 void SRLinkApiClient::login()
 {
     obs_log(
-        LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s", qPrintable(GRANTFLOW_STR(client->grantFlow()))
+        LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s",
+        qUtf8Printable(GRANTFLOW_STR(client->grantFlow()))
     );
     client->link();
 }
@@ -288,7 +297,7 @@ const RequestInvoker *SRLinkApiClient::requestAccountInfo()
         }
 
         accountInfo = newAccountInfo;
-        obs_log(LOG_DEBUG, "client: Received account: %s", qPrintable(accountInfo.getAccount().getDisplayName()));
+        obs_log(LOG_DEBUG, "client: Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
 
         emit accountInfoReady(accountInfo);
     });
@@ -417,15 +426,15 @@ const RequestInvoker *SRLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting uplink for %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Requesting uplink for %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Requesting uplink for %s failed: %d", qPrintable(uuid), error);
+            obs_log(LOG_ERROR, "client: Requesting uplink for %s failed: %d", qUtf8Printable(uuid), error);
             emit uplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Received uplink for %s", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Received uplink for %s", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
@@ -448,17 +457,17 @@ const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting downlink for %s", qPrintable(sourceUuid));
+    obs_log(LOG_DEBUG, "client: Requesting downlink for %s", qUtf8Printable(sourceUuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "client: Requesting downlink for %s failed: %d", qPrintable(sourceUuid), error);
+                obs_log(LOG_ERROR, "client: Requesting downlink for %s failed: %d", qUtf8Printable(sourceUuid), error);
                 emit downlinkFailed(sourceUuid);
                 return;
             }
-            obs_log(LOG_DEBUG, "client: Received downlink for %s", qPrintable(sourceUuid));
+            obs_log(LOG_DEBUG, "client: Received downlink for %s", qUtf8Printable(sourceUuid));
 
             DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
             if (!newDownlink.isValid()) {
@@ -485,14 +494,14 @@ const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, co
     auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    obs_log(LOG_DEBUG, "client: Putting downlink: %s rev.%d", qPrintable(sourceUuid), params.getRevision());
+    obs_log(LOG_DEBUG, "client: Putting downlink: %s rev.%d", qUtf8Printable(sourceUuid), params.getRevision());
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
                 obs_log(
-                    LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qPrintable(sourceUuid),
+                    LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid),
                     params.getRevision(), error
                 );
                 emit putDownlinkFailed(sourceUuid);
@@ -510,7 +519,7 @@ const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, co
             downlinks[sourceUuid] = newDownlink;
             obs_log(
                 LOG_DEBUG, "client: Put downlink %s rev.%d succeeded",
-                qPrintable(downlinks[sourceUuid].getConnection().getId()), params.getRevision()
+                qUtf8Printable(downlinks[sourceUuid].getConnection().getId()), params.getRevision()
             );
 
             websocket->subscribe("downlink", {{"uuid", sourceUuid}});
@@ -529,15 +538,15 @@ const RequestInvoker *SRLinkApiClient::deleteDownlink(const QString &sourceUuid,
 
     auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting downlink of %s", qPrintable(sourceUuid));
+    obs_log(LOG_DEBUG, "client: Deleting downlink of %s", qUtf8Printable(sourceUuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Deleting downlink of %s failed: %d", qPrintable(sourceUuid), error);
+            obs_log(LOG_ERROR, "client: Deleting downlink of %s failed: %d", qUtf8Printable(sourceUuid), error);
             emit deleteDownlinkFailed(sourceUuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Delete downlink of %s succeeded", qPrintable(sourceUuid));
+        obs_log(LOG_DEBUG, "client: Delete downlink of %s succeeded", qUtf8Printable(sourceUuid));
 
         websocket->unsubscribe("downlink", {{"uuid", sourceUuid}});
 
@@ -563,18 +572,18 @@ const RequestInvoker *SRLinkApiClient::putUplink(const bool force)
     body["force"] = force || settings->getForceConnection() ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
 
-    obs_log(LOG_DEBUG, "client: Putting uplink of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Putting uplink of %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
             if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qPrintable(uuid), error);
+                obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
                 emit putUplinkFailed(uuid);
                 emit uplinkFailed(uuid);
                 return;
             }
         }
-        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
@@ -607,18 +616,18 @@ const RequestInvoker *SRLinkApiClient::putUplinkStatus()
     QJsonObject body;
     body["uplink_status"] = uplinkStatus;
 
-    obs_log(LOG_DEBUG, "client: Putting uplink status of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Putting uplink status of %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
             if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qPrintable(uuid), error);
+                obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
                 emit putUplinkStatusFailed(uuid);
                 emit uplinkFailed(uuid);
                 return;
             }
         }
-        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
@@ -645,15 +654,15 @@ const RequestInvoker *SRLinkApiClient::deleteUplink(const bool parallel)
 
     auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting uplink of %s", qPrintable(uuid));
+    obs_log(LOG_DEBUG, "client: Deleting uplink of %s", qUtf8Printable(uuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Deleting uplink of %s failed: %d", qPrintable(uuid), error);
+            obs_log(LOG_ERROR, "client: Deleting uplink of %s failed: %d", qUtf8Printable(uuid), error);
             emit deleteUplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qPrintable(uuid));
+        obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qUtf8Printable(uuid));
 
         websocket->unsubscribe("uplink", {{"uuid", uuid}});
 
@@ -678,15 +687,15 @@ const RequestInvoker *SRLinkApiClient::putScreenshot(const QString &sourceName, 
     imageBuffer.open(QIODevice::WriteOnly);
     image.save(&imageBuffer, "JPG", SCREENSHOT_QUALITY);
 
-    obs_log(LOG_DEBUG, "client: Putting screenshot of %s", qPrintable(sourceName));
+    obs_log(LOG_DEBUG, "client: Putting screenshot of %s", qUtf8Printable(sourceName));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceName](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Putting screenshot of %s failed: %d", qPrintable(sourceName), error);
+            obs_log(LOG_ERROR, "client: Putting screenshot of %s failed: %d", qUtf8Printable(sourceName), error);
             emit putScreenshotFailed(sourceName);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Put screenshot of %s succeeded", qPrintable(sourceName));
+        obs_log(LOG_DEBUG, "client: Put screenshot of %s succeeded", qUtf8Printable(sourceName));
 
         emit putScreenshotSucceeded(sourceName);
     });
@@ -700,11 +709,11 @@ void SRLinkApiClient::getPicture(const QString &pictureId)
     auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL).arg(pictureId))));
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Getting picture of %s failed: %d", qPrintable(pictureId), reply->error());
+            obs_log(LOG_ERROR, "client: Getting picture of %s failed: %d", qUtf8Printable(pictureId), reply->error());
             emit getPictureFailed(pictureId);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Get picture of %s succeeded", qPrintable(pictureId));
+        obs_log(LOG_DEBUG, "client: Get picture of %s succeeded", qUtf8Printable(pictureId));
 
         auto picture = QImage::fromData(reply->readAll());
 
@@ -811,7 +820,7 @@ void SRLinkApiClient::onWebSocketDisconnected()
 
 void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
 {
-    obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qPrintable(name), qPrintable(id));
+    obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 
     if (name == "uplink.allocations") {
         StageSeatAllocation newAllocation = payload;
@@ -936,7 +945,7 @@ void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString 
 
 void SRLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
 {
-    obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qPrintable(name), qPrintable(id));
+    obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 
     if (name == "uplink.allocations") {
         if (uplink.getAllocation().getId() == id) {
