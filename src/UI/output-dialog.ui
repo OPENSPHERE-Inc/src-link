@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>SR Link Output</string>
+   <string>SRC-Link Output</string>
   </property>
   <property name="modal">
    <bool>true</bool>

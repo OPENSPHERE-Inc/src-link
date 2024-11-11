@@ -1,5 +1,5 @@
 /*
-SR Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -40,18 +40,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "api-websocket.hpp"
 #include "utils.hpp"
 
-//#define LOCAL_DEBUG
 #define SCOPE "read write"
 #define SCREENSHOT_QUALITY 75
 #define REPLY_HTML_NAME "oauth-reply.html"
 
 // REST Endpoints
-#ifdef LOCAL_DEBUG
-#define API_SERVER "http://localhost:3000"
-#define API_WS_SERVER "ws://localhost:3000"
-#else
-#define API_SERVER "https://source-link-test.opensphere.co.jp"
-#define API_WS_SERVER "wss://source-link-test.opensphere.co.jp"
+#ifndef API_SERVER
+#  define API_SERVER "http://localhost:3000"
+#endif
+#ifndef API_WS_SERVER
+#  define API_WS_SERVER "ws://localhost:3000"
 #endif
 #define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
 #define TOKEN_URL (API_SERVER "/oauth2/token")
@@ -67,10 +65,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/stages")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
-
-// Embedded client ID and secret
-#define CLIENT_ID "testClientId"
-#define CLIENT_SECRET "testClientSecret"
+// OAuth2 Client info
+#ifndef CLIENT_ID
+#  define CLIENT_ID "testClientId"
+#endif
+#ifndef CLIENT_SECRET
+#  define CLIENT_SECRET "testClientSecret"
+#endif
 
 //--- Macros ---//
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))

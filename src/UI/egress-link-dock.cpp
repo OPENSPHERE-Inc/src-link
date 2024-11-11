@@ -1,5 +1,5 @@
 /*
-SR Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -31,8 +31,8 @@ EgressLinkDock::EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
       ui(new Ui::EgressLinkDock),
       apiClient(_apiClient),
-      defaultAccountPicture(":/sr-link/images/unknownman.png"),
-      defaultStagePicture(":/sr-link/images/unknownstage.png")
+      defaultAccountPicture(":/src-link/images/unknownman.png"),
+      defaultStagePicture(":/src-link/images/unknownstage.png")
 {
     ui->setupUi(this);
 

@@ -1,5 +1,5 @@
 /*
-SR Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -116,14 +116,13 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["host_ability"].isBool() && (*this)["guest_ability"].isBool() &&
-                     (*this)["max_stages"].isDouble() && (*this)["max_parties"].isDouble() &&
-                     (*this)["max_concurrent_party_events"].isDouble() &&
-                     (*this)["max_sources_per_stage_seat"].isDouble() && (*this)["max_seats_per_stage"].isDouble() &&
-                     (*this)["max_members_per_party"].isDouble() &&
-                     (*this)["max_participants_per_party_event"].isDouble() &&
-                     (*this)["max_uplink_duration"].isDouble() && (*this)["ui_type"].isString() &&
-                     (*this)["byol_ability"].isBool() && (*this)["max_relay_connections"].isDouble();
+        auto valid =
+            (*this)["host_ability"].isBool() && (*this)["guest_ability"].isBool() && (*this)["max_stages"].isDouble() &&
+            (*this)["max_parties"].isDouble() && (*this)["max_concurrent_party_events"].isDouble() &&
+            (*this)["max_sources_per_stage_seat"].isDouble() && (*this)["max_seats_per_stage"].isDouble() &&
+            (*this)["max_members_per_party"].isDouble() && (*this)["max_participants_per_party_event"].isDouble() &&
+            (*this)["max_uplink_duration"].isDouble() && (*this)["ui_type"].isString() &&
+            (*this)["byol_ability"].isBool() && (*this)["max_relay_connections"].isDouble();
         return valid;
     }
 };
@@ -155,14 +154,8 @@ public:
     SubscriptionLicense() = default;
     SubscriptionLicense(const QJsonObject &json) : QJsonObject(json) {}
 
-    inline SavedSubscriptionPlan getSavedPlan() const
-    {
-        return value("saved_plan").toObject();
-    }
-    inline void setSavedPlan(const SavedSubscriptionPlan &value)
-    {
-        insert("saved_plan", value);
-    }
+    inline SavedSubscriptionPlan getSavedPlan() const { return value("saved_plan").toObject(); }
+    inline void setSavedPlan(const SavedSubscriptionPlan &value) { insert("saved_plan", value); }
     inline QDateTime getStartDate() const { return QDateTime::fromString(value("start_date").toString(), Qt::ISODate); }
     inline void setStartDate(const QDateTime &value) { insert("start_date", value.toString(Qt::ISODate)); }
     inline bool getValid() const { return value("valid").toBool(); }
@@ -170,8 +163,7 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getSavedPlan().isValid() && (*this)["start_date"].isString() &&
-                     (*this)["valid"].isBool();
+        auto valid = getSavedPlan().isValid() && (*this)["start_date"].isString() && (*this)["valid"].isBool();
         return valid;
     }
 };
@@ -191,12 +183,22 @@ public:
     inline void setConcurrentPartyEvents(int value) { insert("concurrent_party_events", value); }
     inline int getRelayConnections() const { return value("relay_connections").toInt(); }
     inline void setRelayConnections(int value) { insert("relay_connections", value); }
+    inline int getMaxStageSources() const { return value("max_stage_sources").toInt(); }
+    inline void setMaxStageSources(int value) { insert("max_stage_sources", value); }
+    inline int getMaxStageSeats() const { return value("max_stage_seats").toInt(); }
+    inline void setMaxStageSeats(int value) { insert("max_stage_seats", value); }
+    inline int getMaxPartyMembers() const { return value("max_party_members").toInt(); }
+    inline void setMaxPartyMembers(int value) { insert("max_party_members", value); }
+    inline int getMaxPartyEventParticipants() const { return value("max_party_event_participants").toInt(); }
+    inline void setMaxPartyEventParticipants(int value) { insert("max_party_event_participants", value); }
 
     inline bool isValid() const
     {
         auto valid = (*this)["stages"].isDouble() && (*this)["parties"].isDouble() &&
                      (*this)["party_events"].isDouble() && (*this)["concurrent_party_events"].isDouble() &&
-                     (*this)["relay_connections"].isDouble();
+                     (*this)["relay_connections"].isDouble() && (*this)["max_stage_sources"].isDouble() &&
+                     (*this)["max_stage_seats"].isDouble() && (*this)["max_party_members"].isDouble() &&
+                     (*this)["max_party_event_participants"].isDouble();
         return valid;
     }
 };

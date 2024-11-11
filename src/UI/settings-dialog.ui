@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>SR Link Settinbgs</string>
+   <string>SRC-Link Settinbgs</string>
   </property>
   <property name="modal">
    <bool>true</bool>

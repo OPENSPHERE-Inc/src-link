@@ -7,6 +7,19 @@ project(${_name} VERSION ${_version})
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" ON)
 option(ENABLE_QT "Use Qt functionality" ON)
 
+if(DEFINED ENV{API_SERVER})
+  add_compile_definitions(API_SERVER=$ENV{API_SERVER})
+endif()
+if(DEFINED ENV{API_WS_SERVER})
+  add_compile_definitions(API_WS_SERVER=$ENV{API_WS_SERVER})
+endif()
+if(DEFINED ENV{CLIENT_ID})
+  add_compile_definitions(CLIENT_ID=$ENV{CLIENT_ID})
+endif()
+if(DEFINED ENV{CLIENT_SECRET})
+  add_compile_definitions(CLIENT_SECRET=$ENV{CLIENT_SECRET})
+endif()
+
 include(compilerconfig)
 include(defaults)
 include(helpers)
@@ -41,8 +54,20 @@ if(ENABLE_QT)
 endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/shared/properties-view)
-
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
+
+set(o2_SRCS
+    lib/o2/o2.cpp
+    lib/o2/o2pollserver.cpp
+    lib/o2/o2reply.cpp
+    lib/o2/o2replyserver.cpp
+    lib/o2/o2requestor.cpp
+    lib/o2/o2simplecrypt.cpp
+    lib/o2/o0jsonresponse.cpp
+    lib/o2/o0settingsstore.cpp
+    lib/o2/o0baseauth.cpp)
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
@@ -68,22 +93,34 @@ target_sources(
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp)
 
-set(o2_SRCS
-    lib/o2/o2.cpp
-    lib/o2/o2pollserver.cpp
-    lib/o2/o2reply.cpp
-    lib/o2/o2replyserver.cpp
-    lib/o2/o2requestor.cpp
-    lib/o2/o2simplecrypt.cpp
-    lib/o2/o0jsonresponse.cpp
-    lib/o2/o0settingsstore.cpp
-    lib/o2/o0baseauth.cpp)
-
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
-
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
   PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2 ${CMAKE_SOURCE_DIR}/shared/properties-view
           ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+  if(NOT buildspec)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)
+  endif()
+  string(
+    JSON
+    qtversion
+    GET
+    ${buildspec}
+    dependencies
+    qt6
+    version)
+
+  install(
+    FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION bin/64bit
+    OPTIONAL)
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION bin/64bit
+    OPTIONAL)
+endif()
