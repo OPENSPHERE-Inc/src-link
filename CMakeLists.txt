@@ -57,15 +57,15 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/shared/properties-view)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
 
 set(o2_SRCS
-    lib/o2/o2.cpp
-    lib/o2/o2pollserver.cpp
-    lib/o2/o2reply.cpp
-    lib/o2/o2replyserver.cpp
-    lib/o2/o2requestor.cpp
-    lib/o2/o2simplecrypt.cpp
-    lib/o2/o0jsonresponse.cpp
-    lib/o2/o0settingsstore.cpp
-    lib/o2/o0baseauth.cpp)
+    lib/o2/src/o2.cpp
+    lib/o2/src/o2pollserver.cpp
+    lib/o2/src/o2reply.cpp
+    lib/o2/src/o2replyserver.cpp
+    lib/o2/src/o2requestor.cpp
+    lib/o2/src/o2simplecrypt.cpp
+    lib/o2/src/o0jsonresponse.cpp
+    lib/o2/src/o0settingsstore.cpp
+    lib/o2/src/o0baseauth.cpp)
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
@@ -95,7 +95,7 @@ target_sources(
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2 ${CMAKE_SOURCE_DIR}/shared/properties-view
+  PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
           ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

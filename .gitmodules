@@ -1,0 +1,3 @@
+[submodule "lib/o2"]
+	path = lib/o2
+	url = https://github.com/OPENSPHERE-Inc/o2.git
