@@ -82,11 +82,15 @@ inline const std::string dumpJsonObject(const QJsonObject &json)
     return QJsonDocument(json).toJson().toStdString();
 }
 
-class SubscriptionQuota : public QJsonObject {
+class SubscriptionFeatures : public QJsonObject {
 public:
-    SubscriptionQuota() = default;
-    SubscriptionQuota(const QJsonObject &json) : QJsonObject(json) {}
+    SubscriptionFeatures() = default;
+    SubscriptionFeatures(const QJsonObject &json) : QJsonObject(json) {}
 
+    inline bool getHostAbility() const { return value("host_ability").toBool(); }
+    inline void setHostAbility(bool value) { insert("host_ability", value); }
+    inline bool getGuestAbility() const { return value("guest_ability").toBool(); }
+    inline void setGuestAbility(bool value) { insert("guest_ability", value); }
     inline int getMaxStages() const { return value("max_stages").toInt(); }
     inline void setMaxStages(int value) { insert("max_stages", value); }
     inline int getMaxParties() const { return value("max_parties").toInt(); }
@@ -112,7 +116,8 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["max_stages"].isDouble() && (*this)["max_parties"].isDouble() &&
+        auto valid = (*this)["host_ability"].isBool() && (*this)["guest_ability"].isBool() &&
+                     (*this)["max_stages"].isDouble() && (*this)["max_parties"].isDouble() &&
                      (*this)["max_concurrent_party_events"].isDouble() &&
                      (*this)["max_sources_per_stage_seat"].isDouble() && (*this)["max_seats_per_stage"].isDouble() &&
                      (*this)["max_members_per_party"].isDouble() &&
@@ -132,15 +137,15 @@ public:
     inline void setName(const QString &value) { insert("name", value); }
     inline QString getDescription() const { return value("description").toString(); }
     inline void setDescription(const QString &value) { insert("description", value); }
-    inline SubscriptionQuota getQuota() const { return value("quota").toObject(); }
-    inline void setQuota(const SubscriptionQuota &value) { insert("quota", value); }
+    inline SubscriptionFeatures getFeatures() const { return value("features").toObject(); }
+    inline void setFeatures(const SubscriptionFeatures &value) { insert("features", value); }
     inline int getPeriodMonths() const { return value("period_months").toInt(); }
     inline void setPeriodMonths(int value) { insert("period_months", value); }
 
     inline bool isValid() const
     {
         auto valid = (*this)["name"].isString() && maybe((*this)["description"], (*this)["description"].isString()) &&
-                     getQuota().isValid() && (*this)["period_months"].isDouble();
+                     getFeatures().isValid() && (*this)["period_months"].isDouble();
         return valid;
     }
 };
@@ -150,13 +155,13 @@ public:
     SubscriptionLicense() = default;
     SubscriptionLicense(const QJsonObject &json) : QJsonObject(json) {}
 
-    inline SavedSubscriptionPlan getSavedSubscriptionPlan() const
+    inline SavedSubscriptionPlan getSavedPlan() const
     {
-        return value("saved_subscription_plan").toObject();
+        return value("saved_plan").toObject();
     }
-    inline void setSavedSubscriptionPlan(const SavedSubscriptionPlan &value)
+    inline void setSavedPlan(const SavedSubscriptionPlan &value)
     {
-        insert("saved_subscription_plan", value);
+        insert("saved_plan", value);
     }
     inline QDateTime getStartDate() const { return QDateTime::fromString(value("start_date").toString(), Qt::ISODate); }
     inline void setStartDate(const QDateTime &value) { insert("start_date", value.toString(Qt::ISODate)); }
@@ -165,7 +170,7 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getSavedSubscriptionPlan().isValid() && (*this)["start_date"].isString() &&
+        auto valid = getSavedPlan().isValid() && (*this)["start_date"].isString() &&
                      (*this)["valid"].isBool();
         return valid;
     }

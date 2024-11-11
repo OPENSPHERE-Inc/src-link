@@ -194,7 +194,7 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
 
-    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
+    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
     if (quota.getMaxRelayConnections() > 0) {
         newRequest.setRelay(obs_data_get_bool(settings, "relay"));
     } else {
@@ -233,7 +233,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
         QString input;
 
         if (connection.getRelay()) {
-            auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
+            auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
 
             if (quota.getMaxRelayConnections() > 0) {
                 input =
@@ -397,7 +397,7 @@ obs_properties_t *IngressLinkSource::getProperties()
 
     // Connection group -> Relay checkbox
     auto relay = obs_properties_add_bool(connectionGroup, "relay", obs_module_text("UseRelayServer"));
-    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedSubscriptionPlan().getQuota();
+    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
     obs_property_set_enabled(relay, quota.getMaxRelayConnections() > 0);
 
     // Other stage settings
