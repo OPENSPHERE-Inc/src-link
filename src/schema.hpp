@@ -18,6 +18,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#define SCHEMA_DEBUG
+
+#ifdef SCHEMA_DEBUG
+#include <obs-module.h>
+#include "plugin-support.h"
+#endif
+
 #include <QObject>
 #include <QString>
 #include <QJsonObject>
@@ -116,13 +123,38 @@ public:
 
     inline bool isValid() const
     {
-        auto valid =
-            (*this)["host_ability"].isBool() && (*this)["guest_ability"].isBool() && (*this)["max_stages"].isDouble() &&
-            (*this)["max_parties"].isDouble() && (*this)["max_concurrent_party_events"].isDouble() &&
-            (*this)["max_sources_per_stage_seat"].isDouble() && (*this)["max_seats_per_stage"].isDouble() &&
-            (*this)["max_members_per_party"].isDouble() && (*this)["max_participants_per_party_event"].isDouble() &&
-            (*this)["max_uplink_duration"].isDouble() && (*this)["ui_type"].isString() &&
-            (*this)["byol_ability"].isBool() && (*this)["max_relay_connections"].isDouble();
+        auto validHostAbility = (*this)["host_ability"].isBool();
+        auto validGuestAbility = (*this)["guest_ability"].isBool();
+        auto validMaxStages = (*this)["max_stages"].isDouble();
+        auto validMaxParties = (*this)["max_parties"].isDouble();
+        auto validMaxConcurrentPartyEvents = (*this)["max_concurrent_party_events"].isDouble();
+        auto validMaxSourcesPerStageSeat = (*this)["max_sources_per_stage_seat"].isDouble();
+        auto validMaxSeatsPerStage = (*this)["max_seats_per_stage"].isDouble();
+        auto validMaxMembersPerParty = (*this)["max_members_per_party"].isDouble();
+        auto validMaxParticipantsPerPartyEvent = (*this)["max_participants_per_party_event"].isDouble();
+        auto validMaxUplinkDuration = (*this)["max_uplink_duration"].isDouble();
+        auto validUiType = (*this)["ui_type"].isString();
+        auto validByolAbility = (*this)["byol_ability"].isBool();
+        auto validMaxRelayConnections = (*this)["max_relay_connections"].isDouble();
+
+        auto valid = validHostAbility && validGuestAbility && validMaxStages && validMaxParties &&
+                     validMaxConcurrentPartyEvents && validMaxSourcesPerStageSeat && validMaxSeatsPerStage &&
+                     validMaxMembersPerParty && validMaxParticipantsPerPartyEvent && validMaxUplinkDuration &&
+                     validUiType && validByolAbility && validMaxRelayConnections;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "SubscriptionFeatures: host_ability=%d, guest_ability=%d, max_stages=%d, max_parties=%d, max_concurrent_party_events=%d, "
+            "max_sources_per_stage_seat=%d, max_seats_per_stage=%d, max_members_per_party=%d, max_participants_per_party_event=%d, "
+            "max_uplink_duration=%d, ui_type=%d, byol_ability=%d, max_relay_connections=%d",
+            validHostAbility, validGuestAbility, validMaxStages, validMaxParties, validMaxConcurrentPartyEvents,
+            validMaxSourcesPerStageSeat, validMaxSeatsPerStage, validMaxMembersPerParty,
+            validMaxParticipantsPerPartyEvent, validMaxUplinkDuration, validUiType, validByolAbility,
+            validMaxRelayConnections
+        );
+#endif
+
         return valid;
     }
 };
@@ -143,8 +175,21 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && maybe((*this)["description"], (*this)["description"].isString()) &&
-                     getFeatures().isValid() && (*this)["period_months"].isDouble();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validFeatures = getFeatures().isValid();
+        auto validPeriodMonths = (*this)["period_months"].isDouble();
+
+        auto valid = validName && validDescription && validFeatures && validPeriodMonths;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "SavedSubscriptionPlan: name=%d, description=%d, features=%d, period_months=%d", validName,
+            validDescription, validFeatures, validPeriodMonths
+        );
+#endif
+
         return valid;
     }
 };
@@ -163,7 +208,19 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getSavedPlan().isValid() && (*this)["start_date"].isString() && (*this)["valid"].isBool();
+        auto validSavedPlan = getSavedPlan().isValid();
+        auto validStartDate = (*this)["start_date"].isString();
+        auto validValid = (*this)["valid"].isBool();
+
+        auto valid = validSavedPlan && validStartDate && validValid;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "SubscriptionLicense: saved_plan=%d, start_date=%d, valid=%d",
+            validSavedPlan, validStartDate, validValid
+        );
+#endif
+
         return valid;
     }
 };
@@ -194,11 +251,31 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["stages"].isDouble() && (*this)["parties"].isDouble() &&
-                     (*this)["party_events"].isDouble() && (*this)["concurrent_party_events"].isDouble() &&
-                     (*this)["relay_connections"].isDouble() && (*this)["max_stage_sources"].isDouble() &&
-                     (*this)["max_stage_seats"].isDouble() && (*this)["max_party_members"].isDouble() &&
-                     (*this)["max_party_event_participants"].isDouble();
+        auto validStages = (*this)["stages"].isDouble();
+        auto validParties = (*this)["parties"].isDouble();
+        auto validPartyEvents = (*this)["party_events"].isDouble();
+        auto validConcurrentPartyEvents = (*this)["concurrent_party_events"].isDouble();
+        auto validRelayConnections = (*this)["relay_connections"].isDouble();
+        auto validMaxStageSources = (*this)["max_stage_sources"].isDouble();
+        auto validMaxStageSeats = (*this)["max_stage_seats"].isDouble();
+        auto validMaxPartyMembers = (*this)["max_party_members"].isDouble();
+        auto validMaxPartyEventParticipants = (*this)["max_party_event_participants"].isDouble();
+
+        auto valid = validStages && validParties && validPartyEvents && validConcurrentPartyEvents &&
+                     validRelayConnections && validMaxStageSources && validMaxStageSeats && validMaxPartyMembers &&
+                     validMaxPartyEventParticipants;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "AccountResourceUsage: stages=%d, parties=%d, party_events=%d, concurrent_party_events=%d, "
+            "relay_connections=%d, max_stage_sources=%d, max_stage_seats=%d, max_party_members=%d, "
+            "max_party_event_participants=%d",
+            validStages, validParties, validPartyEvents, validConcurrentPartyEvents, validRelayConnections,
+            validMaxStageSources, validMaxStageSeats, validMaxPartyMembers, validMaxPartyEventParticipants
+        );
+#endif
+
         return valid;
     }
 };
@@ -217,8 +294,19 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["display_name"].isString() &&
-                     maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validId = (*this)["_id"].isString();
+        auto validDisplayName = (*this)["display_name"].isString();
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+
+        auto valid = validId && validDisplayName && validPictureId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "Account: id=%d, display_name=%d, picture_id=%d", validId, validDisplayName,
+            validPictureId
+        );
+#endif
+
         return valid;
     }
 };
@@ -237,7 +325,19 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getAccount().isValid() && getSubscriptionLicense().isValid() && getResourceUsage().isValid();
+        auto validAccount = getAccount().isValid();
+        auto validSubscriptionLicense = getSubscriptionLicense().isValid();
+        auto validResourceUsage = getResourceUsage().isValid();
+
+        auto valid = validAccount && validSubscriptionLicense && validResourceUsage;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "AccountInfo: account=%d, subscription_license=%d, resource_usage=%d",
+            validAccount, validSubscriptionLicense, validResourceUsage
+        );
+#endif
+
         return valid;
     }
 };
@@ -256,8 +356,19 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && (*this)["display_name"].isString() &&
-                     maybe((*this)["description"], (*this)["description"].isString());
+        auto validName = (*this)["name"].isString();
+        auto validDisplayName = (*this)["display_name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+
+        auto valid = validName && validDisplayName && validDescription;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "StageSource: name=%d, display_name=%d, description=%d", validName,
+            validDisplayName, validDescription
+        );
+#endif
+
         return valid;
     }
 };
@@ -276,7 +387,15 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && (*this)["display_name"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDisplayName = (*this)["display_name"].isString();
+
+        auto valid = validName && validDisplayName;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "StageSeat: name=%d, display_name=%d", validName, validDisplayName);
+#endif
+
         return valid;
     }
 };
@@ -291,7 +410,18 @@ public:
     inline QString getDisplayName() const { return value("display_name").toString(); }
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
 
-    inline bool isValid() const { return (*this)["display_name"].isString(); }
+    inline bool isValid() const
+    {
+        auto validDisplayName = maybe((*this)["display_name"], (*this)["display_name"].isString());
+
+        auto valid = validDisplayName;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "StageSeatView: display_name=%d", validDisplayName);
+#endif
+
+        return valid;
+    }
 };
 
 class AccountView : public QJsonObject {
@@ -306,8 +436,18 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["display_name"].isString() &&
-                     maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validDisplayName = (*this)["display_name"].isString();
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+
+        auto valid = validDisplayName && validPictureId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "AccountView: display_name=%d, picture_id=%d", validDisplayName,
+            validPictureId
+        );
+#endif
+
         return valid;
     }
 };
@@ -334,13 +474,27 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["name"].isString() &&
-                     maybe((*this)["description"], (*this)["description"].isString()) &&
-                     maybe((*this)["picture_id"], (*this)["picture_id"].isString()) && (*this)["sources"].isArray() &&
-                     getSources().every([](const StageSource &value) { return value.isValid(); }) &&
-                     (*this)["seats"].isArray() &&
-                     getSeats().every([](const StageSeat &value) { return value.isValid(); }) &&
-                     getOwnerAccountView().isValid();
+        auto validId = (*this)["_id"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validSources = (*this)["sources"].isArray() &&
+                            getSources().every([](const StageSource &value) { return value.isValid(); });
+        auto validSeats = (*this)["seats"].isArray() &&
+                          getSeats().every([](const StageSeat &value) { return value.isValid(); });
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
+
+        auto valid = validId && validName && validDescription && validPictureId && validSources && validSeats &&
+                     validOwnerAccountView;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, owner_account_view=%d",
+            validId, validName, validDescription, validPictureId, validSources, validSeats, validOwnerAccountView
+        );
+#endif
+
         return valid;
     }
 };
@@ -359,8 +513,19 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && maybe((*this)["picture_id"], (*this)["picture_id"].isString()) &&
-                     maybe((*this)["description"], (*this)["description"].isString());
+        auto validName = (*this)["name"].isString();
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+
+        auto valid = validName && validPictureId && validDescription;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "StageView: name=%d, picture_id=%d, description=%d", validName,
+            validPictureId, validDescription
+        );
+#endif
+
         return valid;
     }
 };
@@ -388,10 +553,24 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["name"].isString() &&
-                     maybe((*this)["description"], (*this)["description"].isString()) &&
-                     maybe((*this)["picture_id"], (*this)["picture_id"].isString()) &&
-                     maybe((*this)["capacity"], (*this)["capacity"].isDouble()) && getOwnerAccountView().isValid();
+        auto validId = (*this)["_id"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validCapacity = maybe((*this)["capacity"], (*this)["capacity"].isDouble());
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
+
+        auto valid = validId && validName && validDescription && validPictureId && validCapacity &&
+                     validOwnerAccountView;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "Party: _id=%d, name=%d, description=%d, picture_id=%d, capacity=%d, owner_account_view=%d", validId,
+            validName, validDescription, validPictureId, validCapacity, validOwnerAccountView
+        );
+#endif
+
         return valid;
     }
 };
@@ -408,7 +587,15 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validName = (*this)["name"].isString();
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+
+        auto valid = validName && validPictureId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "PartyView: name=%d, picture_id=%d", validName, validPictureId);
+#endif
+
         return valid;
     }
 };
@@ -439,6 +626,8 @@ public:
         return QDateTime::fromString(value("status_changed_at").toString(), Qt::ISODate);
     }
     inline void setStatusChangedAt(const QDateTime &value) { insert("status_changed_at", value.toString(Qt::ISODate)); }
+    inline int getCapacity() const { return value("capacity").toInt(); }
+    inline void setCapacity(int value) { insert("capacity", value); }
 
     inline PartyView getPartyView() const { return value("party_view").toObject(); }
     inline void setPartyView(const PartyView &value) { insert("party_view", value); }
@@ -449,12 +638,34 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["name"].isString() &&
-                     maybe((*this)["description"], (*this)["description"].isString()) &&
-                     (*this)["start_time"].isString() && maybe((*this)["end_time"], (*this)["end_time"].isString()) &&
-                     maybe((*this)["picture_id"], (*this)["picture_id"].isString()) && (*this)["status"].isString() &&
-                     (*this)["status_changed_at"].isString() && getPartyView().isValid() && getStageView().isValid() &&
-                     getOwnerAccountView().isValid();
+        auto validId = (*this)["_id"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validStartTime = (*this)["start_time"].isString();
+        auto validEndTime = maybe((*this)["end_time"], (*this)["end_time"].isString());
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validStatus = (*this)["status"].isString();
+        auto validStatusChangedAt = (*this)["status_changed_at"].isString();
+        auto validCapacity = maybe((*this)["capacity"], (*this)["capacity"].isDouble());
+        auto validPartyView = getPartyView().isValid();
+        auto validStageView = getStageView().isValid();
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
+
+        auto valid = validId && validName && validDescription && validStartTime && validEndTime && validPictureId &&
+                     validStatus && validStatusChangedAt && validCapacity && validPartyView && validStageView &&
+                     validOwnerAccountView;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "PartyEvent: _id=%d, name=%d, description=%d, start_time=%d, end_time=%d, picture_id=%d, "
+            "status=%d, status_changed_at=%d, capacity=%d, party_view=%d, stage_view=%d, "
+            "owner_account_view=%d",
+            validId, validName, validDescription, validStartTime, validEndTime, validPictureId, validStatus,
+            validStatusChangedAt, validCapacity, validPartyView, validStageView, validOwnerAccountView
+        );
+#endif
+
         return valid;
     }
 };
@@ -480,9 +691,22 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["name"].isString() && maybe((*this)["picture_id"], (*this)["picture_id"].isString()) &&
-                     maybe((*this)["description"], (*this)["description"].isString()) && (*this)["status"].isString() &&
-                     (*this)["status_changed_at"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validStatus = (*this)["status"].isString();
+        auto validStatusChangedAt = (*this)["status_changed_at"].isString();
+
+        auto valid = validName && validPictureId && validDescription && validStatus && validStatusChangedAt;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "PartyEventView: name=%d, picture_id=%d, description=%d, status=%d, status_changed_at=%d", validName,
+            validPictureId, validDescription, validStatus, validStatusChangedAt
+        );
+#endif
+
         return valid;
     }
 };
@@ -496,6 +720,8 @@ public:
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getPartyId() const { return value("party_id").toString(); }
+    inline void setPartyId(const QString &value) { insert("party_id", value); }
     inline QString getPartyEventId() const { return value("party_event_id").toString(); }
     inline void setPartyEventId(const QString &value) { insert("party_event_id", value); }
     inline QString getStageId() const { return value("stage_id").toString(); }
@@ -524,13 +750,37 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["party_event_id"].isString() &&
-                     (*this)["stage_id"].isString() && maybe((*this)["member_id"], (*this)["member_id"].isString()) &&
-                     (*this)["account_id"].isString() && maybe((*this)["seat_name"], (*this)["seat_name"].isString()) &&
-                     maybe((*this)["disabled"], (*this)["disabled"].isBool()) && getPartyView().isValid() &&
-                     getPartyEventView().isValid() && getStageView().isValid() &&
-                     maybe((*this)["account_view"], getAccountView().isValid()) && getStageSeatView().isValid() &&
-                     maybe((*this)["byol"], (*this)["byol"].isBool());
+        auto idValid = (*this)["_id"].isString();
+        auto partyIdValid = (*this)["party_id"].isString();
+        auto partyEventIdValid = (*this)["party_event_id"].isString();
+        auto stageIdValid = (*this)["stage_id"].isString();
+        auto memberIdValid = maybe((*this)["member_id"], (*this)["member_id"].isString());
+        auto accountIdValid = maybe((*this)["account_id"], (*this)["account_id"].isString());
+        auto seatNameValid = maybe((*this)["seat_name"], (*this)["seat_name"].isString());
+        auto disabledValid = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto byolValid = maybe((*this)["byol"], (*this)["byol"].isBool());
+        auto stageViewValid = getStageView().isValid();
+        auto partyViewValid = getPartyView().isValid();
+        auto partyEventValid = getPartyEventView().isValid();
+        auto accountViewValid = maybe((*this)["account_view"], getAccountView().isValid());
+        auto stageSeatViewValid = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
+
+        auto valid = idValid && partyIdValid && partyEventIdValid && stageIdValid && memberIdValid && accountIdValid &&
+                     seatNameValid && disabledValid && byolValid && stageViewValid && partyViewValid &&
+                     partyEventValid && accountViewValid && stageSeatViewValid;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "PartyEventParticipant: idValid=%d, partyIdValid=%d, partyEventIdValid=%d, stageIdValid=%d, memberIdValid=%d, "
+            "accountIdValid=%d, seatNameValid=%d, disabledValid=%d, byolValid=%d, stageViewValid=%d, partyViewValid=%d, "
+            "partyEventValid=%d, accountViewValid=%d, stageSeatViewValid=%d",
+            idValid, partyIdValid, partyEventIdValid, stageIdValid, memberIdValid, accountIdValid, seatNameValid,
+            disabledValid, byolValid, stageViewValid, partyViewValid, partyEventValid, accountViewValid,
+            stageSeatViewValid
+        );
+#endif
+
         return valid;
     }
 };
@@ -581,14 +831,43 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["stage_id"].isString() && (*this)["seat_name"].isString() &&
-                     (*this)["source_name"].isString() && (*this)["protocol"].isString() &&
-                     (*this)["server"].isString() && (*this)["port"].isDouble() && (*this)["stream_id"].isString() &&
-                     (*this)["passphrase"].isString() && (*this)["parameters"].isString() &&
-                     (*this)["relay"].isBool() && (*this)["max_bitrate"].isDouble() &&
-                     (*this)["min_bitrate"].isDouble() && (*this)["width"].isDouble() && (*this)["height"].isDouble() &&
-                     (*this)["revision"].isDouble() && maybe((*this)["disabled"], (*this)["disabled"].isBool()) &&
-                     maybe((*this)["allocation_id"], (*this)["allocation_id"].isString());
+        auto validId = (*this)["_id"].isString();
+        auto validStageId = (*this)["stage_id"].isString();
+        auto validSeatName = (*this)["seat_name"].isString();
+        auto validSourceName = (*this)["source_name"].isString();
+        auto validProtocol = (*this)["protocol"].isString();
+        auto validServer = (*this)["server"].isString();
+        auto validPort = (*this)["port"].isDouble();
+        auto validStreamId = (*this)["stream_id"].isString();
+        auto validPassphrase = (*this)["passphrase"].isString();
+        auto validParameters = (*this)["parameters"].isString();
+        auto validRelay = (*this)["relay"].isBool();
+        auto validMaxBitrate = (*this)["max_bitrate"].isDouble();
+        auto validMinBitrate = (*this)["min_bitrate"].isDouble();
+        auto validWidth = (*this)["width"].isDouble();
+        auto validHeight = (*this)["height"].isDouble();
+        auto validRevision = (*this)["revision"].isDouble();
+        auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto validAllocationId = maybe((*this)["allocation_id"], (*this)["allocation_id"].isString());
+
+        auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
+                     validPort && validStreamId && validPassphrase && validParameters && validRelay &&
+                     validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
+                     validDisabled && validAllocationId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "StageConnection: validId=%d, validStageId=%d, validSeatName=%d, validSourceName=%d, validProtocol=%d, "
+            "validServer=%d, validPort=%d, validStreamId=%d, validPassphrase=%d, validParameters=%d, validRelay=%d, "
+            "validMaxBitrate=%d, validMinBitrate=%d, validWidth=%d, validHeight=%d, validRevision=%d, validDisabled=%d, "
+            "validAllocationId=%d",
+            validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
+            validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
+            validRevision, validDisabled, validAllocationId
+        );
+#endif
+
         return valid;
     }
 };
@@ -621,11 +900,29 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["_id"].isString() && (*this)["party_id"].isString() &&
-                     (*this)["party_event_id"].isString() && (*this)["stage_id"].isString() &&
-                     (*this)["seat_name"].isString() && (*this)["member_id"].isString() &&
-                     (*this)["participant_id"].isString() && (*this)["account_id"].isString() &&
-                     maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto validId = (*this)["_id"].isString();
+        auto validPartyId = (*this)["party_id"].isString();
+        auto validPartyEventId = (*this)["party_event_id"].isString();
+        auto validStageId = (*this)["stage_id"].isString();
+        auto validSeatName = (*this)["seat_name"].isString();
+        auto validMemberId = (*this)["member_id"].isString();
+        auto validParticipantId = (*this)["participant_id"].isString();
+        auto validAccountId = (*this)["account_id"].isString();
+        auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+
+        auto valid = validId && validPartyId && validPartyEventId && validStageId && validSeatName && validMemberId &&
+                     validParticipantId && validAccountId && validDisabled;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "StageSeatAllocation: validId=%d, validPartyId=%d, validPartyEventId=%d, validStageId=%d, validSeatName=%d, "
+            "validMemberId=%d, validParticipantId=%d, validAccountId=%d, validDisabled=%d",
+            validId, validPartyId, validPartyEventId, validStageId, validSeatName, validMemberId, validParticipantId,
+            validAccountId, validDisabled
+        );
+#endif
+
         return valid;
     }
 };
@@ -644,9 +941,20 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = maybe((*this)["allocation"], getAllocation().isValid()) && getStage().isValid() &&
-                     (*this)["connections"].isArray() &&
-                     getConnections().every([](const StageConnection &value) { return value.isValid(); });
+        auto validAllocation = maybe((*this)["allocation"], getAllocation().isValid());
+        auto validStage = getStage().isValid();
+        auto validConnections = (*this)["connections"].isArray() &&
+                                getConnections().every([](const StageConnection &value) { return value.isValid(); });
+
+        auto valid = validAllocation && validStage && validConnections;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: validAllocation=%d, validStage=%d, validConnections=%d",
+            validAllocation, validStage, validConnections
+        );
+#endif
+
         return valid;
     }
 };
@@ -661,7 +969,14 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = getConnection().isValid();
+        auto validConnections = getConnection().isValid();
+
+        auto valid = validConnections;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "DownlinkInfo: validConnections=%d", validConnections);
+#endif
+
         return valid;
     }
 };
@@ -682,8 +997,20 @@ public:
 
     inline bool isValid() const
     {
-        auto valid = (*this)["event"].isString() && (*this)["name"].isString() && (*this)["id"].isString() &&
-                     maybe((*this)["payload"], (*this)["payload"].isObject());
+        auto validEvent = (*this)["event"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validId = (*this)["id"].isString();
+        auto validPayload = maybe((*this)["payload"], (*this)["payload"].isObject());
+
+        auto valid = validEvent && validName && validId && validPayload;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: validEvent=%d, validName=%d, validId=%d, validPayload=%d",
+            validEvent, validName, validId, validPayload
+        );
+#endif
+
         return valid;
     }
 };
@@ -705,8 +1032,6 @@ public:
     inline void setPort(int value) { insert("port", value); }
     inline QString getStreamId() const { return value("stream_id").toString(); }
     inline void setStreamId(const QString &value) { insert("stream_id", value); }
-    inline QString getPassphrase() const { return value("passphrase").toString(); }
-    inline void setPassphrase(const QString &value) { insert("passphrase", value); }
     inline QString getParameters() const { return value("parameters").toString(); }
     inline void setParameters(const QString &value) { insert("parameters", value); }
     inline bool getRelay() const { return value("relay").toBool(); }
@@ -724,12 +1049,36 @@ public:
 
     inline bool isValid() const
     {
-        auto valid =
-            (*this)["stage_id"].isString() && (*this)["seat_name"].isString() && (*this)["source_name"].isString() &&
-            (*this)["protocol"].isString() && (*this)["port"].isDouble() && (*this)["stream_id"].isString() &&
-            (*this)["passphrase"].isString() && (*this)["parameters"].isString() && (*this)["relay"].isBool() &&
-            (*this)["max_bitrate"].isDouble() && (*this)["min_bitrate"].isDouble() && (*this)["width"].isDouble() &&
-            (*this)["height"].isDouble() && (*this)["revision"].isDouble();
+        auto validStageId = (*this)["stage_id"].isString();
+        auto validSeatName = (*this)["seat_name"].isString();
+        auto validSourceName = (*this)["source_name"].isString();
+        auto validProtocol = (*this)["protocol"].isString();
+        auto validPort = (*this)["port"].isDouble();
+        auto validStreamId = (*this)["stream_id"].isString();
+        auto validPassphrase = (*this)["passphrase"].isString();
+        auto validParameters = (*this)["parameters"].isString();
+        auto validRelay = (*this)["relay"].isBool();
+        auto validMaxBitrate = (*this)["max_bitrate"].isDouble();
+        auto validMinBitrate = (*this)["min_bitrate"].isDouble();
+        auto validWidth = (*this)["width"].isDouble();
+        auto validHeight = (*this)["height"].isDouble();
+        auto validRevision = (*this)["revision"].isDouble();
+
+        auto valid = validStageId && validSeatName && validSourceName && validProtocol && validPort && validStreamId &&
+                     validPassphrase && validParameters && validRelay && validMaxBitrate && validMinBitrate &&
+                     validWidth && validHeight && validRevision;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "DownlinkRequestBody: validStageId=%d, validSeatName=%d, validSourceName=%d, validProtocol=%d, validPort=%d, "
+            "validStreamId=%d, validPassphrase=%d, validParameters=%d, validRelay=%d, validMaxBitrate=%d, validMinBitrate=%d, "
+            "validWidth=%d, validHeight=%d, validRevision=%d",
+            validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
+            validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision
+        );
+#endif
+
         return valid;
     }
 };

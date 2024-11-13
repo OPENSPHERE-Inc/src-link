@@ -62,6 +62,10 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
 
     obs_frontend_add_event_callback(onOBSFrontendEvent, this);
 
+    // Translations
+    ui->videoSourceLabel->setText(QTStr("LocalSource"));
+    ui->statusLabel->setText(QTStr("Status"));
+
     obs_log(LOG_DEBUG, "EgressLinkConnectionWidget created");
 }
 

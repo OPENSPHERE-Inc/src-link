@@ -38,7 +38,6 @@ class IngressLinkSource : public QObject {
 
     QString uuid;
     QString name;
-    QString localParameters;
     int reconnectDelaySec;
     int bufferingMb;
     bool hwDecode;
@@ -61,7 +60,7 @@ class IngressLinkSource : public QObject {
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
     const RequestInvoker *putConnection();
-    QString compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req, bool remote = false);
+    QString compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req);
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);
 
@@ -77,7 +76,7 @@ private slots:
     void onWebSocketReady(bool reconnect);
     void onSettingsUpdate(obs_data_t *settings);
     void reactivate();
-    
+
 public:
     explicit IngressLinkSource(
         obs_data_t *settings, obs_source_t *source, SRLinkApiClient *_apiClient, QObject *parent = nullptr
@@ -87,7 +86,7 @@ public:
     obs_properties_t *getProperties();
     inline uint32_t getWidth() { return connRequest.getWidth(); }
     inline uint32_t getHeight() { return connRequest.getHeight(); }
-    void videoRenderCallback(gs_effect_t* effect);
+    void videoRenderCallback(gs_effect_t *effect);
     void updateCallback(obs_data_t *settings);
 
     static void getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient);

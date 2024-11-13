@@ -39,27 +39,27 @@ extern obs_source_info createLinkedSourceInfo();
 SettingsDialog *settingsDialog = nullptr;
 SRLinkSettingsStore *settingsStore = nullptr;
 SRLinkApiClient *apiClient = nullptr;
-EgressLinkDock *sourceLinkDock = nullptr;
+EgressLinkDock *egressLinkDock = nullptr;
 
 obs_source_info linkedSourceInfo;
 
-void registerSRLinkDock()
+void registerEgressLinkDock()
 {
     auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
     if (mainWindow) {
-        if (!sourceLinkDock) {
-            sourceLinkDock = new EgressLinkDock(apiClient, mainWindow);
-            obs_frontend_add_dock_by_id(SR_LINK_EGRESS_DOCK_ID, obs_module_text("SRLinkUplinkDock"), sourceLinkDock);
+        if (!egressLinkDock) {
+            egressLinkDock = new EgressLinkDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id(SR_LINK_EGRESS_DOCK_ID, obs_module_text("SRLinkUplinkDock"), egressLinkDock);
         }
     }
 }
 
-void unregisterSRLinkDock()
+void unregisterEgressLinkDock()
 {
-    if (sourceLinkDock) {
+    if (egressLinkDock) {
         // The instance will be deleted by OBS (Do not call delete manually!)
         obs_frontend_remove_dock(SR_LINK_EGRESS_DOCK_ID);
-        sourceLinkDock = nullptr;
+        egressLinkDock = nullptr;
     }
 }
 
@@ -93,12 +93,15 @@ bool obs_module_load(void)
         settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] { settingsDialog->show(); });
 
         // Dock
-        if (apiClient->isLoggedIn()) {
-            registerSRLinkDock();
-        }
+        registerEgressLinkDock();
 
-        QObject::connect(apiClient, &SRLinkApiClient::loginSucceeded, []() { registerSRLinkDock(); });
-        QObject::connect(apiClient, &SRLinkApiClient::logoutSucceeded, []() { unregisterSRLinkDock(); });
+        /*
+        if (apiClient->isLoggedIn()) {
+            registerEgressLinkDock();
+        }
+        QObject::connect(apiClient, &SRLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
+        QObject::connect(apiClient, &SRLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
+        */
     }
 
     obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);

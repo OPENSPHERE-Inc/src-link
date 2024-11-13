@@ -63,17 +63,25 @@ EgressLinkDock::EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent)
     connect(apiClient, SIGNAL(getPictureFailed(const QString &)), this, SLOT(onPictureFailed(const QString &)));
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
     connect(apiClient, SIGNAL(uplinkFailed(const QString &)), this, SLOT(onUplinkFailed(const QString &)));
+    connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
 
     connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
-    connect(ui->logoutButton, SIGNAL(clicked()), this, SLOT(onLogoutButtonClicked()));
+    connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClicked()));
 
+    setClientActive(apiClient->isLoggedIn());
     if (!apiClient->getAccountInfo().isEmpty()) {
         onAccountInfoReady(apiClient->getAccountInfo());
     }
     if (!apiClient->getParticipants().isEmpty()) {
         onParticipantsReady(apiClient->getParticipants());
     }
+
+    // Translations
+    ui->egressLinkLabel->setText(QTStr("Uplink"));
+    ui->participantLabel->setText(QTStr("Receiver"));
+    ui->interlockTypeLabel->setText(QTStr("Interlock"));
+    ui->participantComboBox->setPlaceholderText(QTStr("NoReceiver"));
 
     obs_log(LOG_DEBUG, "EgressLinkDock created");
 }
@@ -85,8 +93,23 @@ EgressLinkDock::~EgressLinkDock()
     obs_log(LOG_DEBUG, "EgressLinkDock destroyed");
 }
 
+void EgressLinkDock::setClientActive(bool active)
+{
+    if (!active) {
+        ui->connectionButton->setText(QTStr("Login"));
+        ui->accountNameLabel->setText(QTStr("NotLoggedInYet"));
+        ui->uplinkWidget->setVisible(false);
+        clearConnections();
+    } else {
+        ui->connectionButton->setText(QTStr("Logout"));
+        ui->uplinkWidget->setVisible(true);
+    }
+}
+
 void EgressLinkDock::onAccountInfoReady(const AccountInfo &accountInfo)
 {
+    setClientActive(true);
+
     auto account = accountInfo.getAccount();
     ui->accountNameLabel->setText(account.getDisplayName());
     ui->accountPictureLabel->setProperty("pictureId", account.getPictureId());
@@ -189,10 +212,14 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
     updateConnections(uplink.getStage());
 
     if (!uplink.getAllocation().isEmpty()) {
+        ui->seatAllocationSeatName->setText(uplink.getAllocation().getSeatName());
         ui->seatAllocationStatus->setText(QTStr("Ready"));
+        setThemeID(ui->seatAllocationSeatName, "good");
         setThemeID(ui->seatAllocationStatus, "good");
     } else {
+        ui->seatAllocationSeatName->setText("");
         ui->seatAllocationStatus->setText(QTStr("NoSlot"));
+        setThemeID(ui->seatAllocationSeatName, "error");
         setThemeID(ui->seatAllocationStatus, "error");
     }
 }
@@ -241,20 +268,38 @@ void EgressLinkDock::updateConnections(const Stage &stage)
     }
 }
 
+void EgressLinkDock::clearConnections()
+{
+    foreach (const auto widget, connectionWidgets) {
+        ui->connectionsLayout->removeWidget(widget);
+        widget->deleteLater();
+        connectionWidgets.removeOne(widget);
+    }
+}
+
 void EgressLinkDock::onInterlockTypeChanged(int)
 {
     auto interlockType = ui->interlockTypeComboBox->currentData().toString();
     apiClient->getSettings()->setValue("interlock_type", interlockType);
 }
 
-void EgressLinkDock::onLogoutButtonClicked()
+void EgressLinkDock::onConnectionButtonClicked()
 {
-    int ret = QMessageBox::warning(
-        // "Are you sure you want to logout?"
-        this, QTStr("Logout"), QTStr("LogoutConfirmation"), QMessageBox::Yes | QMessageBox::Cancel
-    );
+    if (!apiClient->isLoggedIn()) {
+        apiClient->login();
+    } else {
+        int ret = QMessageBox::warning(
+            // "Are you sure you want to logout?"
+            this, QTStr("Logout"), QTStr("LogoutConfirmation"), QMessageBox::Yes | QMessageBox::Cancel
+        );
 
-    if (ret == QMessageBox::Yes) {
-        apiClient->logout();
+        if (ret == QMessageBox::Yes) {
+            apiClient->logout();
+        }
     }
+}
+
+void EgressLinkDock::onLogoutSucceeded()
+{
+    setClientActive(false);
 }

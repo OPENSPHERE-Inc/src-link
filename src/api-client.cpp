@@ -46,10 +46,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 // REST Endpoints
 #ifndef API_SERVER
-#  define API_SERVER "http://localhost:3000"
+#define API_SERVER "http://localhost:3000"
 #endif
 #ifndef API_WS_SERVER
-#  define API_WS_SERVER "ws://localhost:3000"
+#define API_WS_SERVER "ws://localhost:3000"
 #endif
 #define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
 #define TOKEN_URL (API_SERVER "/oauth2/token")
@@ -63,14 +63,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_URL (API_SERVER "/api/v1/uplink/%1/status")
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
-#define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/stages")
+#define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/receivers")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
 // OAuth2 Client info
 #ifndef CLIENT_ID
-#  define CLIENT_ID "testClientId"
+#define CLIENT_ID "testClientId"
 #endif
 #ifndef CLIENT_SECRET
-#  define CLIENT_SECRET "testClientSecret"
+#define CLIENT_SECRET "testClientSecret"
 #endif
 
 //--- Macros ---//
@@ -207,7 +207,9 @@ void SRLinkApiClient::login()
 
 void SRLinkApiClient::logout()
 {
-    client->unlink();
+    connect(deleteUplink(true), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+        client->unlink();
+    });
 }
 
 bool SRLinkApiClient::isLoggedIn()
@@ -297,10 +299,15 @@ const RequestInvoker *SRLinkApiClient::requestAccountInfo()
             return;
         }
 
+        auto licenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().isValid() !=
+                                                            newAccountInfo.getSubscriptionLicense().isValid();
         accountInfo = newAccountInfo;
         obs_log(LOG_DEBUG, "client: Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
 
         emit accountInfoReady(accountInfo);
+        if (licenseChanged) {
+            emit ingressRefreshNeeded();
+        }
     });
     invoker->get(QNetworkRequest(QUrl(ACCOUNT_INFO_URL)));
 

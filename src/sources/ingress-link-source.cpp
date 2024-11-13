@@ -124,7 +124,7 @@ IngressLinkSource::~IngressLinkSource()
     obs_log(LOG_INFO, "%s: Source destroyed", qUtf8Printable(name));
 }
 
-QString IngressLinkSource::compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req, bool remote)
+QString IngressLinkSource::compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req)
 {
     auto apiSettings = apiClient->getSettings();
     QString parameters;
@@ -137,23 +137,13 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, const Downl
         }
 
         if (req.getRelay()) {
-            auto call = remote ? "publish" : "play";
-
             // FIXME: Currently encryption not supported !
-            parameters = QString("mode=caller&latency=%1&streamid=%2/%3/%4")
-                             .arg(latency * 1000) // Convert to microseconds
-                             .arg(call)
-                             .arg(req.getStreamId())
-                             .arg(req.getPassphrase());
+            parameters = QString("latency=%1").arg(latency * 1000); // Convert to microseconds
 
         } else {
-            auto mode = remote ? "caller" : "listener";
-            parameters = QString("mode=%1&latency=%2&pbkeylen=%3&passphrase=%4&streamid=%5")
-                             .arg(mode)
+            parameters = QString("latency=%1&pbkeylen=%2")
                              .arg(latency * 1000) // Convert to microseconds
-                             .arg(apiSettings->getIngressSrtPbkeylen())
-                             .arg(req.getPassphrase())
-                             .arg(req.getStreamId());
+                             .arg(apiSettings->getIngressSrtPbkeylen());
         }
     }
 
@@ -209,12 +199,9 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
         bufferingMb = apiClient->getSettings()->getIngressNetworkBufferSize();
     }
 
-    // Generate new passphrase and stream ID here
-    newRequest.setPassphrase(generatePassword(16, ""));
+    // Generate new stream ID here (passphrase will be generated in the server)
     newRequest.setStreamId(generatePassword(32, ""));
-
-    localParameters = compositeParameters(settings, newRequest);
-    newRequest.setParameters(compositeParameters(settings, newRequest, true));
+    newRequest.setParameters(compositeParameters(settings, newRequest));
 
     // Increment revision when we have some changes
     if (newRequest != connRequest) {
@@ -236,17 +223,30 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
             auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
 
             if (quota.getMaxRelayConnections() > 0) {
-                input =
-                    QString("srt://%1:%2?%3").arg(connection.getServer()).arg(connection.getPort()).arg(localParameters);
+                // FIXME: Currently encryption not supported !
+                input = QString("srt://%1:%2?mode=caller&%3"
+                                "streamid=play/%4/%5")
+                            .arg(connection.getServer())
+                            .arg(connection.getPort())
+                            .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
+                            .arg(connection.getStreamId())
+                            .arg(connection.getPassphrase());
             }
         } else {
-            input = QString("srt://0.0.0.0:%1?%2").arg(connection.getPort()).arg(localParameters);
+            input = QString("srt://0.0.0.0:%1?mode=listener&%2"
+                            "streamid=%3&passphrase=%4")
+                        .arg(connection.getPort())
+                        .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
+                        .arg(connection.getStreamId())
+                        .arg(connection.getPassphrase());
         }
 
         obs_data_set_string(decoderSettings, "input", qUtf8Printable(input));
+        obs_log(LOG_DEBUG, "%s: SRT input is %s", qUtf8Printable(name), qUtf8Printable(input));
 
     } else {
         obs_data_set_string(decoderSettings, "input", "");
+        obs_log(LOG_DEBUG, "%s: SRT input is empty!", qUtf8Printable(name));
     }
 
     obs_data_set_int(decoderSettings, "reconnect_delay_sec", reconnectDelaySec);
@@ -261,6 +261,8 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
     return decoderSettings;
 }
 
+// Passphrase will be generated in the server
+// The connection will be activated on onDownlinkReady()
 const RequestInvoker *IngressLinkSource::putConnection()
 {
     auto port = connRequest.getPort();
@@ -498,18 +500,6 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
                 return;
             }
 
-            DownlinkInfo downlink = QJsonDocument::fromJson(replyData).object();
-            if (!downlink.isValid()) {
-                // Downlink deleted
-                return;
-            }
-
-            connection = downlink.getConnection();
-
-            // Update decoder settings
-            OBSDataAutoRelease decoderSettings = createDecoderSettings();
-            obs_source_update(decoderSource, decoderSettings);
-
             // Store settings to file as recently settings.
             saveSettings(settings);
 
@@ -540,16 +530,23 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
         return;
     }
 
+    // DO NOT unify revision and connection. Connection is possibly emptied.
+    auto incomingConnection = downlink.getConnection();
     auto populated = !connection.getAllocationId().isEmpty();
-    auto reactivateNeeded = populated != !downlink.getConnection().getAllocationId().isEmpty() ||
-                            revision < downlink.getConnection().getRevision();
+    auto reconnectionNeeded = populated != !incomingConnection.getAllocationId().isEmpty() ||
+                              revision < incomingConnection.getRevision() ||
+                              connection.getPassphrase() != incomingConnection.getPassphrase();
 
-    if (reactivateNeeded) {
-        // Don't capture connection here.
+    if (reconnectionNeeded) {
         // Prevent infinite loop
-        revision = downlink.getConnection().getRevision();
-        // Reconnect occurres
-        reactivate();
+        revision = incomingConnection.getRevision();
+
+        // Reconnection occurres
+        connection = incomingConnection;
+
+        // Update decoder settings
+        OBSDataAutoRelease decoderSettings = createDecoderSettings();
+        obs_source_update(decoderSource, decoderSettings);
     }
 }
 

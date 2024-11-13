@@ -126,6 +126,9 @@
    </item>
    <item>
     <layout class="QHBoxLayout" name="ingressLinkSettingslLayout">
+     <property name="topMargin">
+      <number>10</number>
+     </property>
      <property name="bottomMargin">
       <number>0</number>
      </property>
@@ -605,6 +608,9 @@
    </item>
    <item>
     <layout class="QHBoxLayout" name="egresslinkSettingsLayout">
+     <property name="topMargin">
+      <number>10</number>
+     </property>
      <property name="bottomMargin">
       <number>0</number>
      </property>
@@ -654,6 +660,9 @@
         </property>
         <property name="text">
          <string>Screenshot interval</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
         </property>
        </widget>
       </item>

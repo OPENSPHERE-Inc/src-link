@@ -62,6 +62,23 @@ SettingsDialog::SettingsDialog(SRLinkApiClient *_apiClient, QWidget *parent)
     setClientActive(apiClient->isLoggedIn());
     onAccountInfoReady(apiClient->getAccountInfo());
 
+    // Translations
+    ui->forceConnectionCheckBox->setText(QTStr("ForceDisconnectOtherClients"));
+    ui->ingressLinkSettingsLabel->setText(QTStr("DownlinkSettings"));
+    ui->advancedSettingsCheckBox->setText(QTStr("AdvancedSettings"));
+    ui->portRangeLabel->setText(QTStr("UDPListenPortRange"));
+    ui->portRangeNoteLabel->setText(QTStr("UDPListenPortRangeNote"));
+    ui->reconnectDelayTimeLabel->setText(QTStr("ReconnectDelayTime"));
+    ui->reconnectDelayTimeSpinBox->setSuffix(QTStr("Secs"));
+    ui->networkBufferLabel->setText(QTStr("NetworkBuffer"));
+    ui->networkBufferSpinBox->setSuffix(QTStr("MB"));
+    ui->protocolLabel->setText(QTStr("Protocol"));
+    ui->latencyLabel->setText(QTStr("Latency"));
+    ui->latencySpinBox->setSuffix(QTStr("ms"));
+    ui->pbkeylenLabel->setText(QTStr("PBKeyLen"));
+    ui->egressLinkSettingsLabel->setText(QTStr("UplinkSettings"));
+    ui->ssIntervalLabel->setText(QTStr("ScreenshotInterval"));
+
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
@@ -131,7 +148,7 @@ void SettingsDialog::saveSettings()
                                 ingressProtocol != apiClient->getSettings()->getIngressProtocol() ||
                                 ingressSrtLatecy != apiClient->getSettings()->getIngressSrtLatency() ||
                                 ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen();
-    
+
     auto egressScreenshotInterval = ui->ssIntervalComboBox->currentData().toInt();
     auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
 

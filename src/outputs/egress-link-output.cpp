@@ -442,10 +442,21 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connec
     obs_data_apply(egressSettings, settings);
 
     if (connection.getProtocol() == "srt") {
-        auto server = QString("srt://%1:%2?%3")
-                          .arg(connection.getServer())
-                          .arg(connection.getPort())
-                          .arg(connection.getParameters());
+        QString server;
+        if (connection.getRelay()) {
+            // FIXME: Currently encryption not supported !
+            server = QString("srt://%1:%2?mode=caller&%3"
+                             "streamid=publish/%4/%5");
+        } else {
+            server = QString("srt://%1:%2?mode=caller&%3"
+                             "streamid=%4&passphrase=%5");
+        }
+        server = server.arg(connection.getServer())
+                     .arg(connection.getPort())
+                     .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
+                     .arg(connection.getStreamId())
+                     .arg(connection.getPassphrase());
+
         obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server));
         obs_data_set_string(egressSettings, "server", qUtf8Printable(server));
     } else {
@@ -867,15 +878,16 @@ void EgressLinkOutput::setVisible(bool value)
 
 void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
 {
-    StageConnection next = apiClient->getUplink().getConnections().find([this](const StageConnection &c) {
+    StageConnection incomingConnection = apiClient->getUplink().getConnections().find([this](const StageConnection &c) {
         return c.getSourceName() == name;
     });
 
-    if (connection.getId() != next.getId() || connection.getRevision() < next.getRevision()) {
+    if (connection.getId() != incomingConnection.getId() ||
+        connection.getRevision() < incomingConnection.getRevision()) {
         // Restart output
         obs_log(LOG_DEBUG, "%s: The connection has been changed", qUtf8Printable(name));
         // The connection will be retrieved in start() again.
-        connection = next;
+        connection = incomingConnection;
         // Increment revision to restart output
         storedSettingsRev++;
     }

@@ -40,6 +40,8 @@ class EgressLinkDock : public QFrame {
     QList<EgressLinkConnectionWidget *> connectionWidgets;
 
     void updateConnections(const Stage &stage);
+    void clearConnections();
+    void setClientActive(bool active);
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);
@@ -50,10 +52,10 @@ private slots:
     void onUplinkReady(const UplinkInfo &uplink);
     void onUplinkFailed(const QString &uuid);
     void onInterlockTypeChanged(int index);
-    void onLogoutButtonClicked();
+    void onConnectionButtonClicked();
+    void onLogoutSucceeded();
 
 public:
     explicit EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~EgressLinkDock();
 };
-
