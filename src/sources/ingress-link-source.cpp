@@ -398,7 +398,7 @@ obs_properties_t *IngressLinkSource::getProperties()
         connectionGroup, "manage_stages", obs_module_text("ManageReceivers"),
         [](obs_properties_t *props, obs_property_t *property, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
-            ingressLinkSource->apiClient->openStagesManagementPage();
+            ingressLinkSource->apiClient->openStagesPage();
             return true;
         },
         this
@@ -513,12 +513,21 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
     );
 }
 
+void IngressLinkSource::resetDecoder(const StageConnection &_connection)
+{
+    connection = _connection;
+
+    // Update decoder settings
+    OBSDataAutoRelease decoderSettings = createDecoderSettings();
+    obs_source_update(decoderSource, decoderSettings);
+}
+
 void IngressLinkSource::onPutDownlinkFailed(const QString &_uuid)
 {
     if (_uuid != uuid) {
         return;
     }
-    connection = StageConnection();
+    resetDecoder();
 }
 
 void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &_uuid)
@@ -526,7 +535,7 @@ void IngressLinkSource::onDeleteDownlinkSucceeded(const QString &_uuid)
     if (_uuid != uuid) {
         return;
     }
-    connection = StageConnection();
+    resetDecoder();
 }
 
 void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
@@ -545,13 +554,7 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
     if (reconnectionNeeded) {
         // Prevent infinite loop
         revision = incomingConnection.getRevision();
-
-        // Reconnection occurres
-        connection = incomingConnection;
-
-        // Update decoder settings
-        OBSDataAutoRelease decoderSettings = createDecoderSettings();
-        obs_source_update(decoderSource, decoderSettings);
+        resetDecoder(incomingConnection);
     }
 }
 
@@ -564,7 +567,7 @@ void IngressLinkSource::onLoginSucceeded()
 
 void IngressLinkSource::onLogoutSucceeded()
 {
-    connection = StageConnection();
+    resetDecoder();
 }
 
 void IngressLinkSource::reactivate()

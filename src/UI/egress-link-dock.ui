@@ -266,6 +266,12 @@
             </item>
             <item>
              <widget class="QComboBox" name="participantComboBox">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>1</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="minimumSize">
                <size>
                 <width>0</width>
@@ -274,6 +280,19 @@
               </property>
               <property name="placeholderText">
                <string>No receivers</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="membershipsButton">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Manage</string>
               </property>
              </widget>
             </item>
@@ -351,6 +370,49 @@
         </widget>
        </item>
        <item>
+        <widget class="QWidget" name="signupWidget" native="true">
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <property name="leftMargin">
+           <number>20</number>
+          </property>
+          <property name="topMargin">
+           <number>20</number>
+          </property>
+          <property name="rightMargin">
+           <number>20</number>
+          </property>
+          <property name="bottomMargin">
+           <number>20</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="signupButton">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>40</height>
+             </size>
+            </property>
+            <property name="sizeIncrement">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Signup SRC-Link Control Panel</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <spacer name="verticalSpacer1">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
@@ -368,7 +430,7 @@
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="bottomLayout" stretch="0,0,0">
+    <layout class="QHBoxLayout" name="bottomLayout" stretch="0,0,0,0">
      <property name="spacing">
       <number>6</number>
      </property>
@@ -384,6 +446,19 @@
      <property name="bottomMargin">
       <number>9</number>
      </property>
+     <item>
+      <widget class="QPushButton" name="controlPanelButton">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>30</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Control Pane</string>
+       </property>
+      </widget>
+     </item>
      <item>
       <spacer name="horizontalSpacer1">
        <property name="orientation">

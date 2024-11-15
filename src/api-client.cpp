@@ -63,8 +63,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_URL (API_SERVER "/api/v1/uplink/%1/status")
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
-#define STAGES_MANAGEMENT_PAGE_URL (API_SERVER "/receivers")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
+// Control Panel Pages
+#define STAGES_PAGE_URL (API_SERVER "/receivers")
+#define CONTROL_PANEL_PAGE_URL (API_SERVER "/")
+#define MEMBERSHIPS_PAGE (API_SERVER "/memberships")
+#define SIGNUP_PAGE (API_SERVER "/accounts/register")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -735,9 +739,24 @@ void SRCLinkApiClient::getPicture(const QString &pictureId)
     });
 }
 
-void SRCLinkApiClient::openStagesManagementPage()
+void SRCLinkApiClient::openStagesPage()
 {
-    QDesktopServices::openUrl(QUrl(STAGES_MANAGEMENT_PAGE_URL));
+    QDesktopServices::openUrl(QUrl(STAGES_PAGE_URL));
+}
+
+void SRCLinkApiClient::openControlPanelPage()
+{
+    QDesktopServices::openUrl(QUrl(CONTROL_PANEL_PAGE_URL));
+}
+
+void SRCLinkApiClient::openMembershipsPage()
+{
+    QDesktopServices::openUrl(QUrl(MEMBERSHIPS_PAGE));
+}
+
+void SRCLinkApiClient::openSignupPage()
+{
+    QDesktopServices::openUrl(QUrl(SIGNUP_PAGE));
 }
 
 void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)

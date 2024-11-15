@@ -68,6 +68,9 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
     connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClicked()));
+    connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
+    connect(ui->membershipsButton, SIGNAL(clicked()), this, SLOT(onMembershipsButtonClicked()));
+    connect(ui->signupButton, SIGNAL(clicked()), this, SLOT(onSignupButtonClicked()));
 
     setClientActive(apiClient->isLoggedIn());
     if (!apiClient->getAccountInfo().isEmpty()) {
@@ -82,6 +85,9 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->participantLabel->setText(QTStr("Receiver"));
     ui->interlockTypeLabel->setText(QTStr("Interlock"));
     ui->participantComboBox->setPlaceholderText(QTStr("NoReceiver"));
+    ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
+    ui->membershipsButton->setText(QTStr("Manage"));
+    ui->signupButton->setText(QTStr("SignupSRCLinkControlPanel"));
 
     obs_log(LOG_DEBUG, "EgressLinkDock created");
 }
@@ -99,10 +105,12 @@ void EgressLinkDock::setClientActive(bool active)
         ui->connectionButton->setText(QTStr("Login"));
         ui->accountNameLabel->setText(QTStr("NotLoggedInYet"));
         ui->uplinkWidget->setVisible(false);
+        ui->signupWidget->setVisible(true);
         clearConnections();
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
         ui->uplinkWidget->setVisible(true);
+        ui->signupWidget->setVisible(false);
     }
 }
 
@@ -303,4 +311,19 @@ void EgressLinkDock::onConnectionButtonClicked()
 void EgressLinkDock::onLogoutSucceeded()
 {
     setClientActive(false);
+}
+
+void EgressLinkDock::onControlPanelButtonClicked()
+{
+    apiClient->openControlPanelPage();
+}
+
+void EgressLinkDock::onMembershipsButtonClicked()
+{
+    apiClient->openMembershipsPage();
+}
+
+void EgressLinkDock::onSignupButtonClicked()
+{
+    apiClient->openSignupPage();
 }

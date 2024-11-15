@@ -49,7 +49,7 @@ void registerEgressLinkDock()
     if (mainWindow) {
         if (!egressLinkDock) {
             egressLinkDock = new EgressLinkDock(apiClient, mainWindow);
-            obs_frontend_add_dock_by_id(SRC_LINK_EGRESS_DOCK_ID, obs_module_text("SRCLinkUplinkDock"), egressLinkDock);
+            obs_frontend_add_dock_by_id(SRC_LINK_EGRESS_DOCK_ID, obs_module_text("SRCLinkDock"), egressLinkDock);
         }
     }
 }

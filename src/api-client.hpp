@@ -148,7 +148,10 @@ public slots:
     void refreshIngress() { emit ingressRefreshNeeded(); }
     void refreshEgress() { emit egressRefreshNeeded(); }
     void terminate();
-    void openStagesManagementPage(); // Just open web browser
+    void openStagesPage(); // Just open web browser
+    void openControlPanelPage(); // Just open web browser
+    void openMembershipsPage(); // Just open web browser
+    void openSignupPage(); // Just open web browser
     void syncUplinkStatus();
 
     const int getFreePort();

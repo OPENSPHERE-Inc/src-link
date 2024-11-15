@@ -63,6 +63,7 @@ class IngressLinkSource : public QObject {
     QString compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req);
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);
+    void resetDecoder(const StageConnection &connection = StageConnection());
 
 signals:
     void settingsUpdate(obs_data_t *settings);

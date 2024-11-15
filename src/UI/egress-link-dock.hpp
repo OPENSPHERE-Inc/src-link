@@ -54,6 +54,9 @@ private slots:
     void onInterlockTypeChanged(int index);
     void onConnectionButtonClicked();
     void onLogoutSucceeded();
+    void onControlPanelButtonClicked();
+    void onMembershipsButtonClicked();
+    void onSignupButtonClicked();
 
 public:
     explicit EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);
