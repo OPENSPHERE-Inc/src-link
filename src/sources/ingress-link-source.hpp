@@ -44,7 +44,7 @@ class IngressLinkSource : public QObject {
     bool clearOnMediaEnd;
     DownlinkRequestBody connRequest;
 
-    SRLinkApiClient *apiClient;
+    SRCLinkApiClient *apiClient;
     OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
     OBSSourceAutoRelease decoderSource;
     ImageRenderer *fillerRenderer;
@@ -73,13 +73,12 @@ private slots:
     void onDownlinkReady(const DownlinkInfo &downlink);
     void onLoginSucceeded();
     void onLogoutSucceeded();
-    void onWebSocketReady(bool reconnect);
     void onSettingsUpdate(obs_data_t *settings);
     void reactivate();
 
 public:
     explicit IngressLinkSource(
-        obs_data_t *settings, obs_source_t *source, SRLinkApiClient *_apiClient, QObject *parent = nullptr
+        obs_data_t *settings, obs_source_t *source, SRCLinkApiClient *_apiClient, QObject *parent = nullptr
     );
     ~IngressLinkSource();
 
@@ -89,7 +88,7 @@ public:
     void videoRenderCallback(gs_effect_t *effect);
     void updateCallback(obs_data_t *settings);
 
-    static void getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient);
+    static void getDefaults(obs_data_t *settings, SRCLinkApiClient *apiClient);
 };
 
 class SourceAudioThread : public QThread, SourceAudioCapture {

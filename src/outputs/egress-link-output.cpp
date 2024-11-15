@@ -82,7 +82,7 @@ inline bool isSourceAvailable(obs_source_t *source)
 
 //--- EgressLinkOutput class ---//
 
-EgressLinkOutput::EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiClient)
+EgressLinkOutput::EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiClient)
     : QObject(_apiClient),
       name(_name),
       apiClient(_apiClient),
@@ -114,7 +114,7 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiCl
     connect(monitoringTimer, SIGNAL(timeout()), this, SLOT(onMonitoringTimerTimeout()));
 
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
-    connect(apiClient, &SRLinkApiClient::egressRefreshNeeded, this, [this]() { refresh(); });
+    connect(apiClient, &SRCLinkApiClient::egressRefreshNeeded, this, [this]() { refresh(); });
 
     obs_frontend_add_event_callback(onOBSFrontendEvent, this);
 

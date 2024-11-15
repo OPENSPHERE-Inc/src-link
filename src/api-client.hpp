@@ -35,20 +35,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_ACTIVE "active"
 #define UPLINK_STATUS_STANDBY "standby"
 
-class SRLinkApiClient : public QObject {
+class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
-    friend class SRLinkWebSocketClient;
+    friend class SRCLinkWebSocketClient;
 
     QString uuid;
-    SRLinkSettingsStore *settings;
+    SRCLinkSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
     QMap<int, bool> usedPorts;
     RequestSequencer *sequencer;
     int activeOutputs;
     int standByOutputs;
-    SRLinkWebSocketClient *websocket;
+    SRCLinkWebSocketClient *websocket;
     QString uplinkStatus;
 
     // Online rsources
@@ -98,6 +98,7 @@ signals:
     void getPictureFailed(const QString &pictureId);
     void ingressRefreshNeeded();
     void egressRefreshNeeded();
+    void licenseChanged(const SubscriptionLicense &license);
 
 private slots:
     void onO2LinkedChanged();
@@ -111,8 +112,8 @@ private slots:
     void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);
 
 public:
-    explicit SRLinkApiClient(QObject *parent = nullptr);
-    ~SRLinkApiClient();
+    explicit SRCLinkApiClient(QObject *parent = nullptr);
+    ~SRCLinkApiClient();
 
     inline const QString &getUuid() const { return uuid; }
     inline const AccountInfo getAccountInfo() const { return accountInfo; }
@@ -121,7 +122,7 @@ public:
     inline const PartyEventParticipantArray &getParticipants() const { return participants; }
     inline const StageArray &getStages() const { return stages; }
     inline const UplinkInfo getUplink() const { return uplink; }
-    inline SRLinkSettingsStore *getSettings() const { return settings; }
+    inline SRCLinkSettingsStore *getSettings() const { return settings; }
 
 public slots:
     void login();

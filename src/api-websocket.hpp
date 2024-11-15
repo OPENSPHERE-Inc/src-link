@@ -22,14 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWebSocket>
 #include <QJsonObject>
 
-class SRLinkApiClient;
+class SRCLinkApiClient;
 
-class SRLinkWebSocketClient : public QObject {
+class SRCLinkWebSocketClient : public QObject {
     Q_OBJECT
 
     QUrl url;
     QWebSocket *client;
-    SRLinkApiClient *apiClient;
+    SRCLinkApiClient *apiClient;
     bool started;
     int reconnectCount;
     QTimer *intervalTimer;
@@ -52,8 +52,8 @@ private slots:
     void onTextMessageReceived(QString message);
 
 public:
-    explicit SRLinkWebSocketClient(QUrl wsUrl, SRLinkApiClient *apiClient, QObject *parent = nullptr);
-    ~SRLinkWebSocketClient();
+    explicit SRCLinkWebSocketClient(QUrl wsUrl, SRCLinkApiClient *apiClient, QObject *parent = nullptr);
+    ~SRCLinkWebSocketClient();
 
 public slots:
     void start();

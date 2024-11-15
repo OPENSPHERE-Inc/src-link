@@ -48,7 +48,7 @@ class EgressLinkOutput : public QObject {
 
     QString name;
 
-    SRLinkApiClient *apiClient;
+    SRCLinkApiClient *apiClient;
     StageConnection connection;
     OBSDataAutoRelease settings;
     OBSServiceAutoRelease service;
@@ -89,7 +89,7 @@ private slots:
     void onUplinkReady(const UplinkInfo &uplink);
 
 public:
-    explicit EgressLinkOutput(const QString &_name, SRLinkApiClient *_apiClient);
+    explicit EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiClient);
     ~EgressLinkOutput();
 
     obs_properties_t *getProperties();

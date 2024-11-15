@@ -34,7 +34,7 @@ class EgressLinkDock : public QFrame {
 
     Ui::EgressLinkDock *ui;
 
-    SRLinkApiClient *apiClient;
+    SRCLinkApiClient *apiClient;
     QImage defaultAccountPicture;
     QImage defaultStagePicture;
     QList<EgressLinkConnectionWidget *> connectionWidgets;
@@ -56,6 +56,6 @@ private slots:
     void onLogoutSucceeded();
 
 public:
-    explicit EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent = nullptr);
+    explicit EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);
     ~EgressLinkDock();
 };

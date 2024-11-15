@@ -108,6 +108,8 @@ public:
     inline void setMaxSourcesPerStageSeat(int value) { insert("max_sources_per_stage_seat", value); }
     inline int getMaxSeatsPerStage() const { return value("max_seats_per_stage").toInt(); }
     inline void setMaxSeatsPerStage(int value) { insert("max_seats_per_stage", value); }
+    inline int getMaxSrtrelayServersPerStage() const { return value("max_srtrelay_servers_per_stage").toInt(); }
+    inline void setMaxSrtrelayServersPerStage(int value) { insert("max_srtrelay_servers_per_stage", value); }
     inline int getMaxMembersPerParty() const { return value("max_members_per_party").toInt(); }
     inline void setMaxMembersPerParty(int value) { insert("max_members_per_party", value); }
     inline int getMaxParticipantsPerPartyEvent() const { return value("max_participants_per_party_event").toInt(); }
@@ -118,8 +120,6 @@ public:
     inline void setUiType(const QString &value) { insert("ui_type", value); }
     inline bool getByolAbility() const { return value("byol_ability").toBool(); }
     inline void setByolAbility(bool value) { insert("byol_ability", value); }
-    inline int getMaxRelayConnections() const { return value("max_relay_connections").toInt(); }
-    inline void setMaxRelayConnections(int value) { insert("max_relay_connections", value); }
 
     inline bool isValid() const
     {
@@ -130,28 +130,28 @@ public:
         auto validMaxConcurrentPartyEvents = (*this)["max_concurrent_party_events"].isDouble();
         auto validMaxSourcesPerStageSeat = (*this)["max_sources_per_stage_seat"].isDouble();
         auto validMaxSeatsPerStage = (*this)["max_seats_per_stage"].isDouble();
+        auto validMaxSrtrelayServersPerStage = (*this)["max_srtrelay_servers_per_stage"].isDouble();
         auto validMaxMembersPerParty = (*this)["max_members_per_party"].isDouble();
         auto validMaxParticipantsPerPartyEvent = (*this)["max_participants_per_party_event"].isDouble();
         auto validMaxUplinkDuration = (*this)["max_uplink_duration"].isDouble();
         auto validUiType = (*this)["ui_type"].isString();
         auto validByolAbility = (*this)["byol_ability"].isBool();
-        auto validMaxRelayConnections = (*this)["max_relay_connections"].isDouble();
 
         auto valid = validHostAbility && validGuestAbility && validMaxStages && validMaxParties &&
                      validMaxConcurrentPartyEvents && validMaxSourcesPerStageSeat && validMaxSeatsPerStage &&
-                     validMaxMembersPerParty && validMaxParticipantsPerPartyEvent && validMaxUplinkDuration &&
-                     validUiType && validByolAbility && validMaxRelayConnections;
+                     validMaxSrtrelayServersPerStage && validMaxMembersPerParty && validMaxParticipantsPerPartyEvent &&
+                     validMaxUplinkDuration && validUiType && validByolAbility;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "SubscriptionFeatures: host_ability=%d, guest_ability=%d, max_stages=%d, max_parties=%d, max_concurrent_party_events=%d, "
-            "max_sources_per_stage_seat=%d, max_seats_per_stage=%d, max_members_per_party=%d, max_participants_per_party_event=%d, "
-            "max_uplink_duration=%d, ui_type=%d, byol_ability=%d, max_relay_connections=%d",
+            "max_sources_per_stage_seat=%d, max_seats_per_stage=%d, max_srtrelay_servers_per_stage=%d, max_members_per_party=%d, "
+            "max_participants_per_party_event=%d, max_uplink_duration=%d, ui_type=%d, byol_ability=%d",
             validHostAbility, validGuestAbility, validMaxStages, validMaxParties, validMaxConcurrentPartyEvents,
-            validMaxSourcesPerStageSeat, validMaxSeatsPerStage, validMaxMembersPerParty,
-            validMaxParticipantsPerPartyEvent, validMaxUplinkDuration, validUiType, validByolAbility,
-            validMaxRelayConnections
+            validMaxSourcesPerStageSeat, validMaxSeatsPerStage, validMaxSrtrelayServersPerStage,
+            validMaxMembersPerParty, validMaxParticipantsPerPartyEvent, validMaxUplinkDuration, validUiType,
+            validByolAbility
         );
 #endif
 
@@ -203,8 +203,8 @@ public:
     inline void setSavedPlan(const SavedSubscriptionPlan &value) { insert("saved_plan", value); }
     inline QDateTime getStartDate() const { return QDateTime::fromString(value("start_date").toString(), Qt::ISODate); }
     inline void setStartDate(const QDateTime &value) { insert("start_date", value.toString(Qt::ISODate)); }
-    inline bool getValid() const { return value("valid").toBool(); }
-    inline void setValid(bool value) { insert("valid", value); }
+    inline bool getLicenseValid() const { return value("valid").toBool(); }
+    inline void setLicenseValid(bool value) { insert("valid", value); }
 
     inline bool isValid() const
     {
@@ -238,12 +238,12 @@ public:
     inline void setPartyEvents(int value) { insert("party_events", value); }
     inline int getConcurrentPartyEvents() const { return value("concurrent_party_events").toInt(); }
     inline void setConcurrentPartyEvents(int value) { insert("concurrent_party_events", value); }
-    inline int getRelayConnections() const { return value("relay_connections").toInt(); }
-    inline void setRelayConnections(int value) { insert("relay_connections", value); }
     inline int getMaxStageSources() const { return value("max_stage_sources").toInt(); }
     inline void setMaxStageSources(int value) { insert("max_stage_sources", value); }
     inline int getMaxStageSeats() const { return value("max_stage_seats").toInt(); }
     inline void setMaxStageSeats(int value) { insert("max_stage_seats", value); }
+    inline int getMaxSrtrelayServers() const { return value("max_srtrelay_servers").toInt(); }
+    inline void setMaxSrtrelayServers(int value) { insert("max_srtrelay_servers", value); }
     inline int getMaxPartyMembers() const { return value("max_party_members").toInt(); }
     inline void setMaxPartyMembers(int value) { insert("max_party_members", value); }
     inline int getMaxPartyEventParticipants() const { return value("max_party_event_participants").toInt(); }
@@ -255,24 +255,24 @@ public:
         auto validParties = (*this)["parties"].isDouble();
         auto validPartyEvents = (*this)["party_events"].isDouble();
         auto validConcurrentPartyEvents = (*this)["concurrent_party_events"].isDouble();
-        auto validRelayConnections = (*this)["relay_connections"].isDouble();
         auto validMaxStageSources = (*this)["max_stage_sources"].isDouble();
         auto validMaxStageSeats = (*this)["max_stage_seats"].isDouble();
+        auto validMaxSrtrelayServers = (*this)["max_srtrelay_servers"].isDouble();
         auto validMaxPartyMembers = (*this)["max_party_members"].isDouble();
         auto validMaxPartyEventParticipants = (*this)["max_party_event_participants"].isDouble();
 
         auto valid = validStages && validParties && validPartyEvents && validConcurrentPartyEvents &&
-                     validRelayConnections && validMaxStageSources && validMaxStageSeats && validMaxPartyMembers &&
-                     validMaxPartyEventParticipants;
+                     validMaxStageSources && validMaxStageSeats && validMaxSrtrelayServers &&
+                     validMaxPartyMembers && validMaxPartyEventParticipants;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "AccountResourceUsage: stages=%d, parties=%d, party_events=%d, concurrent_party_events=%d, "
-            "relay_connections=%d, max_stage_sources=%d, max_stage_seats=%d, max_party_members=%d, "
+            "max_stage_sources=%d, max_stage_seats=%d, max_srtrelay_servers=%d, max_party_members=%d, "
             "max_party_event_participants=%d",
-            validStages, validParties, validPartyEvents, validConcurrentPartyEvents, validRelayConnections,
-            validMaxStageSources, validMaxStageSeats, validMaxPartyMembers, validMaxPartyEventParticipants
+            validStages, validParties, validPartyEvents, validConcurrentPartyEvents, validMaxStageSources, 
+            validMaxStageSeats, validMaxSrtrelayServers, validMaxPartyMembers, validMaxPartyEventParticipants
         );
 #endif
 
@@ -402,6 +402,33 @@ public:
 
 typedef TypedJsonArray<StageSeat> StageSeatArray;
 
+class SrtrelayServer : public QJsonObject {
+public:
+    SrtrelayServer() = default;
+    SrtrelayServer(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline QString getAddress() const { return value("address").toString(); }
+    inline void setAddress(const QString &value) { insert("address", value); }
+    inline int getPort() const { return value("port").toInt(); }
+    inline void setPort(int value) { insert("port", value); }
+
+    inline bool isValid() const
+    {
+        auto validAddress = (*this)["address"].isString();
+        auto validPort = (*this)["port"].isDouble();
+
+        auto valid = validAddress && validPort;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "SrtrelayServer: address=%d, port=%d", validAddress, validPort);
+#endif
+
+        return valid;
+    }
+};
+
+typedef TypedJsonArray<SrtrelayServer> SrtrelayServerArray;
+
 class StageSeatView : public QJsonObject {
 public:
     StageSeatView() = default;
@@ -469,6 +496,8 @@ public:
     inline void setSources(const StageSourceArray &value) { insert("sources", value); }
     inline StageSeatArray getSeats() const { return value("seats").toArray(); }
     inline void setSeats(const StageSeatArray &value) { insert("seats", value); }
+    inline SrtrelayServerArray getSrtrelayServers() const { return value("srtrelay_servers").toArray(); }
+    inline void setSrtrelayServers(const SrtrelayServerArray &value) { insert("srtrelay_servers", value); }
     inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
 
@@ -482,16 +511,21 @@ public:
                             getSources().every([](const StageSource &value) { return value.isValid(); });
         auto validSeats = (*this)["seats"].isArray() &&
                           getSeats().every([](const StageSeat &value) { return value.isValid(); });
+        auto validSrtrelayServers =
+            (*this)["srtrelay_servers"].isArray() &&
+            getSrtrelayServers().every([](const SrtrelayServer &value) { return value.isValid(); });
         auto validOwnerAccountView = getOwnerAccountView().isValid();
 
         auto valid = validId && validName && validDescription && validPictureId && validSources && validSeats &&
-                     validOwnerAccountView;
+                     validSrtrelayServers && validOwnerAccountView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, owner_account_view=%d",
-            validId, validName, validDescription, validPictureId, validSources, validSeats, validOwnerAccountView
+            "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, srtrelay_servers=%d, "
+            "owner_account_view=%d",
+            validId, validName, validDescription, validPictureId, validSources, validSeats, validSrtrelayServers,
+            validOwnerAccountView
         );
 #endif
 

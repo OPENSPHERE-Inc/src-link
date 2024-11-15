@@ -24,9 +24,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define INTERVAL_INTERVAL_MSECS 30000
 
-//--- SRLinkWebSocketClient class ---//
+//--- SRCLinkWebSocketClient class ---//
 
-SRLinkWebSocketClient::SRLinkWebSocketClient(QUrl _url, SRLinkApiClient *_apiClient, QObject *parent)
+SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
       apiClient(_apiClient),
       url(_url),
@@ -42,7 +42,7 @@ SRLinkWebSocketClient::SRLinkWebSocketClient(QUrl _url, SRLinkApiClient *_apiCli
     connect(client, SIGNAL(textMessageReceived(QString)), this, SLOT(onTextMessageReceived(QString)));
 
     connect(client, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
-        obs_log(LOG_ERROR, "SRLinkWebSocketClient error: %d", error);
+        obs_log(LOG_ERROR, "SRCLinkWebSocketClient error: %d", error);
     });
 
     // Setup interval timer for pinging
@@ -54,22 +54,22 @@ SRLinkWebSocketClient::SRLinkWebSocketClient(QUrl _url, SRLinkApiClient *_apiCli
     intervalTimer->setInterval(INTERVAL_INTERVAL_MSECS);
     intervalTimer->start();
 
-    obs_log(LOG_DEBUG, "SRLinkWebSocketClient created");
+    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient created");
 }
 
-SRLinkWebSocketClient::~SRLinkWebSocketClient() 
+SRCLinkWebSocketClient::~SRCLinkWebSocketClient() 
 {
     stop();
-    obs_log(LOG_DEBUG, "SRLinkWebSocketClient destroyed");
+    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient destroyed");
 }
 
-void SRLinkWebSocketClient::onConnected() 
+void SRCLinkWebSocketClient::onConnected() 
 {
     obs_log(LOG_DEBUG, "WebSocket connected");
     emit connected();
 }
 
-void SRLinkWebSocketClient::onDisconnected() 
+void SRCLinkWebSocketClient::onDisconnected() 
 {
     if (started) {
         obs_log(LOG_DEBUG, "WebSocket reconnecting");
@@ -82,12 +82,12 @@ void SRLinkWebSocketClient::onDisconnected()
     }
 }
 
-void SRLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &payload) 
+void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &payload) 
 {
     obs_log(LOG_DEBUG, "WebSocket pong received: %llu", elapsedTime);
 }
 
-void SRLinkWebSocketClient::onTextMessageReceived(QString message) 
+void SRCLinkWebSocketClient::onTextMessageReceived(QString message) 
 {
     WebSocketMessage messageObj = QJsonDocument::fromJson(message.toUtf8()).object();
     if (messageObj.getEvent() == "ready") {
@@ -103,7 +103,7 @@ void SRLinkWebSocketClient::onTextMessageReceived(QString message)
     }
 }
 
-void SRLinkWebSocketClient::open() 
+void SRCLinkWebSocketClient::open() 
 {
     if (client->isValid()) {
         return;
@@ -115,7 +115,7 @@ void SRLinkWebSocketClient::open()
     client->open(req);
 }
 
-void SRLinkWebSocketClient::start() 
+void SRCLinkWebSocketClient::start() 
 {
     if (started) {
         return;
@@ -127,7 +127,7 @@ void SRLinkWebSocketClient::start()
     open();
 }
 
-void SRLinkWebSocketClient::stop() 
+void SRCLinkWebSocketClient::stop() 
 {
     if (!started) {
         return;
@@ -138,7 +138,7 @@ void SRLinkWebSocketClient::stop()
     client->close();
 }
 
-void SRLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload) 
+void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload) 
 {
     if (!started || !client->isValid()) {
         return;
@@ -154,7 +154,7 @@ void SRLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &pa
     client->sendTextMessage(QJsonDocument(message).toJson());
 }
 
-void SRLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &payload)
+void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &payload)
 {
     if (!started || !client->isValid()) {
         return;

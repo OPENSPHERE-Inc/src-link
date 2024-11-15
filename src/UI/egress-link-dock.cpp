@@ -27,7 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- SouceLinkDock class ---//
 
-EgressLinkDock::EgressLinkDock(SRLinkApiClient *_apiClient, QWidget *parent)
+EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     : QFrame(parent),
       ui(new Ui::EgressLinkDock),
       apiClient(_apiClient),
@@ -226,6 +226,7 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
 
 void EgressLinkDock::onUplinkFailed(const QString &)
 {
+    ui->seatAllocationSeatName->setText("");
     ui->seatAllocationStatus->setText(QTStr("NoSlot"));
     setThemeID(ui->seatAllocationStatus, "error");
 

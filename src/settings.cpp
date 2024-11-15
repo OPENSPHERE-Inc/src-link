@@ -24,9 +24,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define SETTINGS_JSON_NAME "settings.json"
 
-//--- SRLinkSettingsStore class ---//
+//--- SRCLinkSettingsStore class ---//
 
-SRLinkSettingsStore::SRLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
+SRCLinkSettingsStore::SRCLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
 {
     OBSString config_dir_path = obs_module_get_config_path(obs_current_module(), "");
     os_mkdirs(config_dir_path);
@@ -37,15 +37,15 @@ SRLinkSettingsStore::SRLinkSettingsStore(QObject *parent) : O0AbstractStore(pare
         settingsData = obs_data_create();
     }
 
-    obs_log(LOG_DEBUG, "client: SRLinkSettingsStore created");
+    obs_log(LOG_DEBUG, "client: SRCLinkSettingsStore created");
 }
 
-SRLinkSettingsStore::~SRLinkSettingsStore()
+SRCLinkSettingsStore::~SRCLinkSettingsStore()
 {
-    obs_log(LOG_DEBUG, "client: SRLinkSettingsStore destroyed");
+    obs_log(LOG_DEBUG, "client: SRCLinkSettingsStore destroyed");
 }
 
-QString SRLinkSettingsStore::value(const QString &key, const QString &defaultValue)
+QString SRCLinkSettingsStore::value(const QString &key, const QString &defaultValue)
 {
     auto value = QString(obs_data_get_string(settingsData, qUtf8Printable(key)));
     if (!value.isEmpty()) {
@@ -55,7 +55,7 @@ QString SRLinkSettingsStore::value(const QString &key, const QString &defaultVal
     }
 }
 
-void SRLinkSettingsStore::setValue(const QString &key, const QString &value)
+void SRCLinkSettingsStore::setValue(const QString &key, const QString &value)
 {
     obs_data_set_string(settingsData, qUtf8Printable(key), qUtf8Printable(value));
     OBSString path = obs_module_get_config_path(obs_current_module(), SETTINGS_JSON_NAME);

@@ -94,24 +94,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
         }                                             \
     }
 
-//--- SRLinkApiClient class ---//
+//--- SRCLinkApiClient class ---//
 
-SRLinkApiClient::SRLinkApiClient(QObject *parent)
+SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     : QObject(parent),
       // Create store object for writing the received tokens (It will be child of O2 instance)
-      settings(new SRLinkSettingsStore()),
+      settings(new SRCLinkSettingsStore()),
       networkManager(nullptr),
       client(nullptr),
       activeOutputs(0),
       standByOutputs(0),
       uplinkStatus(UPLINK_STATUS_INACTIVE)
 {
-    obs_log(LOG_DEBUG, "client: SRLinkApiClient creating with %s", API_SERVER);
+    obs_log(LOG_DEBUG, "client: SRCLinkApiClient creating with %s", API_SERVER);
 
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
     sequencer = new RequestSequencer(networkManager, client, this);
-    websocket = new SRLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
+    websocket = new SRCLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
 
     uuid = settings->value("uuid");
     if (uuid.isEmpty()) {
@@ -163,6 +163,11 @@ SRLinkApiClient::SRLinkApiClient(QObject *parent)
         websocket, SIGNAL(removed(const QString &, const QString &, const QJsonObject &)), this,
         SLOT(onWebSocketDataRemoved(const QString &, const QString &, const QJsonObject &))
     );
+    connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
+        if (license.getLicenseValid()) {
+            putUplink();
+        }
+    });
 
     if (client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
         // Refresh token now
@@ -170,16 +175,15 @@ SRLinkApiClient::SRLinkApiClient(QObject *parent)
         invoker->refresh();
     } else {
         connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-            if (error == QNetworkReply::NoError) {
-                resyncOnlineResources();
-
-                connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-                    if (error != QNetworkReply::NoError) {
-                        return;
-                    }
-                    websocket->start();
-                });
+            if (error != QNetworkReply::NoError) {
+                return;
             }
+
+            resyncOnlineResources();
+            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
+                // WebSocket will be started even if uplink upload failed.
+                websocket->start();
+            });
         });
 
         // Schedule next refresh
@@ -188,15 +192,15 @@ SRLinkApiClient::SRLinkApiClient(QObject *parent)
         );
     }
 
-    obs_log(LOG_DEBUG, "client: SRLinkApiClient created");
+    obs_log(LOG_DEBUG, "client: SRCLinkApiClient created");
 }
 
-SRLinkApiClient::~SRLinkApiClient()
+SRCLinkApiClient::~SRCLinkApiClient()
 {
-    obs_log(LOG_DEBUG, "client: SRLinkApiClient destroyed");
+    obs_log(LOG_DEBUG, "client: SRCLinkApiClient destroyed");
 }
 
-void SRLinkApiClient::login()
+void SRCLinkApiClient::login()
 {
     obs_log(
         LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s",
@@ -205,26 +209,26 @@ void SRLinkApiClient::login()
     client->link();
 }
 
-void SRLinkApiClient::logout()
+void SRCLinkApiClient::logout()
 {
     connect(deleteUplink(true), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
         client->unlink();
     });
 }
 
-bool SRLinkApiClient::isLoggedIn()
+bool SRCLinkApiClient::isLoggedIn()
 {
     return client->linked();
 }
 
-const RequestInvoker *SRLinkApiClient::refresh()
+const RequestInvoker *SRCLinkApiClient::refresh()
 {
     auto invoker = new RequestInvoker(sequencer, this);
     invoker->refresh();
     return invoker;
 }
 
-const int SRLinkApiClient::getFreePort()
+const int SRCLinkApiClient::getFreePort()
 {
     auto min = settings->getIngressPortMin();
     auto max = settings->getIngressPortMax();
@@ -238,12 +242,12 @@ const int SRLinkApiClient::getFreePort()
     return 0;
 }
 
-void SRLinkApiClient::releasePort(const int port)
+void SRCLinkApiClient::releasePort(const int port)
 {
     usedPorts[port] = false;
 }
 
-void SRLinkApiClient::resyncOnlineResources()
+void SRCLinkApiClient::resyncOnlineResources()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -253,7 +257,7 @@ void SRLinkApiClient::resyncOnlineResources()
     requestStages();
 }
 
-void SRLinkApiClient::clearOnlineResources()
+void SRCLinkApiClient::clearOnlineResources()
 {
     accountInfo = AccountInfo();
     parties = PartyArray();
@@ -264,14 +268,14 @@ void SRLinkApiClient::clearOnlineResources()
     downlinks.clear();
 }
 
-void SRLinkApiClient::terminate()
+void SRCLinkApiClient::terminate()
 {
     obs_log(LOG_DEBUG, "client: Terminating API client.");
     deleteUplink(true);
 }
 
 // Call putUplinkStatus() when uplinkStatus is changed
-void SRLinkApiClient::syncUplinkStatus()
+void SRCLinkApiClient::syncUplinkStatus()
 {
     auto nextUplinkStatus = activeOutputs > 0    ? UPLINK_STATUS_ACTIVE
                             : standByOutputs > 0 ? UPLINK_STATUS_STANDBY
@@ -282,7 +286,7 @@ void SRLinkApiClient::syncUplinkStatus()
     }
 }
 
-const RequestInvoker *SRLinkApiClient::requestAccountInfo()
+const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -299,14 +303,15 @@ const RequestInvoker *SRLinkApiClient::requestAccountInfo()
             return;
         }
 
-        auto licenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().isValid() !=
-                                                            newAccountInfo.getSubscriptionLicense().isValid();
+        auto emitLicenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().getLicenseValid() !=
+                                                            newAccountInfo.getSubscriptionLicense().getLicenseValid();
+
         accountInfo = newAccountInfo;
         obs_log(LOG_DEBUG, "client: Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
-
         emit accountInfoReady(accountInfo);
-        if (licenseChanged) {
-            emit ingressRefreshNeeded();
+
+        if (emitLicenseChanged) {
+            emit licenseChanged(newAccountInfo.getSubscriptionLicense());
         }
     });
     invoker->get(QNetworkRequest(QUrl(ACCOUNT_INFO_URL)));
@@ -314,7 +319,7 @@ const RequestInvoker *SRLinkApiClient::requestAccountInfo()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestParties()
+const RequestInvoker *SRCLinkApiClient::requestParties()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -345,7 +350,7 @@ const RequestInvoker *SRLinkApiClient::requestParties()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestPartyEvents()
+const RequestInvoker *SRCLinkApiClient::requestPartyEvents()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -372,7 +377,7 @@ const RequestInvoker *SRLinkApiClient::requestPartyEvents()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestParticipants()
+const RequestInvoker *SRCLinkApiClient::requestParticipants()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -403,7 +408,7 @@ const RequestInvoker *SRLinkApiClient::requestParticipants()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestStages()
+const RequestInvoker *SRCLinkApiClient::requestStages()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -430,7 +435,7 @@ const RequestInvoker *SRLinkApiClient::requestStages()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestUplink()
+const RequestInvoker *SRCLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -461,7 +466,7 @@ const RequestInvoker *SRLinkApiClient::requestUplink()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid)
+const RequestInvoker *SRCLinkApiClient::requestDownlink(const QString &sourceUuid)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -495,7 +500,7 @@ const RequestInvoker *SRLinkApiClient::requestDownlink(const QString &sourceUuid
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, const DownlinkRequestBody &params)
+const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, const DownlinkRequestBody &params)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -540,7 +545,7 @@ const RequestInvoker *SRLinkApiClient::putDownlink(const QString &sourceUuid, co
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
+const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -568,7 +573,7 @@ const RequestInvoker *SRLinkApiClient::deleteDownlink(const QString &sourceUuid,
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::putUplink(const bool force)
+const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -614,7 +619,7 @@ const RequestInvoker *SRLinkApiClient::putUplink(const bool force)
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::putUplinkStatus()
+const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -656,7 +661,7 @@ const RequestInvoker *SRLinkApiClient::putUplinkStatus()
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::deleteUplink(const bool parallel)
+const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -683,7 +688,7 @@ const RequestInvoker *SRLinkApiClient::deleteUplink(const bool parallel)
     return invoker;
 }
 
-const RequestInvoker *SRLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
+const RequestInvoker *SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -712,7 +717,7 @@ const RequestInvoker *SRLinkApiClient::putScreenshot(const QString &sourceName, 
     return invoker;
 }
 
-void SRLinkApiClient::getPicture(const QString &pictureId)
+void SRCLinkApiClient::getPicture(const QString &pictureId)
 {
     auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL).arg(pictureId))));
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
@@ -730,17 +735,17 @@ void SRLinkApiClient::getPicture(const QString &pictureId)
     });
 }
 
-void SRLinkApiClient::openStagesManagementPage()
+void SRCLinkApiClient::openStagesManagementPage()
 {
     QDesktopServices::openUrl(QUrl(STAGES_MANAGEMENT_PAGE_URL));
 }
 
-void SRLinkApiClient::onO2OpenBrowser(const QUrl &url)
+void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
 }
 
-void SRLinkApiClient::onO2LinkedChanged()
+void SRCLinkApiClient::onO2LinkedChanged()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -748,7 +753,7 @@ void SRLinkApiClient::onO2LinkedChanged()
 }
 
 // This is called when link or refresh token succeeded
-void SRLinkApiClient::onO2LinkingSucceeded()
+void SRCLinkApiClient::onO2LinkingSucceeded()
 {
     if (client->linked()) {
         CHECK_CLIENT_TOKEN();
@@ -760,11 +765,8 @@ void SRLinkApiClient::onO2LinkingSucceeded()
             }
 
             resyncOnlineResources();
-
             connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-                if (error != QNetworkReply::NoError) {
-                    return;
-                }
+                // WebSocket will be started even if uplink upload failed.
                 websocket->start();
             });
         });
@@ -781,7 +783,7 @@ void SRLinkApiClient::onO2LinkingSucceeded()
     }
 }
 
-void SRLinkApiClient::onO2LinkingFailed()
+void SRCLinkApiClient::onO2LinkingFailed()
 {
     obs_log(LOG_ERROR, "client: The API client linking failed.");
 
@@ -790,7 +792,7 @@ void SRLinkApiClient::onO2LinkingFailed()
     emit loginFailed();
 }
 
-void SRLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
+void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 {
     if (error != QNetworkReply::NoError) {
         return;
@@ -801,7 +803,7 @@ void SRLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
     QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
 }
 
-void SRLinkApiClient::onWebSocketReady(bool reconnect)
+void SRCLinkApiClient::onWebSocketReady(bool reconnect)
 {
     obs_log(LOG_DEBUG, "client: WebSocket is ready.");
     websocket->subscribe("uplink", {{"uuid", uuid}});
@@ -821,12 +823,12 @@ void SRLinkApiClient::onWebSocketReady(bool reconnect)
     emit webSocketReady(reconnect);
 }
 
-void SRLinkApiClient::onWebSocketDisconnected()
+void SRCLinkApiClient::onWebSocketDisconnected()
 {
     emit webSocketDisconnected();
 }
 
-void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
+void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
 {
     obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 
@@ -935,8 +937,15 @@ void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString 
             return;
         }
 
+        auto emitLicenseChanged = !accountInfo.isEmpty() &&
+                              accountInfo.getSubscriptionLicense().getLicenseValid() != newLicense.getLicenseValid();
+
         accountInfo.setSubscriptionLicense(newLicense);
         emit accountInfoReady(accountInfo);
+ 
+        if (emitLicenseChanged) {
+            emit licenseChanged(newLicense);
+        }
 
     } else if (name == "accounts.resourceUsage") {
         AccountResourceUsage newResourceUsage = payload;
@@ -951,7 +960,7 @@ void SRLinkApiClient::onWebSocketDataChanged(const QString &name, const QString 
     }
 }
 
-void SRLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
+void SRCLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
 {
     obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 

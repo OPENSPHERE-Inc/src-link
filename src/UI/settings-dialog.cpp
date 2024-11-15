@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../plugin-support.h"
 #include "settings-dialog.hpp"
 
-SettingsDialog::SettingsDialog(SRLinkApiClient *_apiClient, QWidget *parent)
+SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::SettingsDialog),
       apiClient(_apiClient)

@@ -32,7 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //--- IngressLinkSource class ---//
 
 IngressLinkSource::IngressLinkSource(
-    obs_data_t *settings, obs_source_t *_source, SRLinkApiClient *_apiClient, QObject *parent
+    obs_data_t *settings, obs_source_t *_source, SRCLinkApiClient *_apiClient, QObject *parent
 )
     : QObject(parent),
       weakSource(obs_source_get_weak_source(_source)),
@@ -86,9 +86,13 @@ IngressLinkSource::IngressLinkSource(
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
     connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
-    connect(apiClient, &SRLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
+    connect(apiClient, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
+        if (license.getLicenseValid()) {
+            reactivate();
+        }
+    });
+    connect(apiClient, &SRCLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
     connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
-    connect(apiClient, SIGNAL(webSocketReady(bool)), this, SLOT(onWebSocketReady(bool)));
     connect(this, SIGNAL(settingsUpdate(obs_data_t *)), this, SLOT(onSettingsUpdate(obs_data_t *)));
 
     renameSignal.Connect(
@@ -173,7 +177,10 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
     auto newRequest = connRequest;
     newRequest.setProtocol(apiClient->getSettings()->getIngressProtocol());
-    newRequest.setStageId(obs_data_get_string(settings, "stage_id"));
+
+    auto stageId = obs_data_get_string(settings, "stage_id");
+    newRequest.setStageId(stageId);
+
     newRequest.setSeatName(obs_data_get_string(settings, "seat_name"));
     newRequest.setSourceName(obs_data_get_string(settings, "source_name"));
     newRequest.setMaxBitrate(obs_data_get_int(settings, "max_bitrate"));
@@ -184,8 +191,8 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
 
-    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
-    if (quota.getMaxRelayConnections() > 0) {
+    auto stage = apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
+    if (stage.getSrtrelayServers().size() > 0) {
         newRequest.setRelay(obs_data_get_bool(settings, "relay"));
     } else {
         newRequest.setRelay(false);
@@ -220,18 +227,15 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
         QString input;
 
         if (connection.getRelay()) {
-            auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
+            // FIXME: Currently encryption not supported !
+            input = QString("srt://%1:%2?mode=caller&%3"
+                            "streamid=play/%4/%5")
+                        .arg(connection.getServer())
+                        .arg(connection.getPort())
+                        .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
+                        .arg(connection.getStreamId())
+                        .arg(connection.getPassphrase());
 
-            if (quota.getMaxRelayConnections() > 0) {
-                // FIXME: Currently encryption not supported !
-                input = QString("srt://%1:%2?mode=caller&%3"
-                                "streamid=play/%4/%5")
-                            .arg(connection.getServer())
-                            .arg(connection.getPort())
-                            .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
-                            .arg(connection.getStreamId())
-                            .arg(connection.getPassphrase());
-            }
         } else {
             input = QString("srt://0.0.0.0:%1?mode=listener&%2"
                             "streamid=%3&passphrase=%4")
@@ -311,13 +315,13 @@ obs_properties_t *IngressLinkSource::getProperties()
     );
     obs_property_list_add_string(sourceList, "", "");
 
-    // Stage change event -> Update connection group
+    // Stage change stage -> Update connection group
     obs_property_set_modified_callback2(
         stageList,
         [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
             obs_log(LOG_DEBUG, "Receiver has been changed.");
 
-            auto apiClient = static_cast<SRLinkApiClient *>(param);
+            auto apiClient = static_cast<SRCLinkApiClient *>(param);
             QString stageId = obs_data_get_string(settings, "stage_id");
 
             auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
@@ -359,6 +363,9 @@ obs_properties_t *IngressLinkSource::getProperties()
                 );
             }
 
+            auto relay = obs_properties_get(connectionGroup, "relay");
+            obs_property_set_enabled(relay, stage.getSrtrelayServers().size() > 0);
+
             return true;
         },
         apiClient
@@ -398,9 +405,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     );
 
     // Connection group -> Relay checkbox
-    auto relay = obs_properties_add_bool(connectionGroup, "relay", obs_module_text("UseRelayServer"));
-    auto quota = apiClient->getAccountInfo().getSubscriptionLicense().getSavedPlan().getFeatures();
-    obs_property_set_enabled(relay, quota.getMaxRelayConnections() > 0);
+    obs_properties_add_bool(connectionGroup, "relay", obs_module_text("UseRelayServer"));
 
     // Other stage settings
     auto maxBitrate = obs_properties_add_int(props, "max_bitrate", obs_module_text("MaxBitrate"), 0, 1000000000, 100);
@@ -454,7 +459,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     return props;
 }
 
-void IngressLinkSource::getDefaults(obs_data_t *settings, SRLinkApiClient *apiClient)
+void IngressLinkSource::getDefaults(obs_data_t *settings, SRCLinkApiClient *apiClient)
 {
     obs_log(LOG_DEBUG, "Default settings applying.");
 
@@ -562,13 +567,6 @@ void IngressLinkSource::onLogoutSucceeded()
     connection = StageConnection();
 }
 
-void IngressLinkSource::onWebSocketReady(bool reconnect)
-{
-    if (reconnect) {
-        putConnection();
-    }
-}
-
 void IngressLinkSource::reactivate()
 {
     obs_log(LOG_DEBUG, "%s: Source reactivating with rev.%d", qUtf8Printable(name), revision);
@@ -667,7 +665,7 @@ void SourceAudioThread::run()
 
 //--- Source registration ---//
 
-extern SRLinkApiClient *apiClient;
+extern SRCLinkApiClient *apiClient;
 
 void *createSource(obs_data_t *settings, obs_source_t *source)
 {

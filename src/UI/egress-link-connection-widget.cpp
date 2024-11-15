@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //--- EgressLinkConnectionWidget class ---//
 
 EgressLinkConnectionWidget::EgressLinkConnectionWidget(
-    const StageSource &_source, const QString &interlockType, SRLinkApiClient *_apiClient, QWidget *parent
+    const StageSource &_source, const QString &interlockType, SRCLinkApiClient *_apiClient, QWidget *parent
 )
     : QWidget(parent),
       ui(new Ui::EgressLinkConnectionWidget),

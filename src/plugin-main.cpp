@@ -32,16 +32,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
-#define SR_LINK_EGRESS_DOCK_ID "SRLinkDock"
+#define SRC_LINK_EGRESS_DOCK_ID "SRCLinkDock"
 
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
-SRLinkSettingsStore *settingsStore = nullptr;
-SRLinkApiClient *apiClient = nullptr;
+SRCLinkSettingsStore *settingsStore = nullptr;
+SRCLinkApiClient *apiClient = nullptr;
 EgressLinkDock *egressLinkDock = nullptr;
 
-obs_source_info linkedSourceInfo;
+obs_source_info ingressLinkSourceInfo;
 
 void registerEgressLinkDock()
 {
@@ -49,7 +49,7 @@ void registerEgressLinkDock()
     if (mainWindow) {
         if (!egressLinkDock) {
             egressLinkDock = new EgressLinkDock(apiClient, mainWindow);
-            obs_frontend_add_dock_by_id(SR_LINK_EGRESS_DOCK_ID, obs_module_text("SRLinkUplinkDock"), egressLinkDock);
+            obs_frontend_add_dock_by_id(SRC_LINK_EGRESS_DOCK_ID, obs_module_text("SRCLinkUplinkDock"), egressLinkDock);
         }
     }
 }
@@ -58,7 +58,7 @@ void unregisterEgressLinkDock()
 {
     if (egressLinkDock) {
         // The instance will be deleted by OBS (Do not call delete manually!)
-        obs_frontend_remove_dock(SR_LINK_EGRESS_DOCK_ID);
+        obs_frontend_remove_dock(SRC_LINK_EGRESS_DOCK_ID);
         egressLinkDock = nullptr;
     }
 }
@@ -75,13 +75,13 @@ void frontendEventCallback(enum obs_frontend_event event, void *)
 
 bool obs_module_load(void)
 {
-    apiClient = new SRLinkApiClient();
+    apiClient = new SRCLinkApiClient();
 
     obs_frontend_add_event_callback(frontendEventCallback, nullptr);
 
     // Register "linked_source" source
-    linkedSourceInfo = createLinkedSourceInfo();
-    obs_register_source(&linkedSourceInfo);
+    ingressLinkSourceInfo = createLinkedSourceInfo();
+    obs_register_source(&ingressLinkSourceInfo);
 
     // Register menu action
     auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
@@ -99,8 +99,8 @@ bool obs_module_load(void)
         if (apiClient->isLoggedIn()) {
             registerEgressLinkDock();
         }
-        QObject::connect(apiClient, &SRLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
-        QObject::connect(apiClient, &SRLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
+        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
+        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
         */
     }
 

@@ -22,14 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <o2.h>
 
-class SRLinkSettingsStore : public O0AbstractStore {
+class SRCLinkSettingsStore : public O0AbstractStore {
     Q_OBJECT
 
     OBSDataAutoRelease settingsData;
 
 public:
-    explicit SRLinkSettingsStore(QObject *parent = nullptr);
-    ~SRLinkSettingsStore();
+    explicit SRCLinkSettingsStore(QObject *parent = nullptr);
+    ~SRCLinkSettingsStore();
 
     QString value(const QString &key, const QString &defaultValue = QString());
     void setValue(const QString &key, const QString &value);
