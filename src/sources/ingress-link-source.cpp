@@ -364,7 +364,9 @@ obs_properties_t *IngressLinkSource::getProperties()
             }
 
             auto relay = obs_properties_get(connectionGroup, "relay");
-            obs_property_set_enabled(relay, stage.getSrtrelayServers().size() > 0);
+            auto relayServerAvailable = stage.getSrtrelayServers().size() > 0;
+            obs_property_set_enabled(relay, relayServerAvailable);
+            obs_data_set_bool(settings, "relay", obs_data_get_bool(settings, "relay") && relayServerAvailable);
 
             return true;
         },

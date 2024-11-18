@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#define SCHEMA_DEBUG
+//#define SCHEMA_DEBUG
 
 #ifdef SCHEMA_DEBUG
 #include <obs-module.h>

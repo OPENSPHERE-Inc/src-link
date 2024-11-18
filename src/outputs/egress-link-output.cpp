@@ -184,7 +184,7 @@ obs_properties_t *EgressLinkOutput::getProperties()
             auto audioSource = obs_data_get_string(settings, "audio_source");
             obs_property_set_enabled(
                 obs_properties_get(_props, "audio_track"),
-                (!strlen(audioSource) && output->getSourceUuid().isEmpty()) || !strcmp(audioSource, "master_track")
+                (!strlen(audioSource) && output->getSourceUuid() == "program") || !strcmp(audioSource, "master_track")
             );
             return true;
         },
@@ -374,6 +374,10 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     obs_data_set_default_string(defaults, "audio_source", "");
     obs_data_set_default_bool(defaults, "visible", true);
 
+    // Apply encoder's defaults
+    OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(videoEncoderId);
+    applyDefaults(defaults, encoderDefaults);
+
     obs_log(LOG_DEBUG, "%s: Default settings applied", qUtf8Printable(name));
 }
 
@@ -414,8 +418,11 @@ void EgressLinkOutput::loadSettings()
 {
     settings = obs_data_create();
 
-    // Apply defaults
+    // Initialize defaults
     getDefaults(settings);
+    // Apply default first
+    OBSDataAutoRelease defaults = obs_data_get_defaults(settings);
+    obs_data_apply(settings, defaults);
 
     // Load settings from json
     OBSString path = obs_module_get_config_path(obs_current_module(), qUtf8Printable(QString("%1.json").arg(name)));
@@ -487,12 +494,12 @@ void EgressLinkOutput::start()
 
         activeSettingsRev = storedSettingsRev;
         activeSourceUuid = obs_data_get_string(settings, "source_uuid");
-        if (activeSourceUuid == "disabled" || !obs_data_get_bool(settings, "visible")) {
+        if (activeSourceUuid.isEmpty() || !obs_data_get_bool(settings, "visible")) {
             setStatus(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
             return;
         }
 
-        if (!activeSourceUuid.isEmpty()) {
+        if (activeSourceUuid != "program") {
             // Get reference for specific source
             source = obs_get_source_by_uuid(qUtf8Printable(activeSourceUuid));
             if (!source) {
@@ -609,7 +616,7 @@ void EgressLinkOutput::start()
                 return;
             }
             audio = audioSilence;
-        } else if (!audioSourceUuid.isEmpty() && audioSourceUuid != "master_track") {
+        } else if (audioSourceUuid != "program" && audioSourceUuid != "master_track") {
             // Not master audio
             OBSSourceAutoRelease customSource = obs_get_source_by_uuid(qUtf8Printable(audioSourceUuid));
             if (customSource) {

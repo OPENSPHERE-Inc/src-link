@@ -169,7 +169,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     );
     connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
-            putUplink();
+            putUplink(settings->getForceConnection());
         }
     });
 
@@ -184,10 +184,13 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
             }
 
             resyncOnlineResources();
-            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-                // WebSocket will be started even if uplink upload failed.
-                websocket->start();
-            });
+            connect(
+                putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
+                [this](QNetworkReply::NetworkError) {
+                    // WebSocket will be started even if uplink upload failed.
+                    websocket->start();
+                }
+            );
         });
 
         // Schedule next refresh
@@ -270,6 +273,8 @@ void SRCLinkApiClient::clearOnlineResources()
     stages = StageArray();
     uplink = UplinkInfo();
     downlinks.clear();
+    settings->setParticipantId("");
+    settings->setPartyId("");
 }
 
 void SRCLinkApiClient::terminate()
@@ -307,8 +312,9 @@ const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
             return;
         }
 
-        auto emitLicenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().getLicenseValid() !=
-                                                            newAccountInfo.getSubscriptionLicense().getLicenseValid();
+        auto emitLicenseChanged = !accountInfo.isEmpty() &&
+                                  accountInfo.getSubscriptionLicense().getLicenseValid() !=
+                                      newAccountInfo.getSubscriptionLicense().getLicenseValid();
 
         accountInfo = newAccountInfo;
         obs_log(LOG_DEBUG, "client: Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
@@ -403,6 +409,8 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
 
         if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
             settings->setParticipantId(participants[0].getId());
+            // Put uplink again
+            putUplink(settings->getForceConnection());
         }
 
         emit participantsReady(participants);
@@ -586,19 +594,20 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
 
     QJsonObject body;
     body["participant_id"] = settings->getParticipantId();
-    body["force"] = force || settings->getForceConnection() ? "1" : "0";
+    body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
 
-    obs_log(LOG_DEBUG, "client: Putting uplink of %s", qUtf8Printable(uuid));
+    obs_log(
+        LOG_DEBUG, "client: Putting uplink of %s (force=%s)", qUtf8Printable(uuid),
+        qUtf8Printable(body["force"].toString())
+    );
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
-                emit putUplinkFailed(uuid);
-                emit uplinkFailed(uuid);
-                return;
-            }
+            obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+            emit putUplinkFailed(uuid);
+            emit uplinkFailed(uuid);
+            return;
         }
         obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qUtf8Printable(uuid));
 
@@ -637,12 +646,10 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            if (error == QNetworkReply::ContentOperationNotPermittedError) {
-                obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
-                emit putUplinkStatusFailed(uuid);
-                emit uplinkFailed(uuid);
-                return;
-            }
+            obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
+            emit putUplinkStatusFailed(uuid);
+            emit uplinkFailed(uuid);
+            return;
         }
         obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qUtf8Printable(uuid));
 
@@ -784,10 +791,13 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
             }
 
             resyncOnlineResources();
-            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-                // WebSocket will be started even if uplink upload failed.
-                websocket->start();
-            });
+            connect(
+                putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
+                [this](QNetworkReply::NetworkError) {
+                    // WebSocket will be started even if uplink upload failed.
+                    websocket->start();
+                }
+            );
         });
 
         emit loginSucceeded();
@@ -956,12 +966,12 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
             return;
         }
 
-        auto emitLicenseChanged = !accountInfo.isEmpty() &&
-                              accountInfo.getSubscriptionLicense().getLicenseValid() != newLicense.getLicenseValid();
+        auto emitLicenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().getLicenseValid() !=
+                                                                newLicense.getLicenseValid();
 
         accountInfo.setSubscriptionLicense(newLicense);
         emit accountInfoReady(accountInfo);
- 
+
         if (emitLicenseChanged) {
             emit licenseChanged(newLicense);
         }

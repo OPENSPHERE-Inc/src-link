@@ -71,9 +71,6 @@ OutputDialog::~OutputDialog()
 
 void OutputDialog::onAccept()
 {
-    // Apply encoder settings to output
-    propsView->UpdateSettings();
-
     output->update(propsView->GetSettings());
 }
 
@@ -82,6 +79,7 @@ void OutputDialog::showEvent(QShowEvent *event)
     QDialog::showEvent(event);
 
     propsView->ReloadProperties();
+    obs_data_apply(propsView->GetSettings(), output->getSettings());
 }
 
 void OutputDialog::onOBSSourcesChanged(void *data, calldata_t *cd)

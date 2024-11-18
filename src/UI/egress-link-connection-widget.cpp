@@ -45,7 +45,7 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     updateSourceList();
 
     if (output->getSourceUuid().isEmpty()) {
-        ui->videoSourceComboBox->setCurrentIndex(1);
+        ui->videoSourceComboBox->setCurrentIndex(0);
     } else {
         ui->videoSourceComboBox->setCurrentIndex(ui->videoSourceComboBox->findData(output->getSourceUuid()));
     }
@@ -143,8 +143,8 @@ void EgressLinkConnectionWidget::updateSourceList()
     {
         auto selected = output->getSourceUuid(); // The output keeps current value
         ui->videoSourceComboBox->clear();
-        ui->videoSourceComboBox->addItem(QTStr("None"), "disabled");
-        ui->videoSourceComboBox->addItem(QTStr("ProgramOut"), "");
+        ui->videoSourceComboBox->addItem(QTStr("None"), "");
+        ui->videoSourceComboBox->addItem(QTStr("ProgramOut"), "program");
 
         obs_enum_sources(
             [](void *param, obs_source_t *source) {
@@ -161,13 +161,13 @@ void EgressLinkConnectionWidget::updateSourceList()
         );
 
         auto index = ui->videoSourceComboBox->findData(selected);
-        if (!selected.isEmpty() && index != -1) {
+        if (index != -1) {
             ui->videoSourceComboBox->setCurrentIndex(index);
         } else {
-            // Select "Program out" defaultly
-            ui->videoSourceComboBox->setCurrentIndex(1);
+            // Select "disabled" defaultly
+            ui->videoSourceComboBox->setCurrentIndex(0);
             // Trigger event manually
-            onVideoSourceChanged(1);
+            onVideoSourceChanged(0);
         }
     }
     ui->videoSourceComboBox->blockSignals(false);
