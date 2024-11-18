@@ -262,8 +262,8 @@ public:
         auto validMaxPartyEventParticipants = (*this)["max_party_event_participants"].isDouble();
 
         auto valid = validStages && validParties && validPartyEvents && validConcurrentPartyEvents &&
-                     validMaxStageSources && validMaxStageSeats && validMaxSrtrelayServers &&
-                     validMaxPartyMembers && validMaxPartyEventParticipants;
+                     validMaxStageSources && validMaxStageSeats && validMaxSrtrelayServers && validMaxPartyMembers &&
+                     validMaxPartyEventParticipants;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -271,7 +271,7 @@ public:
             "AccountResourceUsage: stages=%d, parties=%d, party_events=%d, concurrent_party_events=%d, "
             "max_stage_sources=%d, max_stage_seats=%d, max_srtrelay_servers=%d, max_party_members=%d, "
             "max_party_event_participants=%d",
-            validStages, validParties, validPartyEvents, validConcurrentPartyEvents, validMaxStageSources, 
+            validStages, validParties, validPartyEvents, validConcurrentPartyEvents, validMaxStageSources,
             validMaxStageSeats, validMaxSrtrelayServers, validMaxPartyMembers, validMaxPartyEventParticipants
         );
 #endif
@@ -507,13 +507,19 @@ public:
         auto validName = (*this)["name"].isString();
         auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
         auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
-        auto validSources = (*this)["sources"].isArray() &&
-                            getSources().every([](const StageSource &value) { return value.isValid(); });
-        auto validSeats = (*this)["seats"].isArray() &&
-                          getSeats().every([](const StageSeat &value) { return value.isValid(); });
-        auto validSrtrelayServers =
+        auto validSources =
+            maybe((*this)["sources"], (*this)["sources"].isArray() && getSources().every([](const StageSource &value) {
+                return value.isValid();
+            }));
+        auto validSeats =
+            maybe((*this)["seats"], (*this)["seats"].isArray() && getSeats().every([](const StageSeat &value) {
+                return value.isValid();
+            }));
+        auto validSrtrelayServers = maybe(
+            (*this)["srtrelay_servers"],
             (*this)["srtrelay_servers"].isArray() &&
-            getSrtrelayServers().every([](const SrtrelayServer &value) { return value.isValid(); });
+                getSrtrelayServers().every([](const SrtrelayServer &value) { return value.isValid(); })
+        );
         auto validOwnerAccountView = getOwnerAccountView().isValid();
 
         auto valid = validId && validName && validDescription && validPictureId && validSources && validSeats &&
