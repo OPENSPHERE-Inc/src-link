@@ -23,11 +23,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "egress-link-output.hpp"
 #include "audio-source.hpp"
 
-#define OUTPUT_MAX_RETRIES 3
+#define OUTPUT_MAX_RETRIES 1
 #define OUTPUT_RETRY_DELAY_SECS 1
 #define OUTPUT_JSON_NAME "output.json"
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
-#define OUTPUT_RETRY_TIMEOUT_MSECS 5000
+#define OUTPUT_RETRY_TIMEOUT_MSECS 3000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
 
 inline audio_t *createSilenceAudio()
@@ -850,7 +850,7 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
             return;
         }
 
-        if (activeSettingsRev != storedSettingsRev) {
+        if (activeSettingsRev != storedSettingsRev && !obs_output_reconnecting(output)) {
             obs_log(LOG_DEBUG, "%s: Attempting change settings", qUtf8Printable(name));
             start();
             return;
