@@ -1,5 +1,5 @@
 /*
-Source Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -22,53 +22,90 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QMainWindow>
+#include <QDir>
+#include <QAction>
 
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
-#include "outputs/linked-output.hpp"
+#include "UI/egress-link-dock.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
+#define SRC_LINK_EGRESS_DOCK_ID "SRCLinkDock"
+
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
-SourceLinkApiClient *apiClient = nullptr;
-OutputDialog *outputDialog = nullptr;
-LinkedOutput *mainOutput = nullptr;
+SRCLinkSettingsStore *settingsStore = nullptr;
+SRCLinkApiClient *apiClient = nullptr;
+EgressLinkDock *egressLinkDock = nullptr;
 
-obs_source_info linkedSourceInfo;
+obs_source_info ingressLinkSourceInfo;
+
+void registerEgressLinkDock()
+{
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
+        if (!egressLinkDock) {
+            egressLinkDock = new EgressLinkDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id(SRC_LINK_EGRESS_DOCK_ID, obs_module_text("SRCLinkDock"), egressLinkDock);
+        }
+    }
+}
+
+void unregisterEgressLinkDock()
+{
+    if (egressLinkDock) {
+        // The instance will be deleted by OBS (Do not call delete manually!)
+        obs_frontend_remove_dock(SRC_LINK_EGRESS_DOCK_ID);
+        egressLinkDock = nullptr;
+    }
+}
+
+void frontendEventCallback(enum obs_frontend_event event, void *)
+{
+    switch (event) {
+    case OBS_FRONTEND_EVENT_EXIT:
+        if (apiClient) {
+            apiClient->terminate();
+        }
+        break;
+    default:
+        break;
+    }
+}
 
 bool obs_module_load(void)
 {
-    apiClient = new SourceLinkApiClient();
+    apiClient = new SRCLinkApiClient();
+
+    obs_frontend_add_event_callback(frontendEventCallback, nullptr);
 
     // Register "linked_source" source
-    linkedSourceInfo = createLinkedSourceInfo();
-    obs_register_source(&linkedSourceInfo);
-
-    // Create main output
-    mainOutput = new LinkedOutput(QString("main"), apiClient);
+    ingressLinkSourceInfo = createLinkedSourceInfo();
+    obs_register_source(&ingressLinkSourceInfo);
 
     // Register menu action
-    QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-    if (mainWindow) {        
-        settingsDialog = new SettingsDialog(apiClient, mainWindow);
-
-        outputDialog = new OutputDialog(apiClient, mainOutput, mainWindow);
-
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
         // Settings menu item
-        QAction *settingsMenuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Settings"));
-        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
-            settingsDialog->setVisible(!settingsDialog->isVisible());
-        });
+        settingsDialog = new SettingsDialog(apiClient, mainWindow);
+        QAction *settingsMenuAction =
+            (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("SourceLinkSettings"));
+        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] { settingsDialog->show(); });
 
-        // Output menu item
-        QAction *outputMenuAction = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("Source Link Output"));
-        outputMenuAction->connect(outputMenuAction, &QAction::triggered, [] {
-            outputDialog->setVisible(!outputDialog->isVisible());
-        });
+        // Dock
+        registerEgressLinkDock();
+
+        /*
+        if (apiClient->isLoggedIn()) {
+            registerEgressLinkDock();
+        }
+        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
+        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
+        */
     }
 
     obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
@@ -77,7 +114,7 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
-    delete mainOutput;
     delete apiClient;
+    apiClient = nullptr;
     obs_log(LOG_INFO, "plugin unloaded");
 }

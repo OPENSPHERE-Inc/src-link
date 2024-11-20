@@ -1,5 +1,5 @@
 /*
-Source Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -18,216 +18,146 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <obs-module.h>
-
 #include <QNetworkAccessManager>
 #include <QByteArray>
 #include <QException>
+#include <QTimer>
 
 #include <o2.h>
-#include <o2requestor.h>
 
 #include "plugin-support.h"
-#include "objects.hpp"
+#include "schema.hpp"
+#include "settings.hpp"
+#include "request-invoker.hpp"
+#include "api-websocket.hpp"
 
-#define DEFAULT_TIMEOUT_MSECS (10 * 1000)
+#define UPLINK_STATUS_INACTIVE "inactive"
+#define UPLINK_STATUS_ACTIVE "active"
+#define UPLINK_STATUS_STANDBY "standby"
 
-class SourceLinkApiClientSettingsStore : public O0AbstractStore {
+class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
-    obs_data_t *settingsData;
-
-public:
-    explicit SourceLinkApiClientSettingsStore(QObject *parent = nullptr);
-    ~SourceLinkApiClientSettingsStore();
-
-    QString value(const QString &key, const QString &defaultValue = QString());
-    void setValue(const QString &key, const QString &value);
-};
-
-class SourceLinkApiClient : public QObject {
-    Q_OBJECT
-
-    friend class RequestInvoker;
+    friend class SRCLinkWebSocketClient;
 
     QString uuid;
-    SourceLinkApiClientSettingsStore *settings;
+    SRCLinkSettingsStore *settings;
     O2 *client;
     QNetworkAccessManager *networkManager;
-    O2Requestor *requestor;
-    QList<RequestInvoker *> requestQueue;
     QMap<int, bool> usedPorts;
+    RequestSequencer *sequencer;
+    int activeOutputs;
+    int standByOutputs;
+    SRCLinkWebSocketClient *websocket;
+    QString uplinkStatus;
 
     // Online rsources
-    AccountInfo *accountInfo;
-    QList<Party *> parties;
-    QList<PartyEvent *> partyEvents;
-    QList<Stage *> stages;
-    StageSeatAllocation *seatAllocation;
+    AccountInfo accountInfo;
+    PartyArray parties;
+    PartyEventArray partyEvents;             // Contains all events of all parties
+    PartyEventParticipantArray participants; // Contains all participants of all events
+    StageArray stages;
+    UplinkInfo uplink;
+    QMap<QString, DownlinkInfo> downlinks;
 
-protected:
-    inline O2 *getO2Client() { return client; }
-    inline O2Requestor *getRequestor() { return requestor; }
-    inline QList<RequestInvoker *> &getRequestQueue() { return requestQueue; }
+    inline QString getAccessToken() { return client->token(); }
 
 signals:
-    void linkingFailed();
-    void linkingSucceeded();
-    void accountInfoReady(const AccountInfo *accountInfo);
+    void loginSucceeded();
+    void loginFailed();
+    void logoutSucceeded();
+    void webSocketReady(bool reconnect);
+    void webSocketDisconnected();
+    void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
-    void partiesReady(QList<Party *> parties);
+    void partiesReady(const PartyArray &parties);
     void partiesFailed();
-    void partyEventsReady(QList<PartyEvent *> partyEvents);
+    void partyEventsReady(const PartyEventArray &partyEvents);
     void partyEventsFailed();
-    void stagesReady(QList<Stage *> stages);
+    void stagesReady(const StageArray &stages);
     void stagesFailed();
-    void seatAllocationReady(StageSeatAllocation *seatAllocation);
-    void seatAllocationFailed();
-    void connectionPutSucceeded(StageConnection *connection);
-    void connectionPutFailed();
-    void connectionDeleteSucceeded(const QString uuid);
-    void connectionDeleteFailed();
-    void seatAllocationPutSucceeded(StageSeatAllocation *seatAllocation);
-    void seatAllocationPutFailed();
-    void seatAllocationDeleteSucceeded(const QString uuid);
-    void seatAllocationDeleteFailed();
+    void participantsReady(const PartyEventParticipantArray &participants);
+    void participantsFailed();
+    void uplinkReady(const UplinkInfo &uplink);
+    void uplinkFailed(const QString &uuid);
+    void downlinkReady(const DownlinkInfo &downlink);
+    void downlinkFailed(const QString &uuid);
+    void putDownlinkSucceeded(const DownlinkInfo &downlink);
+    void putDownlinkFailed(const QString &uuid);
+    void deleteDownlinkSucceeded(const QString &uuid);
+    void deleteDownlinkFailed(const QString &uuid);
+    void putUplinkSucceeded(const UplinkInfo &uplink);
+    void putUplinkFailed(const QString &uuid);
+    void putUplinkStatusSucceeded(const UplinkInfo &uplink);
+    void putUplinkStatusFailed(const QString &uuid);
+    void deleteUplinkSucceeded(const QString &uuid);
+    void deleteUplinkFailed(const QString &uuid);
+    void putScreenshotSucceeded(const QString &sourceName);
+    void putScreenshotFailed(const QString &sourceName);
+    void getPictureSucceeded(const QString &pictureId, const QImage &picture);
+    void getPictureFailed(const QString &pictureId);
+    void ingressRefreshNeeded();
+    void egressRefreshNeeded();
+    void licenseChanged(const SubscriptionLicense &license);
+
+private slots:
+    void onO2LinkedChanged();
+    void onO2LinkingSucceeded();
+    void onO2LinkingFailed();
+    void onO2OpenBrowser(const QUrl &url);
+    void onO2RefreshFinished(QNetworkReply::NetworkError);
+    void onWebSocketReady(bool reconnect);
+    void onWebSocketDisconnected();
+    void onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload);
+    void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);
 
 public:
-    explicit SourceLinkApiClient(QObject *parent = nullptr);
-    ~SourceLinkApiClient();
+    explicit SRCLinkApiClient(QObject *parent = nullptr);
+    ~SRCLinkApiClient();
+
+    inline const QString &getUuid() const { return uuid; }
+    inline const AccountInfo getAccountInfo() const { return accountInfo; }
+    inline const PartyArray &getParties() const { return parties; }
+    inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
+    inline const PartyEventParticipantArray &getParticipants() const { return participants; }
+    inline const StageArray &getStages() const { return stages; }
+    inline const UplinkInfo getUplink() const { return uplink; }
+    inline SRCLinkSettingsStore *getSettings() const { return settings; }
 
 public slots:
     void login();
     void logout();
     bool isLoggedIn();
-    void refresh();
-    void requestOnlineResources();
-    void requestAccountInfo();
-    void requestParties();
-    void requestPartyEvents(const QString &partyId);
-    void requestStages();
-    void requestSeatAllocation();
-    void putConnection(
-        const QString &sourceUuid, const QString &stageId, const QString &seatName, const QString &sourceName,
-        const QString &protocol, const int port, const QString &parameters, const int maxBitrate, const int minBitrate,
-        const int width, const int height
-    );
-    void deleteConnection(const QString &sourceUuid);
-    const int getFreePort();
+    const RequestInvoker *refresh();
+    void resyncOnlineResources();
+    void clearOnlineResources();
+    const RequestInvoker *requestAccountInfo();
+    const RequestInvoker *requestParties();
+    const RequestInvoker *requestPartyEvents();
+    const RequestInvoker *requestParticipants();
+    const RequestInvoker *requestStages();
+    const RequestInvoker *requestUplink();
+    const RequestInvoker *requestDownlink(const QString &sourceUuid);
+    const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
+    const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
+    const RequestInvoker *putUplink(const bool force = false);
+    const RequestInvoker *putUplinkStatus();
+    const RequestInvoker *deleteUplink(const bool parallel = false);
+    const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
+    void getPicture(const QString &pitureId);
+    void refreshIngress() { emit ingressRefreshNeeded(); }
+    void refreshEgress() { emit egressRefreshNeeded(); }
+    void terminate();
+    void openStagesPage();       // Just open web browser
+    void openControlPanelPage(); // Just open web browser
+    void openMembershipsPage();  // Just open web browser
+    void openSignupPage();       // Just open web browser
+    void syncUplinkStatus();
+
+    int getFreePort();
     void releasePort(const int port);
-    void putSeatAllocation();
-    void deleteSeatAllocation();
-
-public:
-    inline const QString getUuid() const { return uuid; }
-    inline void setPartyId(const QString &partyId) { settings->setValue("partyId", partyId); }
-    inline const QString getPartyId() const { return settings->value("partyId"); }
-    inline void setPartyEventId(const QString &partyEventId) { settings->setValue("partyEventId", partyEventId); }
-    inline const QString getPartyEventId() const { return settings->value("partyEventId"); }
-    inline void setPortMin(const int portMin) { settings->setValue("portRange.min", QString::number(portMin)); }
-    inline const int getPortMin() { return settings->value("portRange.min", "10000").toInt(); }
-    inline void setPortMax(const int portMax) { settings->setValue("portRange.max", QString::number(portMax)); }
-    inline const int getPortMax() { return settings->value("portRange.max", "10099").toInt(); }
-
-    inline const AccountInfo *getAccountInfo() const { return accountInfo; }
-    inline const QList<Party *> &getParties() const { return parties; }
-    inline const QList<PartyEvent *> &getPartyEvents() const { return partyEvents; }
-    inline const QList<Stage *> &getStages() const { return stages; }
-    inline const StageSeatAllocation *getSeatAllocation() const { return seatAllocation; }
-
-private slots:
-    void onO2LinkedChanged();
-    void onO2LinkingSucceeded();
-    void onO2OpenBrowser(const QUrl &url);
-    void onO2RefreshFinished(QNetworkReply::NetworkError);
-};
-
-// This class introduces sequencial invocation of requests
-class RequestInvoker : public QObject {
-    Q_OBJECT
-
-    O2Requestor *requestor;
-    SourceLinkApiClient *apiClient;
-    int requestId = -1; // -1: no request, -2: refresh, other: Proper request ID from O2Requestor
-
-signals:
-    void finished(QNetworkReply::NetworkError error, QByteArray data);
-
-public:
-    explicit RequestInvoker(SourceLinkApiClient *apiClient, QObject *parent = nullptr);
-    ~RequestInvoker();
-
-    template<class Func> inline void queue(Func invoker)
-    {
-        if (apiClient->getRequestQueue().isEmpty()) {
-            invoker();
-        } else {
-            // Reserve next invocation
-            obs_log(LOG_DEBUG, "Queue next request: pos=%d", apiClient->getRequestQueue().size());
-            connect(apiClient->getRequestQueue().last(), &RequestInvoker::finished, invoker);
-        }
-        apiClient->getRequestQueue().append(this);
-    }
-
-    /// Do token refresh
-    inline void refresh()
-    {
-        queue([this]() {
-            obs_log(LOG_DEBUG, "Invoke refresh token");
-            apiClient->refresh();
-            requestId = -2;
-        });
-    }
-
-    /// Make a GET request.
-    inline void get(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->get(req, timeout); });
-    }
-
-    /// Make a POST request.
-    inline void post(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestor->post(req, data, timeout); });
-    }
-
-    inline void post(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->post(req, data, timeout); });
-    }
-
-    /// Make a PUT request.
-    inline void put(const QNetworkRequest &req, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
-
-    inline void put(const QNetworkRequest &req, QHttpMultiPart *data, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, data, timeout]() { requestId = requestor->put(req, data, timeout); });
-    }
-
-    /// Make a DELETE request.
-    inline void deleteResource(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->deleteResource(req, timeout); });
-    }
-
-    /// Make a HEAD request.
-    inline void head(const QNetworkRequest &req, int timeout = DEFAULT_TIMEOUT_MSECS)
-    {
-        queue([this, req, timeout]() { requestId = requestor->head(req, timeout); });
-    }
-
-    /// Make a custom request.
-    inline void customRequest(
-        const QNetworkRequest &req, const QByteArray &verb, const QByteArray &data, int timeout = DEFAULT_TIMEOUT_MSECS
-    )
-    {
-        queue([this, req, verb, data, timeout]() { requestId = requestor->customRequest(req, verb, data, timeout); });
-    }
-
-private slots:
-    void onRequestorFinished(int, QNetworkReply::NetworkError error, QByteArray data);
-    void onO2RefreshFinished(QNetworkReply::NetworkError error);
+    inline void incrementActiveOutputs() { activeOutputs++; }
+    inline void decrementActiveOutputs() { activeOutputs--; }
+    inline void incrementStandByOutputs() { standByOutputs++; }
+    inline void decrementStandByOutputs() { standByOutputs--; }
 };

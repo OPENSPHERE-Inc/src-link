@@ -16,26 +16,22 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include <plugin-support.h>
+#pragma once
 
-extern void blogva(int log_level, const char *format, va_list args);
+#include <obs.hpp>
+#include <graphics/image-file.h>
 
-const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
-const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";
+#include <QObject>
 
-void obs_log(int log_level, const char *format, ...)
-{
-	size_t length = 4 + strlen(PLUGIN_NAME) + strlen(format);
+class ImageRenderer : public QObject {
+    Q_OBJECT
 
-	char *template = malloc(length + 1);
+    gs_image_file4_t if4;
 
-	snprintf(template, length, "[%s] %s", PLUGIN_NAME, format);
+public:
+    explicit ImageRenderer(bool linearAlpha, QString file, QObject *parent = nullptr);
+    ~ImageRenderer();
 
-	va_list(args);
-
-	va_start(args, format);
-	blogva(log_level, template, args);
-	va_end(args);
-
-	free(template);
-}
+    void render(gs_effect_t *effect);
+    void render(gs_effect_t *effect, uint32_t width, uint32_t height);
+};

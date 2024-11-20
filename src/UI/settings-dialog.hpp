@@ -1,5 +1,5 @@
 /*
-Source Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -21,35 +21,33 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 
 #include <QDialog>
+#include <QGraphicsScene>
 
 #include "ui_settings-dialog.h"
 #include "../api-client.hpp"
-#include "../objects.hpp"
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
 
-    SourceLinkApiClient* apiClient;
+    Ui::SettingsDialog *ui;
+
+    SRCLinkApiClient *apiClient;
 
     void setClientActive(bool active);
 
-public:
-    SettingsDialog(SourceLinkApiClient* _apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
-
 private slots:
-    void onConnect();
-    void onDisconnect();
+    void onConnectionButtonClick();
     void onAccept();
 
     void onLinkingFailed();
-    void onAccountInfoReady(const AccountInfo *accountInfo);
-    void onPartiesReady(QList<Party *> parties);
-    void onPartyEventsReady(QList<PartyEvent *> events);
+    void onAccountInfoReady(const AccountInfo &accountInfo);
     void saveSettings();
     void loadSettings();
-    void onActivePartyChanged(int index);
 
-private:
-    Ui::SettingsDialog *ui;
+protected:
+    void showEvent(QShowEvent *event) override;
+
+public:
+    SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);
+    ~SettingsDialog();
 };

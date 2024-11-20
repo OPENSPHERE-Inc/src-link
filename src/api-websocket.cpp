@@ -1,0 +1,173 @@
+/*
+SRC-Link
+Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>
+*/
+
+#include <QJsonDocument>
+
+#include "plugin-support.h"
+#include "api-websocket.hpp"
+#include "api-client.hpp"
+
+#define INTERVAL_INTERVAL_MSECS 30000
+
+//--- SRCLinkWebSocketClient class ---//
+
+SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_apiClient, QObject *parent)
+    : QObject(parent),
+      apiClient(_apiClient),
+      url(_url),
+      started(false),
+      reconnectCount(0)
+{
+    intervalTimer = new QTimer(this);
+    client = new QWebSocket("https://" + url.host(), QWebSocketProtocol::Version13, this);
+
+    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
+    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
+    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
+    connect(client, SIGNAL(textMessageReceived(QString)), this, SLOT(onTextMessageReceived(QString)));
+
+    /* Required Qt 6.5 (Error on Ubuntu 22.04)
+    connect(client, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
+        obs_log(LOG_ERROR, "SRCLinkWebSocketClient error: %d", error);
+    });
+    */
+
+    // Setup interval timer for pinging
+    connect(intervalTimer, &QTimer::timeout, [this]() {
+        if (started && client->isValid()) {
+            client->ping();
+        }
+    });
+    intervalTimer->setInterval(INTERVAL_INTERVAL_MSECS);
+    intervalTimer->start();
+
+    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient created");
+}
+
+SRCLinkWebSocketClient::~SRCLinkWebSocketClient()
+{
+    stop();
+    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient destroyed");
+}
+
+void SRCLinkWebSocketClient::onConnected()
+{
+    obs_log(LOG_DEBUG, "WebSocket connected");
+    emit connected();
+}
+
+void SRCLinkWebSocketClient::onDisconnected()
+{
+    if (started) {
+        obs_log(LOG_DEBUG, "WebSocket reconnecting");
+        reconnectCount++;
+        open();
+        emit reconnecting();
+    } else {
+        obs_log(LOG_DEBUG, "WebSocket disconnected");
+        emit disconnected();
+    }
+}
+
+void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &)
+{
+    obs_log(LOG_DEBUG, "WebSocket pong received: %llu", elapsedTime);
+}
+
+void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
+{
+    WebSocketMessage messageObj = QJsonDocument::fromJson(message.toUtf8()).object();
+    if (messageObj.getEvent() == "ready") {
+        emit ready(reconnectCount > 0);
+    } else if (messageObj.getEvent() == "added") {
+        emit added(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "changed") {
+        emit changed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "removed") {
+        emit removed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+    } else {
+        obs_log(LOG_WARNING, "WebSocket unknown message: %s", qUtf8Printable(message));
+    }
+}
+
+void SRCLinkWebSocketClient::open()
+{
+    if (client->isValid()) {
+        return;
+    }
+
+    auto req = QNetworkRequest(url);
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
+
+    client->open(req);
+}
+
+void SRCLinkWebSocketClient::start()
+{
+    if (started) {
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "WebSocket connecting: %s", qUtf8Printable(url.toString()));
+    started = true;
+    reconnectCount = 0;
+    open();
+}
+
+void SRCLinkWebSocketClient::stop()
+{
+    if (!started) {
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "WebSocket disconnecting");
+    started = false;
+    client->close();
+}
+
+void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload)
+{
+    if (!started || !client->isValid()) {
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qUtf8Printable(name));
+
+    QJsonObject message;
+    message["event"] = "subscribe";
+    message["name"] = name;
+    message["payload"] = payload;
+
+    client->sendTextMessage(QJsonDocument(message).toJson());
+}
+
+void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &payload)
+{
+    if (!started || !client->isValid()) {
+        return;
+    }
+
+    obs_log(LOG_DEBUG, "WebSocket unsubscribe: %s", qUtf8Printable(name));
+
+    QJsonObject message;
+    message["event"] = "unsubscribe";
+    message["name"] = name;
+    message["payload"] = payload;
+
+    client->sendTextMessage(QJsonDocument(message).toJson());
+}

@@ -157,28 +157,28 @@ signals:
 	void PropertiesRefreshed();
 
 public:
-	OBSPropertiesView(OBSData settings, obs_object_t *obj,
-			  PropertiesReloadCallback reloadCallback,
-			  PropertiesUpdateCallback callback,
+	OBSPropertiesView(OBSData settings_, obs_object_t *obj,
+			  PropertiesReloadCallback reloadCallback_,
+			  PropertiesUpdateCallback callback_,
 			  PropertiesVisualUpdateCb cb = nullptr,
-			  int minSize = 0);
-	OBSPropertiesView(OBSData settings, void *obj,
-			  PropertiesReloadCallback reloadCallback,
-			  PropertiesUpdateCallback callback,
+			  int minSize_ = 0);
+	OBSPropertiesView(OBSData settings_, void *obj,
+			  PropertiesReloadCallback reloadCallback_,
+			  PropertiesUpdateCallback callback_,
 			  PropertiesVisualUpdateCb cb = nullptr,
-			  int minSize = 0);
-	OBSPropertiesView(OBSData settings, const char *type,
-			  PropertiesReloadCallback reloadCallback,
-			  int minSize = 0);
+			  int minSize_ = 0);
+	OBSPropertiesView(OBSData settings_, const char *type,
+			  PropertiesReloadCallback reloadCallback_,
+			  int minSize_ = 0);
 
 #define obj_constructor(type)                                              \
-	inline OBSPropertiesView(OBSData settings, obs_##type##_t *type,   \
-				 PropertiesReloadCallback reloadCallback,  \
-				 PropertiesUpdateCallback callback,        \
+	inline OBSPropertiesView(OBSData settings_, obs_##type##_t *type,   \
+				 PropertiesReloadCallback reloadCallback_,  \
+				 PropertiesUpdateCallback callback_,        \
 				 PropertiesVisualUpdateCb cb = nullptr,    \
-				 int minSize = 0)                          \
-		: OBSPropertiesView(settings, (obs_object_t *)type,        \
-				    reloadCallback, callback, cb, minSize) \
+				 int minSize_ = 0)                          \
+		: OBSPropertiesView(settings_, (obs_object_t *)type,        \
+				    reloadCallback_, callback_, cb, minSize_) \
 	{                                                                  \
 	}
 

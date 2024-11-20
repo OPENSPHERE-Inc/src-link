@@ -1,5 +1,5 @@
 /*
-Source Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -18,72 +18,101 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QUrl>
 #include <QDesktopServices>
+#include <QGraphicsPixmapItem>
+#include <QImageReader>
+#include <QMessageBox>
 
-#include "common.hpp"
-#include "settings-dialog.hpp"
+#include "../utils.hpp"
 #include "../plugin-support.h"
+#include "settings-dialog.hpp"
 
-SettingsDialog::SettingsDialog(SourceLinkApiClient *_apiClient, QWidget *parent)
+SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::SettingsDialog),
       apiClient(_apiClient)
 {
     ui->setupUi(this);
 
-    loadSettings();
+    ui->protocolComboBox->addItem(QTStr("SRT"), "srt");
 
-    connect(apiClient, SIGNAL(accountInfoReady(const AccountInfo *)), this, SLOT(onAccountInfoReady(const AccountInfo *)));
-    connect(apiClient, SIGNAL(partiesReady(QList<Party *>)), this, SLOT(onPartiesReady(QList<Party *>)));
+    ui->pbkeylenComboBox->addItem("16", 16);
+    ui->pbkeylenComboBox->addItem("24", 24);
+    ui->pbkeylenComboBox->addItem("32", 32);
+
+    ui->ssIntervalComboBox->addItem(QTStr("5secs"), 5);
+    ui->ssIntervalComboBox->addItem(QTStr("10secs"), 10);
+    ui->ssIntervalComboBox->addItem(QTStr("15secs"), 15);
+    ui->ssIntervalComboBox->addItem(QTStr("30secs"), 30);
+    ui->ssIntervalComboBox->addItem(QTStr("60secs"), 60);
+
     connect(
-        apiClient, SIGNAL(partyEventsReady(QList<PartyEvent *>)), this, SLOT(onPartyEventsReady(QList<PartyEvent *>))
+        apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
     );
+    connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClick()));
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
-    connect(ui->activePartyComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActivePartyChanged(int)));
+    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, [this](bool checked) {
+        ui->reconnectDelayTimeWidget->setVisible(checked);
+        ui->networkBufferWidget->setVisible(checked);
+        ui->protocolWidget->setVisible(checked);
+        ui->pbkeylenWidget->setVisible(checked);
+    });
+
+    loadSettings();
 
     setClientActive(apiClient->isLoggedIn());
     onAccountInfoReady(apiClient->getAccountInfo());
-    onPartiesReady(apiClient->getParties());
-    onPartyEventsReady(apiClient->getPartyEvents());
+
+    // Translations
+    ui->forceConnectionCheckBox->setText(QTStr("ForceDisconnectOtherClients"));
+    ui->ingressLinkSettingsLabel->setText(QTStr("DownlinkSettings"));
+    ui->advancedSettingsCheckBox->setText(QTStr("AdvancedSettings"));
+    ui->portRangeLabel->setText(QTStr("UDPListenPortRange"));
+    ui->portRangeNoteLabel->setText(QTStr("UDPListenPortRangeNote"));
+    ui->reconnectDelayTimeLabel->setText(QTStr("ReconnectDelayTime"));
+    ui->reconnectDelayTimeSpinBox->setSuffix(QTStr("Secs"));
+    ui->networkBufferLabel->setText(QTStr("NetworkBuffer"));
+    ui->networkBufferSpinBox->setSuffix(QTStr("MB"));
+    ui->protocolLabel->setText(QTStr("Protocol"));
+    ui->latencyLabel->setText(QTStr("Latency"));
+    ui->latencySpinBox->setSuffix(QTStr("ms"));
+    ui->pbkeylenLabel->setText(QTStr("PBKeyLen"));
+    ui->egressLinkSettingsLabel->setText(QTStr("UplinkSettings"));
+    ui->ssIntervalLabel->setText(QTStr("ScreenshotInterval"));
 
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
 
 SettingsDialog::~SettingsDialog()
 {
+    disconnect(this);
+
     obs_log(LOG_DEBUG, "SettingsDialog destroyed");
 }
 
 void SettingsDialog::setClientActive(bool active)
 {
     if (!active) {
-        ui->connectButton->setText(QTStr("Connect"));
-        ui->accountName->setText(QTStr("Disconnected"));
-        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
-        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
+        ui->connectionButton->setText(QTStr("Login"));
+        ui->accountName->setText(QTStr("NotLoggedInYet"));
     } else {
-        ui->connectButton->setText(QTStr("Disconnect"));
-        connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onDisconnect()));
-        disconnect(ui->connectButton, SIGNAL(clicked()), this, SLOT(onConnect()));
+        ui->connectionButton->setText(QTStr("Logout"));
     }
 }
 
-void SettingsDialog::onConnect()
+void SettingsDialog::onConnectionButtonClick()
 {
-    ui->connectButton->setEnabled(false);
-
-    connect(apiClient, SIGNAL(linkingFailed()), this, SLOT(onLinkingFailed()));
-
-    apiClient->login();
-}
-
-void SettingsDialog::onDisconnect()
-{
-    apiClient->logout();
-
-    ui->activePartyEventComboBox->clear();
-    ui->connectButton->setEnabled(true);
-
-    setClientActive(false);
+    if (!apiClient->isLoggedIn()) {
+        apiClient->login();
+    } else {
+        int ret = QMessageBox::warning(
+            // "Are you sure you want to logout?"
+            this, QTStr("Logout"), QTStr("LogoutConfirmation"), QMessageBox::Yes | QMessageBox::Cancel
+        );
+        if (ret == QMessageBox::Yes) {
+            apiClient->logout();
+            setClientActive(false);
+        }
+    }
 }
 
 void SettingsDialog::onAccept()
@@ -93,76 +122,81 @@ void SettingsDialog::onAccept()
 
 void SettingsDialog::onLinkingFailed()
 {
-    ui->connectButton->setEnabled(true);
     setClientActive(false);
 }
 
-void SettingsDialog::onAccountInfoReady(const AccountInfo *accountInfo)
+void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
 {
-    if (!accountInfo) {
-        return;
-    }
-    
     setClientActive(true);
-    ui->accountName->setText(QString("Connected: %1").arg(accountInfo->getDisplayName()));
-    ui->connectButton->setEnabled(true);
-}
-
-void SettingsDialog::onPartiesReady(QList<Party *> parties)
-{
-    ui->activePartyComboBox->clear();
-
-    foreach(const auto party, parties)
-    {
-        ui->activePartyComboBox->addItem(QString(party->getName()), party->getId());
-    }
-
-    if (!apiClient->getPartyId().isEmpty()) {
-        ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
-    }
-}
-
-void SettingsDialog::onPartyEventsReady(QList<PartyEvent *> events)
-{
-    ui->activePartyEventComboBox->clear();
-
-    foreach(const auto partyEvent, events)
-    {
-        if (!partyEvent->getParty()) {
-            continue;
-        }
-        ui->activePartyEventComboBox->addItem(QString(partyEvent->getName()), partyEvent->getId());
-    }
-
-    if (!apiClient->getPartyEventId().isEmpty()) {
-        ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId(
-        )));
-    }
+    // "Logged in: %1"
+    ui->accountName->setText(QTStr("LoggedInAccount").arg(accountInfo.getAccount().getDisplayName()));
 }
 
 void SettingsDialog::saveSettings()
 {
-    apiClient->setPortMin(ui->portMinSpinBox->value());
-    apiClient->setPortMax(ui->portMaxSpinBox->value());
-    apiClient->setPartyId(ui->activePartyComboBox->currentData().toString());
-    apiClient->setPartyEventId(ui->activePartyEventComboBox->currentData().toString());
-    apiClient->putSeatAllocation();
+    auto ingressPortMin = ui->portMinSpinBox->value();
+    auto ingressPortMax = ui->portMaxSpinBox->value();
+    auto ingressReconnectDelayTime = ui->reconnectDelayTimeSpinBox->value();
+    auto ingressNetworkBuffer = ui->networkBufferSpinBox->value();
+    auto ingressProtocol = ui->protocolComboBox->currentData().toString();
+    auto ingressSrtLatecy = ui->latencySpinBox->value();
+    auto ingressSrtPbkeylen = ui->pbkeylenComboBox->currentData().toInt();
+    auto ingressRefreshNeeded = ingressPortMin != apiClient->getSettings()->getIngressPortMin() ||
+                                ingressPortMax != apiClient->getSettings()->getIngressPortMax() ||
+                                ingressReconnectDelayTime != apiClient->getSettings()->getIngressReconnectDelayTime() ||
+                                ingressNetworkBuffer != apiClient->getSettings()->getIngressNetworkBufferSize() ||
+                                ingressProtocol != apiClient->getSettings()->getIngressProtocol() ||
+                                ingressSrtLatecy != apiClient->getSettings()->getIngressSrtLatency() ||
+                                ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen();
+
+    auto egressScreenshotInterval = ui->ssIntervalComboBox->currentData().toInt();
+    auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
+
+    auto settings = apiClient->getSettings();
+    settings->setForceConnection(ui->forceConnectionCheckBox->isChecked());
+    settings->setIngressPortMin(ingressPortMin);
+    settings->setIngressPortMax(ingressPortMax);
+    settings->setIngressReconnectDelayTime(ingressReconnectDelayTime);
+    settings->setIngressNetworkBufferSize(ingressNetworkBuffer);
+    settings->setIngressProtocol(ingressProtocol);
+    settings->setIngressSrtLatency(ingressSrtLatecy);
+    settings->setIngressSrtPbkeylen(ingressSrtPbkeylen);
+    settings->setIngressAdvancedSettings(ui->advancedSettingsCheckBox->isChecked());
+    settings->setEgressScreenshotInterval(egressScreenshotInterval);
+
+    apiClient->putUplink();
+    if (ingressRefreshNeeded) {
+        apiClient->refreshIngress();
+    }
+    if (egressRefreshNeeded) {
+        apiClient->refreshEgress();
+    }
 }
 
 void SettingsDialog::loadSettings()
 {
-    ui->portMinSpinBox->setValue(apiClient->getPortMin());
-    ui->portMaxSpinBox->setValue(apiClient->getPortMax());
-    ui->activePartyComboBox->setCurrentIndex(ui->activePartyComboBox->findData(apiClient->getPartyId()));
-    ui->activePartyEventComboBox->setCurrentIndex(ui->activePartyEventComboBox->findData(apiClient->getPartyEventId()));
+    auto settings = apiClient->getSettings();
+    ui->forceConnectionCheckBox->setChecked(settings->getForceConnection());
+    ui->portMinSpinBox->setValue(settings->getIngressPortMin());
+    ui->portMaxSpinBox->setValue(settings->getIngressPortMax());
+    ui->reconnectDelayTimeSpinBox->setValue(settings->getIngressReconnectDelayTime());
+    ui->networkBufferSpinBox->setValue(settings->getIngressNetworkBufferSize());
+    ui->protocolComboBox->setCurrentIndex(ui->protocolComboBox->findData(settings->getIngressProtocol()));
+    ui->latencySpinBox->setValue(settings->getIngressSrtLatency());
+    ui->pbkeylenComboBox->setCurrentIndex(ui->pbkeylenComboBox->findData(settings->getIngressSrtPbkeylen()));
+    ui->advancedSettingsCheckBox->setChecked(settings->getIngressAdvancedSettings());
+    ui->ssIntervalComboBox->setCurrentIndex(ui->ssIntervalComboBox->findData(settings->getEgressScreenshotInterval()));
+
+    bool advanced = ui->advancedSettingsCheckBox->isChecked();
+    ui->reconnectDelayTimeWidget->setVisible(advanced);
+    ui->networkBufferWidget->setVisible(advanced);
+    ui->protocolWidget->setVisible(advanced);
+    ui->pbkeylenWidget->setVisible(advanced);
 }
 
-void SettingsDialog::onActivePartyChanged(int index)
+void SettingsDialog::showEvent(QShowEvent *event)
 {
-    if (index < 0) {
-        return;
-    }
+    QDialog::showEvent(event);
 
-    auto partyId = ui->activePartyComboBox->itemData(index).toString();
-    apiClient->requestPartyEvents(partyId);
+    setClientActive(apiClient->isLoggedIn());
 }

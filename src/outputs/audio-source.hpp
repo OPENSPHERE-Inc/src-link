@@ -16,26 +16,28 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include <plugin-support.h>
+#pragma once
 
-extern void blogva(int log_level, const char *format, va_list args);
+#include <obs-module.h>
 
-const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
-const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";
+#include "../sources/audio-capture.hpp"
 
-void obs_log(int log_level, const char *format, ...)
-{
-	size_t length = 4 + strlen(PLUGIN_NAME) + strlen(format);
+class OutputAudioSource : public SourceAudioCapture {
+    Q_OBJECT
 
-	char *template = malloc(length + 1);
+    audio_t *audio;
 
-	snprintf(template, length, "[%s] %s", PLUGIN_NAME, format);
+    static bool onOutputAudio(
+        void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers, audio_output_data *audioData
+    );
 
-	va_list(args);
+public:
+    explicit OutputAudioSource(
+        obs_source_t *source, uint32_t _samplesPerSec, speaker_layout _speakers, QObject *parent = nullptr
+    );
+    ~OutputAudioSource();
 
-	va_start(args, format);
-	blogva(log_level, template, args);
-	va_end(args);
+    inline audio_t *getAudio() { return audio; }
 
-	free(template);
-}
+    uint64_t popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData);
+};

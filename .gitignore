@@ -33,3 +33,6 @@
 
 # Except shared files
 !/shared
+
+# Except additional project files
+!build-windows-installer.ps1

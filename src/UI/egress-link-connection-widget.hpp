@@ -18,34 +18,41 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <obs-module.h>
-#include <properties-view.hpp>
+#include <QWidget>
 
-#include <QDialog>
-
-#include "ui_output-dialog.h"
 #include "../api-client.hpp"
-#include "../outputs/egress-link-output.hpp"
+#include "output-dialog.hpp"
+#include "ui_egress-link-connection-widget.h"
 
-class OutputDialog : public QDialog {
+class EgressLinkConnectionWidget : public QWidget {
     Q_OBJECT
 
-    Ui::OutputDialog *ui;
+    friend class EgressLinkDock;
+
+    Ui::EgressLinkConnectionWidget *ui;
+
+    StageSource source;
 
     EgressLinkOutput *output;
-    OBSPropertiesView *propsView;
+    OutputDialog *outputDialog;
     OBSSignal sourceCreateSignal;
     OBSSignal sourceRemoveSignal;
 
-    static void onOBSSourcesChanged(void *_data, calldata_t *cd);
+    static void onOBSSourcesChanged(void *data, calldata_t *cd);
+    static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 
 private slots:
-    void onAccept();
-
-protected:
-    void showEvent(QShowEvent *event) override;
+    void onSettingsButtonClick();
+    void onVideoSourceChanged(int index);
+    void onOutputStatusChanged(EgressLinkOutputStatus status);
+    void updateSourceList();
+    void onVisibilityChanged(bool value);
 
 public:
-    explicit OutputDialog(EgressLinkOutput *_output, QWidget *parent = nullptr);
-    ~OutputDialog();
+    explicit EgressLinkConnectionWidget(
+        const StageSource &_source, SRCLinkApiClient *_client, QWidget *parent = nullptr
+    );
+    ~EgressLinkConnectionWidget();
+
+    void setSource(const StageSource &_source);
 };

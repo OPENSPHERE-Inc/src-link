@@ -1,5 +1,5 @@
 /*
-Source Link
+SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
@@ -20,36 +20,70 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- OutputDialog class ---//
 
-OutputDialog::OutputDialog(SourceLinkApiClient *_apiClient, LinkedOutput *_output, QWidget *parent)
+OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
     : QDialog(parent),
       ui(new Ui::OutputDialog),
-      apiClient(_apiClient),
       output(_output)
 {
     ui->setupUi(this);
 
-    view = new OBSPropertiesView(
-        output->getSettings(), output,
-        [](void *data) {
-            auto output = static_cast<LinkedOutput *>(data);
-            return output->getProperties();
+    // Create dedicated data instance
+    OBSDataAutoRelease settings = obs_data_create();
+    output->getDefaults(settings);
+    obs_data_apply(settings, output->getSettings());
+
+    // First arg must has non-null reference
+    propsView = new OBSPropertiesView(
+        settings.Get(), output,
+        [](void *_data) {
+            auto egressOutput = static_cast<EgressLinkOutput *>(_data);
+            auto properties = egressOutput->getProperties();
+            // Neccessary to apply default settings
+            obs_properties_apply_settings(properties, egressOutput->getSettings());
+            return properties;
         },
-        nullptr,
-        [](void *data, obs_data_t *settings) {
-            auto output = static_cast<LinkedOutput *>(data);
-            output->update(settings);
-        }
+        nullptr, nullptr
     );
 
-    view->setMinimumHeight(150);
+    propsView->setMinimumHeight(150);
+    propsView->SetDeferrable(true); // Always deferrable
 
-    ui->propertiesLayout->addWidget(view);
-    view->show();
+    ui->propertiesLayout->addWidget(propsView);
+    propsView->show();
+
+    connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
+
+    sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "OutputDialog created");
 }
 
-OutputDialog::~OutputDialog() 
+OutputDialog::~OutputDialog()
 {
+    disconnect(this);
+
+    sourceCreateSignal.Disconnect();
+    sourceRemoveSignal.Disconnect();
+
     obs_log(LOG_DEBUG, "OutputDialog destroyed");
+}
+
+void OutputDialog::onAccept()
+{
+    output->update(propsView->GetSettings());
+}
+
+void OutputDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+
+    propsView->ReloadProperties();
+    obs_data_apply(propsView->GetSettings(), output->getSettings());
+}
+
+void OutputDialog::onOBSSourcesChanged(void *_data, calldata_t *)
+{
+    auto dialog = (OutputDialog *)_data;
+    dialog->propsView->ReloadProperties();
 }
