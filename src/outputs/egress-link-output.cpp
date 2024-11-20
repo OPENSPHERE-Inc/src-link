@@ -43,8 +43,7 @@ inline audio_t *createSilenceAudio()
     aoi.speakers = ai.speakers;
     aoi.format = AUDIO_FORMAT_FLOAT_PLANAR;
     aoi.input_param = nullptr;
-    aoi.input_callback = [](void *param, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t mixers,
-                            audio_output_data *mixes) {
+    aoi.input_callback = [](void *, uint64_t startTsIn, uint64_t, uint64_t *outTs, uint32_t, audio_output_data *) {
         *outTs = startTsIn;
         return true;
     };
@@ -885,9 +884,8 @@ void EgressLinkOutput::setVisible(bool value)
 
 void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
 {
-    StageConnection incomingConnection = apiClient->getUplink().getConnections().find([this](const StageConnection &c) {
-        return c.getSourceName() == name;
-    });
+    StageConnection incomingConnection =
+        uplink.getConnections().find([this](const StageConnection &c) { return c.getSourceName() == name; });
 
     if (connection.getId() != incomingConnection.getId() ||
         connection.getRevision() < incomingConnection.getRevision()) {

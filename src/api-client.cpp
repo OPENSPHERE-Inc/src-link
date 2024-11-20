@@ -829,7 +829,9 @@ void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
     CHECK_CLIENT_TOKEN();
 
     // Schedule next refresh
-    QTimer::singleShot(client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh()));
+    QTimer::singleShot(
+        client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
+    );
 }
 
 void SRCLinkApiClient::onWebSocketReady(bool reconnect)
@@ -989,7 +991,7 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     }
 }
 
-void SRCLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload)
+void SRCLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &)
 {
     obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 

@@ -41,9 +41,11 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
     connect(client, SIGNAL(textMessageReceived(QString)), this, SLOT(onTextMessageReceived(QString)));
 
+    /* Required Qt 6.5 (Error on Ubuntu 22.04)
     connect(client, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
         obs_log(LOG_ERROR, "SRCLinkWebSocketClient error: %d", error);
     });
+    */
 
     // Setup interval timer for pinging
     connect(intervalTimer, &QTimer::timeout, [this]() {
@@ -82,7 +84,7 @@ void SRCLinkWebSocketClient::onDisconnected()
     }
 }
 
-void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &payload)
+void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &)
 {
     obs_log(LOG_DEBUG, "WebSocket pong received: %llu", elapsedTime);
 }

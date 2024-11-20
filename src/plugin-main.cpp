@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QUrl>
 #include <QMainWindow>
 #include <QDir>
+#include <QAction>
 
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"

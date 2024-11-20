@@ -499,20 +499,17 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
     obs_log(LOG_DEBUG, "%s: Source updating", qUtf8Printable(name));
 
     captureSettings(settings);
-    connect(
-        putConnection(), &RequestInvoker::finished,
-        [this, settings](QNetworkReply::NetworkError error, QByteArray) {
-            if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
-                return;
-            }
-
-            // Store settings to file as recently settings.
-            saveSettings(settings);
-
-            obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(name));
+    connect(putConnection(), &RequestInvoker::finished, [this, settings](QNetworkReply::NetworkError error, QByteArray) {
+        if (error != QNetworkReply::NoError) {
+            obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
+            return;
         }
-    );
+
+        // Store settings to file as recently settings.
+        saveSettings(settings);
+
+        obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(name));
+    });
 }
 
 void IngressLinkSource::resetDecoder(const StageConnection &_connection)
