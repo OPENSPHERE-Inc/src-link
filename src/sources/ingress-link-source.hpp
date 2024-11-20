@@ -31,6 +31,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define MAX_AUDIO_BUFFER_FRAMES 131071
 
+class SourceAudioThread;
+
 class IngressLinkSource : public QObject {
     Q_OBJECT
 

@@ -180,6 +180,7 @@ public:
 		: OBSPropertiesView(settings_, (obs_object_t *)type,        \
 				    reloadCallback, callback_, cb, minSize_) \
 	{                                                                  \
+	    UNUSED_PARAMETER(reloadCallback_);    \
 	}
 
 	obj_constructor(source);

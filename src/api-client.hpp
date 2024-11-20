@@ -154,7 +154,7 @@ public slots:
     void openSignupPage();       // Just open web browser
     void syncUplinkStatus();
 
-    const int getFreePort();
+    int getFreePort();
     void releasePort(const int port);
     inline void incrementActiveOutputs() { activeOutputs++; }
     inline void decrementActiveOutputs() { activeOutputs--; }
