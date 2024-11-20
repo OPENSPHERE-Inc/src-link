@@ -36,3 +36,4 @@
 
 # Except additional project files
 !build-windows-installer.ps1
+!src-link_usage_image.jpg
