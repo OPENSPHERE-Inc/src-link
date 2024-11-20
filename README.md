@@ -1,10 +1,12 @@
 # SRC-Link (The OBS Studio Plugin)
 
+[<img src="./src-link_usage_image.jpg" />](./src-link_usage_image.jpg)
+
 ## Features
 
 **[EN]**
 
-SRC-Link (Secure Reliable Controllable Link) introduce remote, multiperson, secure, reliable and efficient **orchestration method** to your [OBS Studio](https://obsproject.com/).
+SRC-Link (Secure Reliable Controllable Link) introduces remote, multiperson, secure, reliable and efficient **orchestration method** to your [OBS Studio](https://obsproject.com/).
 
 SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction) Web service.
 

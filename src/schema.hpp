@@ -982,7 +982,7 @@ public:
     inline bool isValid() const
     {
         auto validAllocation = maybe((*this)["allocation"], getAllocation().isValid());
-        auto validStage = getStage().isValid();
+        auto validStage = maybe((*this)["stage"], getStage().isValid());
         auto validConnections = (*this)["connections"].isArray() &&
                                 getConnections().every([](const StageConnection &value) { return value.isValid(); });
 
