@@ -158,6 +158,7 @@ void RequestInvoker::customRequest(
 
 void RequestInvoker::onRequestorFinished(int _requestId, QNetworkReply::NetworkError error, QByteArray data)
 {
+    UNUSED_PARAMETER(_requestId);
     TRACE("Request finished: %d", _requestId);
 
     QMutexLocker locker(&sequencer->mutex);
