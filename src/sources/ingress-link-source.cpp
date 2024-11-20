@@ -597,9 +597,7 @@ void IngressLinkSource::updateCallback(obs_data_t *settings)
 SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource, QObject *parent)
     : QThread(parent),
       ingressLinkSource(_linkedSource),
-      audioCapture(
-          _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers
-      )
+      audioCapture(_linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers)
 {
     obs_log(LOG_DEBUG, "%s: Audio thread creating.", qUtf8Printable(ingressLinkSource->name));
 }
@@ -634,7 +632,10 @@ void SourceAudioThread::run()
             }
 
             // Peek header of first chunk
-            deque_peek_front(audioCapture.getAudioBuffer(), audioCapture.getAudioConvBuffer(), sizeof(SourceAudioCapture::AudioBufferHeader));
+            deque_peek_front(
+                audioCapture.getAudioBuffer(), audioCapture.getAudioConvBuffer(),
+                sizeof(SourceAudioCapture::AudioBufferHeader)
+            );
             auto header = (SourceAudioCapture::AudioBufferHeader *)audioCapture.getAudioConvBuffer();
             size_t dataSize = sizeof(SourceAudioCapture::AudioBufferHeader) + header->speakers * header->frames * 4;
 
