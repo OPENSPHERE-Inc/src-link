@@ -521,7 +521,7 @@ void OBSPropertiesView::AddFloat(obs_property_t *prop, QFormLayout *layout,
 	if (stepVal < 1.0) {
 		constexpr int sane_limit = 8;
 		const int decimals =
-			std::min<int>((int)log10(1.0 / stepVal) + 0.99, sane_limit);
+			std::min<int>((int)(log10(1.0 / stepVal) + 0.99), sane_limit);
 		if (decimals > spin->decimals())
 			spin->setDecimals(decimals);
 	}

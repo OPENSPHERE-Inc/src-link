@@ -267,10 +267,10 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 const auto max_value = obs_property_int_max(encoderBitrateProp);
                 const auto step_value = obs_property_int_step(encoderBitrateProp);
 
-                for (int index = obs_property_int_min(encoderBitrateProp); index <= max_value; index += step_value) {
+                for (int j = obs_property_int_min(encoderBitrateProp); j <= max_value; j += step_value) {
                     char bitrateTitle[6];
-                    snprintf(bitrateTitle, sizeof(bitrateTitle), "%d", index);
-                    obs_property_list_add_int(audioBitrateProp, bitrateTitle, index);
+                    snprintf(bitrateTitle, sizeof(bitrateTitle), "%d", j);
+                    obs_property_list_add_int(audioBitrateProp, bitrateTitle, j);
                 }
 
                 break;
@@ -288,11 +288,11 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 }
 
                 const auto count = obs_property_list_item_count(encoderBitrateProp);
-                for (size_t i = 0; i < count; i++) {
-                    if (obs_property_list_item_disabled(encoderBitrateProp, i)) {
+                for (size_t j = 0; j < count; j++) {
+                    if (obs_property_list_item_disabled(encoderBitrateProp, j)) {
                         continue;
                     }
-                    const auto bitrate = obs_property_list_item_int(encoderBitrateProp, i);
+                    const auto bitrate = obs_property_list_item_int(encoderBitrateProp, j);
                     char bitrateTitle[6];
                     snprintf(bitrateTitle, sizeof(bitrateTitle), "%lld", bitrate);
                     obs_property_list_add_int(audioBitrateProp, bitrateTitle, bitrate);
