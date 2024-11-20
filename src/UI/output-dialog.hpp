@@ -37,7 +37,7 @@ class OutputDialog : public QDialog {
     OBSSignal sourceCreateSignal;
     OBSSignal sourceRemoveSignal;
 
-    static void onOBSSourcesChanged(void *data, calldata_t *cd);
+    static void onOBSSourcesChanged(void *_data, calldata_t *cd);
 
 private slots:
     void onAccept();

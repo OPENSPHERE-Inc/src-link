@@ -35,11 +35,11 @@ OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
     // First arg must has non-null reference
     propsView = new OBSPropertiesView(
         settings.Get(), output,
-        [](void *data) {
-            auto output = static_cast<EgressLinkOutput *>(data);
-            auto properties = output->getProperties();
+        [](void *_data) {
+            auto _output = static_cast<EgressLinkOutput *>(_data);
+            auto properties = _output->getProperties();
             // Neccessary to apply default settings
-            obs_properties_apply_settings(properties, output->getSettings());
+            obs_properties_apply_settings(properties, _output->getSettings());
             return properties;
         },
         nullptr, nullptr
@@ -82,8 +82,8 @@ void OutputDialog::showEvent(QShowEvent *event)
     obs_data_apply(propsView->GetSettings(), output->getSettings());
 }
 
-void OutputDialog::onOBSSourcesChanged(void *data, calldata_t *)
+void OutputDialog::onOBSSourcesChanged(void *_data, calldata_t *)
 {
-    auto dialog = (OutputDialog *)data;
+    auto dialog = (OutputDialog *)_data;
     dialog->propsView->ReloadProperties();
 }

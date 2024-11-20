@@ -19,7 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <qt-wrappers.hpp>
 
-#include <QmessageBox>
+#include <QMessageBox>
 
 #include "../outputs/egress-link-output.hpp"
 #include "egress-link-dock.hpp"
@@ -269,8 +269,7 @@ void EgressLinkDock::updateConnections(const Stage &stage)
             }
         }
         if (newcommer) {
-            auto interlockType = ui->interlockTypeComboBox->currentData().toString();
-            auto widget = new EgressLinkConnectionWidget(source, interlockType, apiClient, this);
+            auto widget = new EgressLinkConnectionWidget(source, apiClient, this);
             connectionWidgets.append(widget);
             ui->connectionsLayout->addWidget(widget);
         }

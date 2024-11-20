@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //--- EgressLinkConnectionWidget class ---//
 
 EgressLinkConnectionWidget::EgressLinkConnectionWidget(
-    const StageSource &_source, const QString &interlockType, SRCLinkApiClient *_apiClient, QWidget *parent
+    const StageSource &_source, SRCLinkApiClient *_apiClient, QWidget *parent
 )
     : QWidget(parent),
       ui(new Ui::EgressLinkConnectionWidget),
@@ -83,7 +83,7 @@ EgressLinkConnectionWidget::~EgressLinkConnectionWidget()
     obs_log(LOG_DEBUG, "EgressLinkConnectionWidget destroyed");
 }
 
-void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *cd)
+void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *)
 {
     auto widget = (EgressLinkConnectionWidget *)data;
     widget->updateSourceList();
