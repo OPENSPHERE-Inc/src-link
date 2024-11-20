@@ -1,0 +1,76 @@
+[app]
+# Relay listen address
+# You can add multiple addresses to listen on. If you use a domain name, it will be resolved to its IP-Addresses.
+# The first address listed here will be used to generate the listen-URL you can request by the API.
+# However, you can use whatever address you specified here to listen to a stream. Or just reorder the list.
+# listen on all addresses
+#addresses = [":1337"]
+# listen on localhost
+#addresses = ["localhost:1337"]
+addresses = ["172.100.0.4:1337"]
+
+# Set public address for use in API responses
+# by default local FQDN + listen address port is used
+#publicAddress = "hostname:1337"
+
+# SRT protocol latency in ms
+# This should be a multiple of your expected RTT because SRT needs some time
+# to send and receive acknowledgements and retransmits to be effective.
+# The recommended latency is about ~2.5x RTT.
+latency = 200
+
+# Relay buffer size in bytes, 384000 -> 1 second @ 3Mbits
+# This determines the maximum delay tolerance for connected clients.
+# Clients which are more than buffersize behind the live edge are disconnected.
+buffersize = 384000
+
+# SRT protocol `lossmaxttl` value. Default 0 disables the mechanism. This is an advanced configuration, see
+# http://underpop.online.fr/f/ffmpeg/help/haivision-secure-reliable-transport-protocol.htm.gz
+# for more info
+#lossMaxTTL = 0
+
+# Experimental: synchronize MPEG-TS clients to a GOP start
+# This should not increase playback delay, just make sure the client always
+# starts with a clean packet stream.
+# Currently just implemented for H.264
+syncClients = true
+
+# Set packet size in Bytes for SRT socket, 1316 Bytes is generally used for MPEG-TS the maximum is 1456 Bytes
+#packetSize = 1456
+
+# Max number of pending clients in the accept queue
+#listenBacklog = 10
+
+[api]
+# Set to false to disable the API endpoint
+#enabled = true
+
+# API listening address
+#address = "172.100.0.4:1338"
+
+[auth]
+# Choose between available auth types (static and http)
+# for further config options see below
+type = "http"
+
+[auth.static]
+# Streams are authenticated using a static list of allowed streamids
+# Each pattern is matched to the client streamid
+# in the form of <mode>/<stream-name>/<password>
+# Allows using * as wildcard (will match across slashes)
+#allow = ["*", "publish/foo/bar", "play/*"]
+
+[auth.http]
+# Streams are authenticated using HTTP POST calls against this URL
+# Should be compatible to nginx-rtmp on_publish/on_subscribe directives
+url = "https://api.src-link.live/srtrelay/v1/auth"
+
+# auth timeout duration
+#timeout = "1s"
+
+# Value of the 'app' form-field to send in the POST request
+# Needed for compatibility with the RTMP-application field
+#application = "stream"
+
+# Key of the form-field to send the stream password in
+#passwordParam = "auth"

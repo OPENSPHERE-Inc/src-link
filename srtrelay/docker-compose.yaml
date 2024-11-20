@@ -1,0 +1,20 @@
+services:
+  srtrelay:
+    image: ghcr.io/opensphere-inc/srtrelay:latest
+    restart: always
+    container_name: srtrelay
+    volumes:
+      - ./srtrelay-config.toml:/home/srtrelay/config.toml
+    ports:
+      - "1337:1337/udp"
+    networks:
+      srtrelay_net:
+        ipv4_address: 172.100.0.4
+
+networks:
+  srtrelay_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.100.0.0/24
