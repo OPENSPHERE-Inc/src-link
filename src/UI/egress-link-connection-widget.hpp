@@ -50,8 +50,7 @@ private slots:
 
 public:
     explicit EgressLinkConnectionWidget(
-        const StageSource &_source, const QString &interlockType, SRCLinkApiClient *_client,
-        QWidget *parent = nullptr
+        const StageSource &_source, const QString &interlockType, SRCLinkApiClient *_client, QWidget *parent = nullptr
     );
     ~EgressLinkConnectionWidget();
 

@@ -59,9 +59,18 @@ public:
         setValue("ingress.advancedSettings", value ? "true" : "false");
     }
     inline int getIngressReconnectDelayTime() { return value("ingress.reconnectDelayTime", "1").toInt(); }
-    inline void setIngressReconnectDelayTime(int value) { setValue("ingress.reconnectDelayTime", QString::number(value)); }
+    inline void setIngressReconnectDelayTime(int value)
+    {
+        setValue("ingress.reconnectDelayTime", QString::number(value));
+    }
     inline int getIngressNetworkBufferSize() { return value("ingress.networkBufferSize", "1").toInt(); }
-    inline void setIngressNetworkBufferSize(int value) { setValue("ingress.networkBufferSize", QString::number(value)); }
+    inline void setIngressNetworkBufferSize(int value)
+    {
+        setValue("ingress.networkBufferSize", QString::number(value));
+    }
     inline int getEgressScreenshotInterval() { return value("egress.screenshotInterval", "5").toInt(); }
-    inline void setEgressScreenshotInterval(int value) { setValue("egress.screenshotInterval", QString::number(value)); }
+    inline void setEgressScreenshotInterval(int value)
+    {
+        setValue("egress.screenshotInterval", QString::number(value));
+    }
 };

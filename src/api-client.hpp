@@ -54,7 +54,7 @@ class SRCLinkApiClient : public QObject {
     // Online rsources
     AccountInfo accountInfo;
     PartyArray parties;
-    PartyEventArray partyEvents; // Contains all events of all parties
+    PartyEventArray partyEvents;             // Contains all events of all parties
     PartyEventParticipantArray participants; // Contains all participants of all events
     StageArray stages;
     UplinkInfo uplink;
@@ -148,10 +148,10 @@ public slots:
     void refreshIngress() { emit ingressRefreshNeeded(); }
     void refreshEgress() { emit egressRefreshNeeded(); }
     void terminate();
-    void openStagesPage(); // Just open web browser
+    void openStagesPage();       // Just open web browser
     void openControlPanelPage(); // Just open web browser
-    void openMembershipsPage(); // Just open web browser
-    void openSignupPage(); // Just open web browser
+    void openMembershipsPage();  // Just open web browser
+    void openSignupPage();       // Just open web browser
     void syncUplinkStatus();
 
     const int getFreePort();

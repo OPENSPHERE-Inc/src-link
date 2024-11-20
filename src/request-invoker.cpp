@@ -24,9 +24,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 //#define LOG_REQUEST_QUEUE_TRACE
 
 #ifdef LOG_REQUEST_QUEUE_TRACE
-#  define TRACE(...) obs_log(LOG_DEBUG, __VA_ARGS__)
+#define TRACE(...) obs_log(LOG_DEBUG, __VA_ARGS__)
 #else
-#  define TRACE(...) 
+#define TRACE(...)
 #endif
 
 //--- RequestSequencer class ---//

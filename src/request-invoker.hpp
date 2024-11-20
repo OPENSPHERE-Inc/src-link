@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define DEFAULT_TIMEOUT_MSECS (10 * 1000)
 
+class RequestInvoker;
 
 // This class introduces sequencial invocation of requests
 class RequestSequencer : public QObject {
@@ -57,7 +58,7 @@ signals:
 public:
     // Sequential invocation
     explicit RequestInvoker(RequestSequencer *sequencer, QObject *parent = nullptr);
-    
+
     // Parallel invocation
     explicit RequestInvoker(QNetworkAccessManager *networkManager, O2 *client, QObject *parent = nullptr);
 

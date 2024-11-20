@@ -57,19 +57,19 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     obs_log(LOG_DEBUG, "SRCLinkWebSocketClient created");
 }
 
-SRCLinkWebSocketClient::~SRCLinkWebSocketClient() 
+SRCLinkWebSocketClient::~SRCLinkWebSocketClient()
 {
     stop();
     obs_log(LOG_DEBUG, "SRCLinkWebSocketClient destroyed");
 }
 
-void SRCLinkWebSocketClient::onConnected() 
+void SRCLinkWebSocketClient::onConnected()
 {
     obs_log(LOG_DEBUG, "WebSocket connected");
     emit connected();
 }
 
-void SRCLinkWebSocketClient::onDisconnected() 
+void SRCLinkWebSocketClient::onDisconnected()
 {
     if (started) {
         obs_log(LOG_DEBUG, "WebSocket reconnecting");
@@ -82,12 +82,12 @@ void SRCLinkWebSocketClient::onDisconnected()
     }
 }
 
-void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &payload) 
+void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &payload)
 {
     obs_log(LOG_DEBUG, "WebSocket pong received: %llu", elapsedTime);
 }
 
-void SRCLinkWebSocketClient::onTextMessageReceived(QString message) 
+void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
 {
     WebSocketMessage messageObj = QJsonDocument::fromJson(message.toUtf8()).object();
     if (messageObj.getEvent() == "ready") {
@@ -103,7 +103,7 @@ void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
     }
 }
 
-void SRCLinkWebSocketClient::open() 
+void SRCLinkWebSocketClient::open()
 {
     if (client->isValid()) {
         return;
@@ -115,7 +115,7 @@ void SRCLinkWebSocketClient::open()
     client->open(req);
 }
 
-void SRCLinkWebSocketClient::start() 
+void SRCLinkWebSocketClient::start()
 {
     if (started) {
         return;
@@ -127,7 +127,7 @@ void SRCLinkWebSocketClient::start()
     open();
 }
 
-void SRCLinkWebSocketClient::stop() 
+void SRCLinkWebSocketClient::stop()
 {
     if (!started) {
         return;
@@ -138,12 +138,12 @@ void SRCLinkWebSocketClient::stop()
     client->close();
 }
 
-void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload) 
+void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &payload)
 {
     if (!started || !client->isValid()) {
         return;
     }
-    
+
     obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qUtf8Printable(name));
 
     QJsonObject message;
