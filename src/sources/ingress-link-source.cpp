@@ -28,6 +28,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define SETTINGS_JSON_NAME "ingress-link-source.json"
 #define FILLER_IMAGE_NAME "filler.jpg"
+#define PORTS_ERROR_IMAGE_NAME "ports-error.jpg"
+#define CONNECTING_IMAGE_NAME "connecting.jpg"
 
 //--- IngressLinkSource class ---//
 
@@ -44,9 +46,6 @@ IngressLinkSource::IngressLinkSource(
     name = obs_source_get_name(_source);
     obs_log(LOG_DEBUG, "%s: Source creating", qUtf8Printable(name));
 
-    // Allocate port
-    connRequest.setPort(apiClient->getFreePort());
-
     if (!strcmp(obs_data_get_json(settings), "{}")) {
         // Initial creation -> Load recently settings from file
         loadSettings(settings);
@@ -54,6 +53,13 @@ IngressLinkSource::IngressLinkSource(
 
     // Capture source's settings first
     captureSettings(settings);
+
+    // Allocate port (non-relay only)
+    if (!connRequest.getRelay()) {
+        connRequest.setPort(apiClient->getFreePort());
+    } else {
+        connRequest.setPort(0);
+    }
 
     // Create decoder private source (SRT, RIST, etc.)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
@@ -64,6 +70,12 @@ IngressLinkSource::IngressLinkSource(
     // Create filler private source
     QString fillerFile = QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(FILLER_IMAGE_NAME);
     fillerRenderer = new ImageRenderer(false, fillerFile, this);
+    QString portsErrorFile =
+        QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(PORTS_ERROR_IMAGE_NAME);
+    portsErrorRenderer = new ImageRenderer(false, portsErrorFile, this);
+    QString connectingFile =
+        QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(CONNECTING_IMAGE_NAME);
+    connectingRenderer = new ImageRenderer(false, connectingFile, this);
 
     // Register connection to server
     putConnection();
@@ -116,7 +128,9 @@ IngressLinkSource::~IngressLinkSource()
     disconnect(this);
 
     apiClient->deleteDownlink(uuid, true);
-    apiClient->releasePort(connRequest.getPort());
+    if (connRequest.getPort()) {
+        apiClient->releasePort(connRequest.getPort());
+    }
 
     // Destroy decoder private source
     audioThread->requestInterruption();
@@ -191,12 +205,7 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
 
-    auto stage = apiClient->getStages().find([stageId](const Stage &_stage) { return _stage.getId() == stageId; });
-    if (stage.getSrtrelayServers().size() > 0) {
-        newRequest.setRelay(obs_data_get_bool(settings, "relay"));
-    } else {
-        newRequest.setRelay(false);
-    }
+    newRequest.setRelay(obs_data_get_bool(settings, "relay"));
 
     if (obs_data_get_bool(settings, "advanced_settings")) {
         reconnectDelaySec = (int)obs_data_get_int(settings, "reconnect_delay_sec");
@@ -279,6 +288,9 @@ const RequestInvoker *IngressLinkSource::putConnection()
         // Register connection to server
         return apiClient->putDownlink(uuid, connRequest);
     } else {
+        if (!port && !relay) {
+            obs_log(LOG_ERROR, "%s: Port is not available.", qUtf8Printable(name));
+        }
         // Unregister connection if no stage/seat/source selected.
         return apiClient->deleteDownlink(uuid);
     }
@@ -487,10 +499,20 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 {
     // Just pass through the video
     if (!connection.isEmpty()) {
-        obs_source_video_render(decoderSource);
+        if (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource)) {
+            // Display connecting image
+            connectingRenderer->render(effect, getWidth(), getHeight());
+        } else {
+            obs_source_video_render(decoderSource);
+        }
     } else {
-        // Display filler image
-        fillerRenderer->render(effect, getWidth(), getHeight());
+        if (!connRequest.getPort() && !connRequest.getRelay()) {
+            // Display ports error image
+            portsErrorRenderer->render(effect, getWidth(), getHeight());
+        } else {
+            // Display filler image
+            fillerRenderer->render(effect, getWidth(), getHeight());
+        }
     }
 }
 
@@ -576,8 +598,13 @@ void IngressLinkSource::reactivate()
     OBSDataAutoRelease settings = obs_source_get_settings(source);
 
     // Re-allocate port
-    apiClient->releasePort(connRequest.getPort());
-    connRequest.setPort(apiClient->getFreePort());
+    if (connRequest.getPort()) {
+        apiClient->releasePort(connRequest.getPort());
+        connRequest.setPort(0);
+    }
+    if (!connRequest.getRelay()) {
+        connRequest.setPort(apiClient->getFreePort());
+    }
 
     onSettingsUpdate(settings);
     obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qUtf8Printable(name), revision);

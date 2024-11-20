@@ -50,6 +50,8 @@ class IngressLinkSource : public QObject {
     OBSWeakSourceAutoRelease weakSource; // Don't grab strong reference because cannot finalize by OBS
     OBSSourceAutoRelease decoderSource;
     ImageRenderer *fillerRenderer;
+    ImageRenderer *portsErrorRenderer;
+    ImageRenderer *connectingRenderer;
     speaker_layout speakers;
     uint32_t samplesPerSec;
     SourceAudioThread *audioThread;

@@ -292,6 +292,7 @@ This plugin is developed under [obs-plugintemplate](https://github.com/obsprojec
 
 ## Using Open Source Libraries
 
-- Qt6
-- O2 (OAuth client)
-- OBS Studio
+- [Qt6](https://www.qt.io/)
+- [O2 (OAuth client)](https://github.com/pipacs/o2)
+- [Font Awesome](https://fontawesome.com/)
+- [OBS Studio](https://obsproject.com/)
