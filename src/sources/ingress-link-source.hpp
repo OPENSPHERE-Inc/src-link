@@ -94,13 +94,14 @@ public:
     static void getDefaults(obs_data_t *settings, SRCLinkApiClient *apiClient);
 };
 
-class SourceAudioThread : public QThread, SourceAudioCapture {
+class SourceAudioThread : public QThread {
     Q_OBJECT
 
     IngressLinkSource *ingressLinkSource;
+    SourceAudioCapture audioCapture;
 
 public:
-    explicit SourceAudioThread(IngressLinkSource *_linkedSource);
+    explicit SourceAudioThread(IngressLinkSource *_linkedSource, QObject *parent = nullptr);
     ~SourceAudioThread();
 
     void run() override;

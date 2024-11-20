@@ -41,6 +41,7 @@ protected:
     QMutex audioBufferMutex;
     bool active;
 
+public:
     struct AudioBufferHeader {
         size_t data_idx[MAX_AV_PLANES]; // Zero means unused channel
         uint32_t frames;
@@ -51,13 +52,19 @@ protected:
         size_t offset;
     };
 
-public:
     explicit SourceAudioCapture(
         obs_source_t *source, uint32_t _samplesPerSec, speaker_layout _speakers, QObject *parent = nullptr
     );
     ~SourceAudioCapture();
 
     void pushAudio(const audio_data *audioData, obs_source_t *source);
+    inline bool getActive() { return active; }
+    inline void setActive(bool value) { active = value; }
+    inline QMutex *getAudioBufferMutex() { return &audioBufferMutex; }
+    inline deque *getAudioBuffer() { return &audioBuffer; }
+    inline uint8_t *getAudioConvBuffer() const { return audioConvBuffer; }
+    inline const size_t getAudioBufferFrames() const { return audioBufferFrames; }
+    inline void decrementAudioBufferFrames(size_t amount) { audioBufferFrames -= amount; }
 
 private:
     static void onSourceAudio(void *param, obs_source_t *, const audio_data *audioData, bool muted);

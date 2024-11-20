@@ -235,7 +235,7 @@ const RequestInvoker *SRCLinkApiClient::refresh()
     return invoker;
 }
 
-const int SRCLinkApiClient::getFreePort()
+int SRCLinkApiClient::getFreePort()
 {
     auto min = settings->getIngressPortMin();
     auto max = settings->getIngressPortMax();

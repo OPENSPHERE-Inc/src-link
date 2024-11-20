@@ -74,7 +74,7 @@ IngressLinkSource::IngressLinkSource(
     speakers = ai.speakers;
     samplesPerSec = ai.samples_per_sec;
 
-    audioThread = new SourceAudioThread(this);
+    audioThread = new SourceAudioThread(this, this);
     audioThread->start();
 
     connect(
@@ -594,11 +594,11 @@ void IngressLinkSource::updateCallback(obs_data_t *settings)
 
 //--- SourceLinkAudioThread class ---//
 
-SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource)
-    : ingressLinkSource(_linkedSource),
-      QThread(_linkedSource),
-      SourceAudioCapture(
-          _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers, _linkedSource
+SourceAudioThread::SourceAudioThread(IngressLinkSource *_linkedSource, QObject *parent)
+    : QThread(parent),
+      ingressLinkSource(_linkedSource),
+      audioCapture(
+          _linkedSource->decoderSource, _linkedSource->samplesPerSec, _linkedSource->speakers
       )
 {
     obs_log(LOG_DEBUG, "%s: Audio thread creating.", qUtf8Printable(ingressLinkSource->name));
@@ -617,16 +617,16 @@ SourceAudioThread::~SourceAudioThread()
 void SourceAudioThread::run()
 {
     obs_log(LOG_DEBUG, "%s: Audio thread started.", qUtf8Printable(ingressLinkSource->name));
-    active = true;
+    audioCapture.setActive(true);
 
     while (!isInterruptionRequested()) {
-        QMutexLocker locker(&audioBufferMutex);
+        QMutexLocker locker(audioCapture.getAudioBufferMutex());
         {
             OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
             if (!source) {
                 break;
             }
-            if (!audioBufferFrames) {
+            if (!audioCapture.getAudioBufferFrames()) {
                 // No data at this time
                 locker.unlock();
                 msleep(10);
@@ -634,12 +634,12 @@ void SourceAudioThread::run()
             }
 
             // Peek header of first chunk
-            deque_peek_front(&audioBuffer, audioConvBuffer, sizeof(AudioBufferHeader));
-            auto header = (AudioBufferHeader *)audioConvBuffer;
-            size_t dataSize = sizeof(AudioBufferHeader) + header->speakers * header->frames * 4;
+            deque_peek_front(audioCapture.getAudioBuffer(), audioCapture.getAudioConvBuffer(), sizeof(SourceAudioCapture::AudioBufferHeader));
+            auto header = (SourceAudioCapture::AudioBufferHeader *)audioCapture.getAudioConvBuffer();
+            size_t dataSize = sizeof(SourceAudioCapture::AudioBufferHeader) + header->speakers * header->frames * 4;
 
             // Read chunk data
-            deque_pop_front(&audioBuffer, audioConvBuffer, dataSize);
+            deque_pop_front(audioCapture.getAudioBuffer(), audioCapture.getAudioConvBuffer(), dataSize);
 
             // Create audio data to send source output
             obs_source_audio audioData = {0};
@@ -653,18 +653,18 @@ void SourceAudioThread::run()
                 if (!header->data_idx[i]) {
                     continue;
                 }
-                audioData.data[i] = audioConvBuffer + header->data_idx[i];
+                audioData.data[i] = audioCapture.getAudioConvBuffer() + header->data_idx[i];
             }
 
             // Send data to source output
             obs_source_output_audio(source, &audioData);
 
-            audioBufferFrames -= header->frames;
+            audioCapture.decrementAudioBufferFrames(header->frames);
         }
         locker.unlock();
     }
 
-    active = false;
+    audioCapture.setActive(false);
     obs_log(LOG_DEBUG, "%s: Audio thread stopped.", qUtf8Printable(ingressLinkSource->name));
 }
 
