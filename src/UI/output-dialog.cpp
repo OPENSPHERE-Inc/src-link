@@ -82,7 +82,7 @@ void OutputDialog::showEvent(QShowEvent *event)
     obs_data_apply(propsView->GetSettings(), output->getSettings());
 }
 
-void OutputDialog::onOBSSourcesChanged(void *data, calldata_t *cd)
+void OutputDialog::onOBSSourcesChanged(void *data, calldata_t *)
 {
     auto dialog = (OutputDialog *)data;
     dialog->propsView->ReloadProperties();

@@ -63,7 +63,7 @@ public:
     inline QMutex *getAudioBufferMutex() { return &audioBufferMutex; }
     inline deque *getAudioBuffer() { return &audioBuffer; }
     inline uint8_t *getAudioConvBuffer() const { return audioConvBuffer; }
-    inline const size_t getAudioBufferFrames() const { return audioBufferFrames; }
+    inline size_t getAudioBufferFrames() const { return audioBufferFrames; }
     inline void decrementAudioBufferFrames(size_t amount) { audioBufferFrames -= amount; }
 
 private:
