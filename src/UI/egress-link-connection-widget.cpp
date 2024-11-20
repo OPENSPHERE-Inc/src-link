@@ -147,13 +147,13 @@ void EgressLinkConnectionWidget::updateSourceList()
         ui->videoSourceComboBox->addItem(QTStr("ProgramOut"), "program");
 
         obs_enum_sources(
-            [](void *param, obs_source_t *source) {
+            [](void *param, obs_source_t *_source) {
                 auto widget = (EgressLinkConnectionWidget *)param;
-                auto type = obs_source_get_type(source);
-                auto flags = obs_source_get_output_flags(source);
+                auto type = obs_source_get_type(_source);
+                auto flags = obs_source_get_output_flags(_source);
 
                 if (flags & OBS_SOURCE_VIDEO && (type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE)) {
-                    widget->ui->videoSourceComboBox->addItem(obs_source_get_name(source), obs_source_get_uuid(source));
+                    widget->ui->videoSourceComboBox->addItem(obs_source_get_name(_source), obs_source_get_uuid(_source));
                 }
                 return true;
             },

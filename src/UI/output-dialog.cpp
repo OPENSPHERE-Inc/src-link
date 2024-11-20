@@ -36,10 +36,10 @@ OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
     propsView = new OBSPropertiesView(
         settings.Get(), output,
         [](void *_data) {
-            auto _output = static_cast<EgressLinkOutput *>(_data);
-            auto properties = _output->getProperties();
+            auto egressOutput = static_cast<EgressLinkOutput *>(_data);
+            auto properties = egressOutput->getProperties();
             // Neccessary to apply default settings
-            obs_properties_apply_settings(properties, _output->getSettings());
+            obs_properties_apply_settings(properties, egressOutput->getSettings());
             return properties;
         },
         nullptr, nullptr

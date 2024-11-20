@@ -87,7 +87,7 @@ uint64_t OutputAudioSource::popAudio(uint64_t startTsIn, uint32_t mixers, audio_
                     }
                     auto in = (float *)(audioConvBuffer + header->data_idx[ch]) + header->offset;
 
-                    for (auto i = 0; i < frames; i++) {
+                    for (size_t i = 0; i < frames; i++) {
                         *out += *(in++);
                         if (*out > 1.0f) {
                             *out = 1.0f;
