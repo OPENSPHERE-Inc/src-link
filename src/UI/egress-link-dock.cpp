@@ -169,8 +169,8 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
 void EgressLinkDock::onActiveParticipantChanged(int)
 {
     auto participantId = ui->participantComboBox->currentData().toString();
-    auto participant = apiClient->getParticipants().find([participantId](const PartyEventParticipant &participant) {
-        return participant.getId() == participantId;
+    auto participant = apiClient->getParticipants().find([participantId](const PartyEventParticipant &_participant) {
+        return _participant.getId() == participantId;
     });
 
     if (!participant.isEmpty()) {

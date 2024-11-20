@@ -137,7 +137,7 @@ QString IngressLinkSource::compositeParameters(obs_data_t *settings, const Downl
         // Generate SRT parameters
         auto latency = apiSettings->getIngressSrtLatency();
         if (obs_data_get_bool(settings, "advanced_settings")) {
-            latency = obs_data_get_int(settings, "srt_latency");
+            latency = (int)obs_data_get_int(settings, "srt_latency");
         }
 
         if (req.getRelay()) {
@@ -183,15 +183,15 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
 
     newRequest.setSeatName(obs_data_get_string(settings, "seat_name"));
     newRequest.setSourceName(obs_data_get_string(settings, "source_name"));
-    newRequest.setMaxBitrate(obs_data_get_int(settings, "max_bitrate"));
-    newRequest.setMinBitrate(obs_data_get_int(settings, "min_bitrate"));
-    newRequest.setWidth(obs_data_get_int(settings, "width"));
-    newRequest.setHeight(obs_data_get_int(settings, "height"));
+    newRequest.setMaxBitrate((int)obs_data_get_int(settings, "max_bitrate"));
+    newRequest.setMinBitrate((int)obs_data_get_int(settings, "min_bitrate"));
+    newRequest.setWidth((int)obs_data_get_int(settings, "width"));
+    newRequest.setHeight((int)obs_data_get_int(settings, "height"));
 
     hwDecode = obs_data_get_bool(settings, "hw_decode");
     clearOnMediaEnd = obs_data_get_bool(settings, "clear_on_media_end");
 
-    auto stage = apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
+    auto stage = apiClient->getStages().find([stageId](const Stage &_stage) { return _stage.getId() == stageId; });
     if (stage.getSrtrelayServers().size() > 0) {
         newRequest.setRelay(obs_data_get_bool(settings, "relay"));
     } else {
@@ -199,8 +199,8 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     }
 
     if (obs_data_get_bool(settings, "advanced_settings")) {
-        reconnectDelaySec = obs_data_get_int(settings, "reconnect_delay_sec");
-        bufferingMb = obs_data_get_int(settings, "buffering_mb");
+        reconnectDelaySec = (int)obs_data_get_int(settings, "reconnect_delay_sec");
+        bufferingMb = (int)obs_data_get_int(settings, "buffering_mb");
     } else {
         reconnectDelaySec = apiClient->getSettings()->getIngressReconnectDelayTime();
         bufferingMb = apiClient->getSettings()->getIngressNetworkBufferSize();
@@ -318,53 +318,53 @@ obs_properties_t *IngressLinkSource::getProperties()
     // Stage change stage -> Update connection group
     obs_property_set_modified_callback2(
         stageList,
-        [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
             obs_log(LOG_DEBUG, "Receiver has been changed.");
 
-            auto apiClient = static_cast<SRCLinkApiClient *>(param);
+            auto _apiClient = static_cast<SRCLinkApiClient *>(param);
             QString stageId = obs_data_get_string(settings, "stage_id");
 
-            auto connectionGroup = obs_property_group_content(obs_properties_get(props, "connection"));
+            auto _connectionGroup = obs_property_group_content(obs_properties_get(_props, "connection"));
 
-            auto seatList = obs_properties_get(connectionGroup, "seat_name");
-            obs_property_list_clear(seatList);
+            auto _seatList = obs_properties_get(_connectionGroup, "seat_name");
+            obs_property_list_clear(_seatList);
 
-            auto sourceList = obs_properties_get(connectionGroup, "source_name");
-            obs_property_list_clear(sourceList);
+            auto _sourceList = obs_properties_get(_connectionGroup, "source_name");
+            obs_property_list_clear(_sourceList);
 
-            if (!apiClient->getStages().size()) {
-                obs_property_list_add_string(seatList, "", "");
-                obs_property_list_add_string(sourceList, "", "");
+            if (!_apiClient->getStages().size()) {
+                obs_property_list_add_string(_seatList, "", "");
+                obs_property_list_add_string(_sourceList, "", "");
                 return true;
             }
 
-            auto stage =
-                apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
+            auto _stage =
+                _apiClient->getStages().find([stageId](const Stage &stage) { return stage.getId() == stageId; });
 
-            if (!stage.getSeats().size()) {
-                obs_property_list_add_string(seatList, "", "");
+            if (!_stage.getSeats().size()) {
+                obs_property_list_add_string(_seatList, "", "");
             } else {
-                obs_property_list_add_string(seatList, "", "");
+                obs_property_list_add_string(_seatList, "", "");
             }
-            if (!stage.getSources().size()) {
-                obs_property_list_add_string(sourceList, "", "");
+            if (!_stage.getSources().size()) {
+                obs_property_list_add_string(_sourceList, "", "");
             } else {
-                obs_property_list_add_string(sourceList, "", "");
+                obs_property_list_add_string(_sourceList, "", "");
             }
 
-            foreach (auto &seat, stage.getSeats().values()) {
+            foreach (auto &seat, _stage.getSeats().values()) {
                 obs_property_list_add_string(
-                    seatList, qUtf8Printable(seat.getDisplayName()), qUtf8Printable(seat.getName())
+                    _seatList, qUtf8Printable(seat.getDisplayName()), qUtf8Printable(seat.getName())
                 );
             }
-            foreach (auto &source, stage.getSources().values()) {
+            foreach (auto &source, _stage.getSources().values()) {
                 obs_property_list_add_string(
-                    sourceList, qUtf8Printable(source.getDisplayName()), qUtf8Printable(source.getName())
+                    _sourceList, qUtf8Printable(source.getDisplayName()), qUtf8Printable(source.getName())
                 );
             }
 
-            auto relay = obs_properties_get(connectionGroup, "relay");
-            auto relayServerAvailable = stage.getSrtrelayServers().size() > 0;
+            auto relay = obs_properties_get(_connectionGroup, "relay");
+            auto relayServerAvailable = _stage.getSrtrelayServers().size() > 0;
             obs_property_set_enabled(relay, relayServerAvailable);
             obs_data_set_bool(settings, "relay", obs_data_get_bool(settings, "relay") && relayServerAvailable);
 
@@ -376,13 +376,13 @@ obs_properties_t *IngressLinkSource::getProperties()
     // Connection group -=> Reload button
     obs_properties_add_button2(
         connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
-        [](obs_properties_t *props, obs_property_t *, void *param) {
+        [](obs_properties_t *_props, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
                 QObject::connect(
                     invoker, &RequestInvoker::finished,
-                    [ingressLinkSource, props](QNetworkReply::NetworkError, QByteArray) {
+                    [ingressLinkSource, _props](QNetworkReply::NetworkError, QByteArray) {
                         // Reload source properties
                         OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
                         obs_frontend_open_source_properties(source);
@@ -429,15 +429,15 @@ obs_properties_t *IngressLinkSource::getProperties()
     auto advancedSettings = obs_properties_add_bool(props, "advanced_settings", obs_module_text("AdvancedSettings"));
     obs_property_set_modified_callback2(
         advancedSettings,
-        [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
             IngressLinkSource *ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto apiSettings = ingressLinkSource->apiClient->getSettings();
             auto advanced = obs_data_get_bool(settings, "advanced_settings");
 
-            obs_property_set_visible(obs_properties_get(props, "reconnect_delay_sec"), advanced);
-            obs_property_set_visible(obs_properties_get(props, "buffering_mb"), advanced);
+            obs_property_set_visible(obs_properties_get(_props, "reconnect_delay_sec"), advanced);
+            obs_property_set_visible(obs_properties_get(_props, "buffering_mb"), advanced);
             obs_property_set_visible(
-                obs_properties_get(props, "srt_latency"), advanced && apiSettings->getIngressProtocol() == "srt"
+                obs_properties_get(_props, "srt_latency"), advanced && apiSettings->getIngressProtocol() == "srt"
             );
 
             return true;
