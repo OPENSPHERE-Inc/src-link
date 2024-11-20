@@ -70,6 +70,9 @@ void frontendEventCallback(enum obs_frontend_event event, void *)
         if (apiClient) {
             apiClient->terminate();
         }
+        break;
+    default:
+        break;
     }
 }
 
