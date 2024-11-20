@@ -178,12 +178,13 @@ obs_properties_t *EgressLinkOutput::getProperties()
     );
     obs_property_set_modified_callback2(
         audioSourceList,
-        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
-            auto output = static_cast<EgressLinkOutput *>(param);
-            auto audioSource = obs_data_get_string(settings, "audio_source");
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *_settings) {
+            auto _output = static_cast<EgressLinkOutput *>(param);
+            auto _audioSource = obs_data_get_string(_settings, "audio_source");
             obs_property_set_enabled(
                 obs_properties_get(_props, "audio_track"),
-                (!strlen(audioSource) && output->getSourceUuid() == "program") || !strcmp(audioSource, "master_track")
+                (!strlen(_audioSource) && _output->getSourceUuid() == "program") ||
+                    !strcmp(_audioSource, "master_track")
             );
             return true;
         },
@@ -235,27 +236,27 @@ obs_properties_t *EgressLinkOutput::getProperties()
             continue;
         }
 
-        auto name = obs_encoder_get_display_name(encoderId);
+        auto _name = obs_encoder_get_display_name(encoderId);
 
         if (obs_get_encoder_type(encoderId) == OBS_ENCODER_VIDEO) {
-            obs_property_list_add_string(videoEncoderList, name, encoderId);
+            obs_property_list_add_string(videoEncoderList, _name, encoderId);
         } else if (obs_get_encoder_type(encoderId) == OBS_ENCODER_AUDIO) {
-            obs_property_list_add_string(audioEncoderList, name, encoderId);
+            obs_property_list_add_string(audioEncoderList, _name, encoderId);
         }
     }
 
     obs_property_set_modified_callback2(
         audioEncoderList,
-        [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            auto output = static_cast<EgressLinkOutput *>(param);
-            obs_log(LOG_DEBUG, "%s: Audio encoder chainging", qUtf8Printable(output->getName()));
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *_settings) {
+            auto _output = static_cast<EgressLinkOutput *>(param);
+            obs_log(LOG_DEBUG, "%s: Audio encoder chainging", qUtf8Printable(_output->getName()));
 
-            const auto encoderId = obs_data_get_string(settings, "audio_encoder");
-            const OBSProperties encoderProps = obs_get_encoder_properties(encoderId);
+            const auto _encoderId = obs_data_get_string(_settings, "audio_encoder");
+            const OBSProperties encoderProps = obs_get_encoder_properties(_encoderId);
             const auto encoderBitrateProp = obs_properties_get(encoderProps, "bitrate");
 
-            auto audioEncoderGroup = obs_property_group_content(obs_properties_get(props, "audio_encoder_group"));
-            auto audioBitrateProp = obs_properties_get(audioEncoderGroup, "audio_bitrate");
+            auto _audioEncoderGroup = obs_property_group_content(obs_properties_get(_props, "audio_encoder_group"));
+            auto audioBitrateProp = obs_properties_get(_audioEncoderGroup, "audio_bitrate");
 
             obs_property_list_clear(audioBitrateProp);
 
@@ -266,10 +267,10 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 const auto max_value = obs_property_int_max(encoderBitrateProp);
                 const auto step_value = obs_property_int_step(encoderBitrateProp);
 
-                for (int i = obs_property_int_min(encoderBitrateProp); i <= max_value; i += step_value) {
+                for (int index = obs_property_int_min(encoderBitrateProp); index <= max_value; index += step_value) {
                     char bitrateTitle[6];
-                    snprintf(bitrateTitle, sizeof(bitrateTitle), "%d", i);
-                    obs_property_list_add_int(audioBitrateProp, bitrateTitle, i);
+                    snprintf(bitrateTitle, sizeof(bitrateTitle), "%d", index);
+                    obs_property_list_add_int(audioBitrateProp, bitrateTitle, index);
                 }
 
                 break;
@@ -280,7 +281,7 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 if (format != OBS_COMBO_FORMAT_INT) {
                     obs_log(
                         LOG_ERROR, "%s: Invalid bitrate property given by encoder: %s",
-                        qUtf8Printable(output->getName()), encoderId
+                        qUtf8Printable(_output->getName()), _encoderId
                     );
                     result = false;
                     break;
@@ -303,7 +304,7 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 break;
             }
 
-            obs_log(LOG_DEBUG, "%s: Audio encoder changed", qUtf8Printable(output->getName()));
+            obs_log(LOG_DEBUG, "%s: Audio encoder changed", qUtf8Printable(_output->getName()));
             return result;
         },
         this
@@ -311,28 +312,28 @@ obs_properties_t *EgressLinkOutput::getProperties()
 
     obs_property_set_modified_callback2(
         videoEncoderList,
-        [](void *param, obs_properties_t *props, obs_property_t *, obs_data_t *settings) {
-            auto output = static_cast<EgressLinkOutput *>(param);
-            obs_log(LOG_DEBUG, "%s: Video encoder chainging", qUtf8Printable(output->getName()));
+        [](void *param, obs_properties_t *_props, obs_property_t *, obs_data_t *_settings) {
+            auto _output = static_cast<EgressLinkOutput *>(param);
+            obs_log(LOG_DEBUG, "%s: Video encoder chainging", qUtf8Printable(_output->getName()));
 
-            auto videoEncoderGroup = obs_property_group_content(obs_properties_get(props, "video_encoder_group"));
-            auto encoderId = obs_data_get_string(settings, "video_encoder");
+            auto _videoEncoderGroup = obs_property_group_content(obs_properties_get(_props, "video_encoder_group"));
+            auto _encoderId = obs_data_get_string(_settings, "video_encoder");
 
-            obs_properties_remove_by_name(videoEncoderGroup, "video_encoder_settings_group");
+            obs_properties_remove_by_name(_videoEncoderGroup, "video_encoder_settings_group");
 
-            auto encoderProps = obs_get_encoder_properties(encoderId);
+            auto encoderProps = obs_get_encoder_properties(_encoderId);
             if (encoderProps) {
                 obs_properties_add_group(
-                    videoEncoderGroup, "video_encoder_settings_group", obs_encoder_get_display_name(encoderId),
+                    _videoEncoderGroup, "video_encoder_settings_group", obs_encoder_get_display_name(_encoderId),
                     OBS_GROUP_NORMAL, encoderProps
                 );
             }
 
             // Apply encoder's defaults
-            OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(encoderId);
-            applyDefaults(settings, encoderDefaults);
+            OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(_encoderId);
+            applyDefaults(_settings, encoderDefaults);
 
-            obs_log(LOG_DEBUG, "%s: Video encoder changed", qUtf8Printable(output->getName()));
+            obs_log(LOG_DEBUG, "%s: Video encoder changed", qUtf8Printable(_output->getName()));
             return true;
         },
         this
@@ -442,14 +443,14 @@ void EgressLinkOutput::saveSettings()
     obs_data_save_json_safe(settings, path, "tmp", "bak");
 }
 
-obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connection)
+obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_connection)
 {
     obs_data_t *egressSettings = obs_data_create();
     obs_data_apply(egressSettings, settings);
 
-    if (connection.getProtocol() == "srt") {
+    if (_connection.getProtocol() == "srt") {
         QString server;
-        if (connection.getRelay()) {
+        if (_connection.getRelay()) {
             // FIXME: Currently encryption not supported !
             server = QString("srt://%1:%2?mode=caller&%3"
                              "streamid=publish/%4/%5");
@@ -457,11 +458,11 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connec
             server = QString("srt://%1:%2?mode=caller&%3"
                              "streamid=%4&passphrase=%5");
         }
-        server = server.arg(connection.getServer())
-                     .arg(connection.getPort())
-                     .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
-                     .arg(connection.getStreamId())
-                     .arg(connection.getPassphrase());
+        server = server.arg(_connection.getServer())
+                     .arg(_connection.getPort())
+                     .arg(_connection.getParameters() + (_connection.getParameters().isEmpty() ? "" : "&"))
+                     .arg(_connection.getStreamId())
+                     .arg(_connection.getPassphrase());
 
         obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server));
         obs_data_set_string(egressSettings, "server", qUtf8Printable(server));
@@ -471,10 +472,10 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &connec
 
     // Limit bitrate
     auto bitrate = obs_data_get_int(egressSettings, "bitrate");
-    if (bitrate > connection.getMaxBitrate()) {
-        obs_data_set_int(egressSettings, "bitrate", connection.getMaxBitrate());
-    } else if (bitrate < connection.getMinBitrate()) {
-        obs_data_set_int(egressSettings, "bitrate", connection.getMinBitrate());
+    if (bitrate > _connection.getMaxBitrate()) {
+        obs_data_set_int(egressSettings, "bitrate", _connection.getMaxBitrate());
+    } else if (bitrate < _connection.getMinBitrate()) {
+        obs_data_set_int(egressSettings, "bitrate", _connection.getMinBitrate());
     }
 
     return egressSettings;
