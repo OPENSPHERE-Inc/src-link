@@ -37,7 +37,7 @@ QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t reques
         imgWidth = requestedWidth;
 
         if (!requestedHeight)
-            imgHeight = ((double)imgWidth / sourceAspectRatio);
+            imgHeight = (uint32_t)((double)imgWidth / sourceAspectRatio);
     }
 
     // Determine suitable image height
@@ -45,7 +45,7 @@ QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t reques
         imgHeight = requestedHeight;
 
         if (!requestedWidth)
-            imgWidth = ((double)imgHeight * sourceAspectRatio);
+            imgWidth = (uint32_t)((double)imgHeight * sourceAspectRatio);
     }
 
     obs_log(LOG_DEBUG, "screenshot: width=%d, height=%d", imgWidth, imgHeight);
@@ -85,7 +85,7 @@ QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t reques
 
         gs_stage_texture(stageSurface, gs_texrender_get_texture(texRender));
         if (gs_stagesurface_map(stageSurface, &videoData, &videoLinesize)) {
-            int lineSize = ret.bytesPerLine();
+            auto lineSize = ret.bytesPerLine();
             for (uint y = 0; y < imgHeight; y++) {
                 memcpy(ret.scanLine(y), videoData + (y * videoLinesize), lineSize);
             }

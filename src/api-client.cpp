@@ -195,7 +195,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 
         // Schedule next refresh
         QTimer::singleShot(
-            client->expires() * 1000 - 60000 - QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
+            client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
         );
     }
 

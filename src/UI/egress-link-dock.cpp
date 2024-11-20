@@ -166,7 +166,7 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
     }
 }
 
-void EgressLinkDock::onActiveParticipantChanged(int index)
+void EgressLinkDock::onActiveParticipantChanged(int)
 {
     auto participantId = ui->participantComboBox->currentData().toString();
     auto participant = apiClient->getParticipants().find([participantId](const PartyEventParticipant &participant) {
