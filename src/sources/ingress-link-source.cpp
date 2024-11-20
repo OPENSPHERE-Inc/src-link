@@ -376,13 +376,13 @@ obs_properties_t *IngressLinkSource::getProperties()
     // Connection group -=> Reload button
     obs_properties_add_button2(
         connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
-        [](obs_properties_t *props, obs_property_t *property, void *param) {
+        [](obs_properties_t *props, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
                 QObject::connect(
                     invoker, &RequestInvoker::finished,
-                    [ingressLinkSource, props](QNetworkReply::NetworkError error, QByteArray) {
+                    [ingressLinkSource, props](QNetworkReply::NetworkError, QByteArray) {
                         // Reload source properties
                         OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
                         obs_frontend_open_source_properties(source);
@@ -398,7 +398,7 @@ obs_properties_t *IngressLinkSource::getProperties()
     // Connection group -> Create button
     obs_properties_add_button2(
         connectionGroup, "manage_stages", obs_module_text("ManageReceivers"),
-        [](obs_properties_t *props, obs_property_t *property, void *param) {
+        [](obs_properties_t *, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             ingressLinkSource->apiClient->openStagesPage();
             return true;
@@ -501,7 +501,7 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
     captureSettings(settings);
     connect(
         putConnection(), &RequestInvoker::finished,
-        [this, settings](QNetworkReply::NetworkError error, QByteArray replyData) {
+        [this, settings](QNetworkReply::NetworkError error, QByteArray) {
             if (error != QNetworkReply::NoError) {
                 obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
                 return;
