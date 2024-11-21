@@ -125,7 +125,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Account Name</string>
+            <string/>
            </property>
            <property name="margin">
             <number>0</number>

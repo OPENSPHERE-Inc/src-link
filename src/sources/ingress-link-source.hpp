@@ -52,6 +52,7 @@ class IngressLinkSource : public QObject {
     ImageRenderer *fillerRenderer;
     ImageRenderer *portsErrorRenderer;
     ImageRenderer *connectingRenderer;
+    ImageRenderer *unreachableRenderer;
     speaker_layout speakers;
     uint32_t samplesPerSec;
     SourceAudioThread *audioThread;

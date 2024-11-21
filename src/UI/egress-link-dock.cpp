@@ -152,6 +152,8 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
         } else {
             ui->participantComboBox->setCurrentIndex(0);
         }
+        // Ensure selected with current data
+        selected = ui->participantComboBox->currentData().toString();
 
         // Reset picture for no party events
         if (!participants.size()) {

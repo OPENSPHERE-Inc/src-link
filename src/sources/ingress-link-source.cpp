@@ -30,6 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define FILLER_IMAGE_NAME "filler.jpg"
 #define PORTS_ERROR_IMAGE_NAME "ports-error.jpg"
 #define CONNECTING_IMAGE_NAME "connecting.jpg"
+#define UNREACHABLE_IMAGE_NAME "unreachable.jpg"
 
 //--- IngressLinkSource class ---//
 
@@ -70,12 +71,17 @@ IngressLinkSource::IngressLinkSource(
     // Create filler private source
     QString fillerFile = QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(FILLER_IMAGE_NAME);
     fillerRenderer = new ImageRenderer(false, fillerFile, this);
+
     QString portsErrorFile =
         QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(PORTS_ERROR_IMAGE_NAME);
     portsErrorRenderer = new ImageRenderer(false, portsErrorFile, this);
+
     QString connectingFile =
         QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(CONNECTING_IMAGE_NAME);
     connectingRenderer = new ImageRenderer(false, connectingFile, this);
+
+    QString unreachableFile = QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(UNREACHABLE_IMAGE_NAME);
+    unreachableRenderer = new ImageRenderer(false, unreachableFile, this);
 
     // Register connection to server
     putConnection();
@@ -499,7 +505,10 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 {
     // Just pass through the video
     if (!connection.isEmpty()) {
-        if (!clearOnMediaEnd && (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
+        if (connection.getConnectionAdvices().getUnreachable()) {
+            // Display unreachable image
+            unreachableRenderer->render(effect, getWidth(), getHeight());
+        } else if (!clearOnMediaEnd && (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
             // Display connecting image
             connectingRenderer->render(effect, getWidth(), getHeight());
         } else {

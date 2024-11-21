@@ -123,12 +123,12 @@ public:
 
     inline bool isValid() const
     {
-        auto validHostAbility = (*this)["host_ability"].isBool();
-        auto validGuestAbility = (*this)["guest_ability"].isBool();
-        auto validMaxStages = (*this)["max_stages"].isDouble();
-        auto validMaxParties = (*this)["max_parties"].isDouble();
-        auto validMaxConcurrentPartyEvents = (*this)["max_concurrent_party_events"].isDouble();
-        auto validMaxSourcesPerStageSeat = (*this)["max_sources_per_stage_seat"].isDouble();
+        auto hostAbilityValid = (*this)["host_ability"].isBool();
+        auto guestAbilityValid = (*this)["guest_ability"].isBool();
+        auto maxStagesValid = (*this)["max_stages"].isDouble();
+        auto maxPartiesValid = (*this)["max_parties"].isDouble();
+        auto maxConcurrentPartyEventsValid = (*this)["max_concurrent_party_events"].isDouble();
+        auto maxSourcesPerStageSeatValid = (*this)["max_sources_per_stage_seat"].isDouble();
         auto validMaxSeatsPerStage = (*this)["max_seats_per_stage"].isDouble();
         auto validMaxSrtrelayServersPerStage = (*this)["max_srtrelay_servers_per_stage"].isDouble();
         auto validMaxMembersPerParty = (*this)["max_members_per_party"].isDouble();
@@ -137,8 +137,8 @@ public:
         auto validUiType = (*this)["ui_type"].isString();
         auto validByolAbility = (*this)["byol_ability"].isBool();
 
-        auto valid = validHostAbility && validGuestAbility && validMaxStages && validMaxParties &&
-                     validMaxConcurrentPartyEvents && validMaxSourcesPerStageSeat && validMaxSeatsPerStage &&
+        auto valid = hostAbilityValid && guestAbilityValid && maxStagesValid && maxPartiesValid &&
+                     maxConcurrentPartyEventsValid && maxSourcesPerStageSeatValid && validMaxSeatsPerStage &&
                      validMaxSrtrelayServersPerStage && validMaxMembersPerParty && validMaxParticipantsPerPartyEvent &&
                      validMaxUplinkDuration && validUiType && validByolAbility;
 
@@ -148,8 +148,8 @@ public:
             "SubscriptionFeatures: host_ability=%d, guest_ability=%d, max_stages=%d, max_parties=%d, max_concurrent_party_events=%d, "
             "max_sources_per_stage_seat=%d, max_seats_per_stage=%d, max_srtrelay_servers_per_stage=%d, max_members_per_party=%d, "
             "max_participants_per_party_event=%d, max_uplink_duration=%d, ui_type=%d, byol_ability=%d",
-            validHostAbility, validGuestAbility, validMaxStages, validMaxParties, validMaxConcurrentPartyEvents,
-            validMaxSourcesPerStageSeat, validMaxSeatsPerStage, validMaxSrtrelayServersPerStage,
+            hostAbilityValid, guestAbilityValid, maxStagesValid, maxPartiesValid, maxConcurrentPartyEventsValid,
+            maxSourcesPerStageSeatValid, validMaxSeatsPerStage, validMaxSrtrelayServersPerStage,
             validMaxMembersPerParty, validMaxParticipantsPerPartyEvent, validMaxUplinkDuration, validUiType,
             validByolAbility
         );
@@ -790,34 +790,34 @@ public:
 
     inline bool isValid() const
     {
-        auto idValid = (*this)["_id"].isString();
-        auto partyIdValid = (*this)["party_id"].isString();
-        auto partyEventIdValid = (*this)["party_event_id"].isString();
-        auto stageIdValid = (*this)["stage_id"].isString();
-        auto memberIdValid = maybe((*this)["member_id"], (*this)["member_id"].isString());
-        auto accountIdValid = maybe((*this)["account_id"], (*this)["account_id"].isString());
-        auto seatNameValid = maybe((*this)["seat_name"], (*this)["seat_name"].isString());
-        auto disabledValid = maybe((*this)["disabled"], (*this)["disabled"].isBool());
-        auto byolValid = maybe((*this)["byol"], (*this)["byol"].isBool());
-        auto stageViewValid = getStageView().isValid();
-        auto partyViewValid = getPartyView().isValid();
-        auto partyEventValid = getPartyEventView().isValid();
-        auto accountViewValid = maybe((*this)["account_view"], getAccountView().isValid());
-        auto stageSeatViewValid = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
+        auto validId = (*this)["_id"].isString();
+        auto validPartyId = (*this)["party_id"].isString();
+        auto validPartyEventId = (*this)["party_event_id"].isString();
+        auto validStageId = (*this)["stage_id"].isString();
+        auto validMemberId = maybe((*this)["member_id"], (*this)["member_id"].isString());
+        auto validAccountId = maybe((*this)["account_id"], (*this)["account_id"].isString());
+        auto validSeatName = maybe((*this)["seat_name"], (*this)["seat_name"].isString());
+        auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto validByol = maybe((*this)["byol"], (*this)["byol"].isBool());
+        auto validStageView = getStageView().isValid();
+        auto validPartyView = getPartyView().isValid();
+        auto validPartyEventView = getPartyEventView().isValid();
+        auto validAccountView = maybe((*this)["account_view"], getAccountView().isValid());
+        auto validStageSeatView = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
 
-        auto valid = idValid && partyIdValid && partyEventIdValid && stageIdValid && memberIdValid && accountIdValid &&
-                     seatNameValid && disabledValid && byolValid && stageViewValid && partyViewValid &&
-                     partyEventValid && accountViewValid && stageSeatViewValid;
+        auto valid = validId && validPartyId && validPartyEventId && validStageId && validMemberId && validAccountId &&
+                     validSeatName && validDisabled && validByol && validStageView && validPartyView &&
+                     validPartyEventView && validAccountView && validStageSeatView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "PartyEventParticipant: idValid=%d, partyIdValid=%d, partyEventIdValid=%d, stageIdValid=%d, memberIdValid=%d, "
-            "accountIdValid=%d, seatNameValid=%d, disabledValid=%d, byolValid=%d, stageViewValid=%d, partyViewValid=%d, "
-            "partyEventValid=%d, accountViewValid=%d, stageSeatViewValid=%d",
-            idValid, partyIdValid, partyEventIdValid, stageIdValid, memberIdValid, accountIdValid, seatNameValid,
-            disabledValid, byolValid, stageViewValid, partyViewValid, partyEventValid, accountViewValid,
-            stageSeatViewValid
+            "PartyEventParticipant: _d=%d, party_id=%d, party_event_id=%d, stage_id=%d, member_id=%d, "
+            "account_id=%d, seat_name=%d, disabled=%d, byol=%d, stage_view=%d, party_view=%d, "
+            "party_event_view=%d, account_view=%d, stage_seat_view=%d",
+            validId, validPartyId, validPartyEventId, validStageId, validMemberId, validAccountId, validSeatName,
+            validDisabled, validByol, validStageView, validPartyView, validPartyEventView, validAccountView,
+            validStageSeatView
         );
 #endif
 
@@ -826,6 +826,28 @@ public:
 };
 
 typedef TypedJsonArray<PartyEventParticipant> PartyEventParticipantArray;
+
+class ConnectionAdvices : public QJsonObject {
+public:
+    ConnectionAdvices() = default;
+    ConnectionAdvices(const QJsonObject &json) : QJsonObject(json) {}
+
+    inline bool getUnreachable() const { return value("unreachable").toBool(); }
+    inline void setUnreachable(bool value) { insert("unreachable", value); }
+
+    inline bool isValid() const
+    {
+        auto validUnreachable = (*this)["unreachable"].isBool();
+
+        auto valid = validUnreachable;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "ConnectionAdvices: unreachable=%d", validUnreachable);
+#endif
+
+        return valid;
+    }
+};
 
 class StageConnection : public QJsonObject {
 public:
@@ -868,6 +890,8 @@ public:
     inline void setDisabled(bool value) { insert("disabled", value); }
     inline QString getAllocationId() const { return value("allocation_id").toString(); }
     inline void setAllocationId(const QString &value) { insert("allocation_id", value); }
+    inline ConnectionAdvices getConnectionAdvices() const { return value("connection_advices").toObject(); }
+    inline void setConnectionAdvices(const ConnectionAdvices &value) { insert("connection_advices", value); }
 
     inline bool isValid() const
     {
@@ -889,22 +913,23 @@ public:
         auto validRevision = (*this)["revision"].isDouble();
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
         auto validAllocationId = maybe((*this)["allocation_id"], (*this)["allocation_id"].isString());
+        auto vlaidConnectionAdvices = maybe((*this)["connection_advices"], getConnectionAdvices().isValid());
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
-                     validDisabled && validAllocationId;
+                     validDisabled && validAllocationId && vlaidConnectionAdvices;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "StageConnection: validId=%d, validStageId=%d, validSeatName=%d, validSourceName=%d, validProtocol=%d, "
-            "validServer=%d, validPort=%d, validStreamId=%d, validPassphrase=%d, validParameters=%d, validRelay=%d, "
-            "validMaxBitrate=%d, validMinBitrate=%d, validWidth=%d, validHeight=%d, validRevision=%d, validDisabled=%d, "
-            "validAllocationId=%d",
+            "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
+            "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
+            "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
+            "allocation_id=%d, connection_advices=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
-            validRevision, validDisabled, validAllocationId
+            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices
         );
 #endif
 
@@ -956,8 +981,8 @@ public:
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "StageSeatAllocation: validId=%d, validPartyId=%d, validPartyEventId=%d, validStageId=%d, validSeatName=%d, "
-            "validMemberId=%d, validParticipantId=%d, validAccountId=%d, validDisabled=%d",
+            "StageSeatAllocation: id=%d, party_id=%d, party_event_id=%d, stage_id=%d, seat_name=%d, "
+            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d",
             validId, validPartyId, validPartyEventId, validStageId, validSeatName, validMemberId, validParticipantId,
             validAccountId, validDisabled
         );
@@ -990,8 +1015,8 @@ public:
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: validAllocation=%d, validStage=%d, validConnections=%d",
-            validAllocation, validStage, validConnections
+            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: allocation=%d, stage=%d, connections=%d", validAllocation,
+            validStage, validConnections
         );
 #endif
 
@@ -1014,7 +1039,7 @@ public:
         auto valid = validConnections;
 
 #ifdef SCHEMA_DEBUG
-        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "DownlinkInfo: validConnections=%d", validConnections);
+        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "DownlinkInfo: connection=%d", validConnections);
 #endif
 
         return valid;
@@ -1046,8 +1071,8 @@ public:
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: validEvent=%d, validName=%d, validId=%d, validPayload=%d",
-            validEvent, validName, validId, validPayload
+            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: event=%d, name=%d, id=%d, payload=%d", validEvent,
+            validName, validId, validPayload
         );
 #endif
 
@@ -1111,9 +1136,8 @@ public:
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "DownlinkRequestBody: validStageId=%d, validSeatName=%d, validSourceName=%d, validProtocol=%d, validPort=%d, "
-            "validStreamId=%d, validPassphrase=%d, validParameters=%d, validRelay=%d, validMaxBitrate=%d, validMinBitrate=%d, "
-            "validWidth=%d, validHeight=%d, validRevision=%d",
+            "DownlinkRequestBody: stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, port=%d, stream_id=%d, "
+            "passphrase=%d, parameters=%d, relay=%d, max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d",
             validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
             validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision
         );
