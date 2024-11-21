@@ -21,7 +21,7 @@ SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction)
   * However, there is a limit in the SRC-Link Control Panel plan.
 - SRT is used as the transmission protocol for video and audio. Stream ID and passphrase are controlled by the SRC-Link Control Panel.
 
-**terminology**
+**Glossary**
 
 - **HOST**: OBS instance (and SRC-Link user) receiving video and audio
 - **GUEST**: OBS instance (and SRC-Link user) transmitting video and audio
@@ -52,7 +52,7 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
   ※ただし、SRC-Link Control Panel のプランで上限があります。
 - 映像音声の伝送プロトコルは SRT を使用しています。ストリームIDやパスフレーズは SRC-Link Control Panel により制御されます。
 
-**用語**
+**用語集**
 
 - **ホスト**: 映像音声を受信する OBS インスタンス（及び SRC-Link ユーザー）
 - **ゲスト**: 映像音声を送信する OBS インスタンス（及び SRC-Link ユーザー）
