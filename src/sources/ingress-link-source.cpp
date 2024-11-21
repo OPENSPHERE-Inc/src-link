@@ -80,7 +80,8 @@ IngressLinkSource::IngressLinkSource(
         QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(CONNECTING_IMAGE_NAME);
     connectingRenderer = new ImageRenderer(false, connectingFile, this);
 
-    QString unreachableFile = QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(UNREACHABLE_IMAGE_NAME);
+    QString unreachableFile =
+        QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(UNREACHABLE_IMAGE_NAME);
     unreachableRenderer = new ImageRenderer(false, unreachableFile, this);
 
     // Register connection to server
@@ -508,7 +509,8 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
         if (connection.getConnectionAdvices().getUnreachable()) {
             // Display unreachable image
             unreachableRenderer->render(effect, getWidth(), getHeight());
-        } else if (!clearOnMediaEnd && (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
+        } else if (!clearOnMediaEnd &&
+                   (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
             // Display connecting image
             connectingRenderer->render(effect, getWidth(), getHeight());
         } else {
