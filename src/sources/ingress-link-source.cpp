@@ -478,9 +478,9 @@ void IngressLinkSource::getDefaults(obs_data_t *settings, SRCLinkApiClient *apiC
     obs_log(LOG_DEBUG, "Default settings applying.");
 
     obs_data_set_default_bool(settings, "hw_decode", false);
-    obs_data_set_default_bool(settings, "clear_on_media_end", true);
-    obs_data_set_default_int(settings, "max_bitrate", 8000);
-    obs_data_set_default_int(settings, "min_bitrate", 4000);
+    obs_data_set_default_bool(settings, "clear_on_media_end", false);
+    obs_data_set_default_int(settings, "max_bitrate", 10000);
+    obs_data_set_default_int(settings, "min_bitrate", 5000);
     obs_data_set_default_bool(settings, "advanced_settings", false);
     obs_data_set_default_int(settings, "srt_latency", apiClient->getSettings()->getIngressSrtLatency());
     obs_data_set_default_int(settings, "reconnect_delay_sec", apiClient->getSettings()->getIngressReconnectDelayTime());
@@ -499,7 +499,7 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
 {
     // Just pass through the video
     if (!connection.isEmpty()) {
-        if (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource)) {
+        if (!clearOnMediaEnd && (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
             // Display connecting image
             connectingRenderer->render(effect, getWidth(), getHeight());
         } else {
