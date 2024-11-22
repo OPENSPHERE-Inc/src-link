@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <QWidget>
+#include <QTimer>
 
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
@@ -37,6 +38,7 @@ class EgressLinkConnectionWidget : public QWidget {
     OutputDialog *outputDialog;
     OBSSignal sourceCreateSignal;
     OBSSignal sourceRemoveSignal;
+    QTimer *intervalTimer;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
     static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);

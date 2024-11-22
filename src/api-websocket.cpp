@@ -24,6 +24,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #define INTERVAL_INTERVAL_MSECS 30000
 
+//#define API_DEBUG
+
+//--- Macros ---//
+#ifdef API_DEBUG
+#define API_LOG(message, ...) obs_log(LOG_DEBUG, "websocket: " message, __VA_ARGS__)
+#else
+#define API_LOG(message, ...)
+#endif
+#define WARNING_LOG(message, ...) obs_log(LOG_WARNING, "websocket: " message, __VA_ARGS__)
+#define ERROR_LOG(message, ...) obs_log(LOG_ERROR, "websocket: " message, __VA_ARGS__)
+
 //--- SRCLinkWebSocketClient class ---//
 
 SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_apiClient, QObject *parent)
@@ -43,7 +54,7 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
 
     /* Required Qt 6.5 (Error on Ubuntu 22.04)
     connect(client, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
-        obs_log(LOG_ERROR, "SRCLinkWebSocketClient error: %d", error);
+        ERROR_LOG("Error received: %d", error);
     });
     */
 
@@ -56,37 +67,37 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     intervalTimer->setInterval(INTERVAL_INTERVAL_MSECS);
     intervalTimer->start();
 
-    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient created");
+    API_LOG("SRCLinkWebSocketClient created");
 }
 
 SRCLinkWebSocketClient::~SRCLinkWebSocketClient()
 {
     stop();
-    obs_log(LOG_DEBUG, "SRCLinkWebSocketClient destroyed");
+    API_LOG("SRCLinkWebSocketClient destroyed");
 }
 
 void SRCLinkWebSocketClient::onConnected()
 {
-    obs_log(LOG_DEBUG, "WebSocket connected");
+    API_LOG("WebSocket connected");
     emit connected();
 }
 
 void SRCLinkWebSocketClient::onDisconnected()
 {
     if (started) {
-        obs_log(LOG_DEBUG, "WebSocket reconnecting");
+        API_LOG("Reconnecting");
         reconnectCount++;
         open();
         emit reconnecting();
     } else {
-        obs_log(LOG_DEBUG, "WebSocket disconnected");
+        API_LOG("Disconnected");
         emit disconnected();
     }
 }
 
 void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &)
 {
-    obs_log(LOG_DEBUG, "WebSocket pong received: %llu", elapsedTime);
+    API_LOG("Pong received: %llu", elapsedTime);
 }
 
 void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
@@ -101,7 +112,7 @@ void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
     } else if (messageObj.getEvent() == "removed") {
         emit removed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else {
-        obs_log(LOG_WARNING, "WebSocket unknown message: %s", qUtf8Printable(message));
+        WARNING_LOG("Unknown message: %s", qUtf8Printable(message));
     }
 }
 
@@ -123,7 +134,7 @@ void SRCLinkWebSocketClient::start()
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket connecting: %s", qUtf8Printable(url.toString()));
+    API_LOG("Connecting: %s", qUtf8Printable(url.toString()));
     started = true;
     reconnectCount = 0;
     open();
@@ -135,7 +146,7 @@ void SRCLinkWebSocketClient::stop()
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket disconnecting");
+    API_LOG("Disconnecting");
     started = false;
     client->close();
 }
@@ -146,7 +157,7 @@ void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &p
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket subscribe: %s", qUtf8Printable(name));
+    API_LOG("Subscribe: %s", qUtf8Printable(name));
 
     QJsonObject message;
     message["event"] = "subscribe";
@@ -162,7 +173,7 @@ void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject 
         return;
     }
 
-    obs_log(LOG_DEBUG, "WebSocket unsubscribe: %s", qUtf8Printable(name));
+    API_LOG("Unsubscribe: %s", qUtf8Printable(name));
 
     QJsonObject message;
     message["event"] = "unsubscribe";

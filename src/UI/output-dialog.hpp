@@ -48,4 +48,7 @@ protected:
 public:
     explicit OutputDialog(EgressLinkOutput *_output, QWidget *parent = nullptr);
     ~OutputDialog();
+
+public slots:
+    void reloadProperties();
 };

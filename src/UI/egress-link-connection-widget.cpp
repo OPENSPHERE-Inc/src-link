@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "egress-link-connection-widget.hpp"
 
+
 //--- EgressLinkConnectionWidget class ---//
 
 EgressLinkConnectionWidget::EgressLinkConnectionWidget(
@@ -58,7 +59,7 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
 
     sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
-    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_dstroy", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_destroy", onOBSSourcesChanged, this);
 
     obs_frontend_add_event_callback(onOBSFrontendEvent, this);
 
@@ -86,7 +87,8 @@ EgressLinkConnectionWidget::~EgressLinkConnectionWidget()
 void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *)
 {
     auto widget = (EgressLinkConnectionWidget *)data;
-    widget->updateSourceList();
+    // Prevent crash
+    QMetaObject::invokeMethod(widget, "updateSourceList", Qt::QueuedConnection);
 }
 
 void EgressLinkConnectionWidget::onOBSFrontendEvent(enum obs_frontend_event event, void *param)

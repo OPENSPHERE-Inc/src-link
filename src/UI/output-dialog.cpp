@@ -54,7 +54,7 @@ OutputDialog::OutputDialog(EgressLinkOutput *_output, QWidget *parent)
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
 
     sourceCreateSignal.Connect(obs_get_signal_handler(), "source_create", onOBSSourcesChanged, this);
-    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_remove", onOBSSourcesChanged, this);
+    sourceRemoveSignal.Connect(obs_get_signal_handler(), "source_destroy", onOBSSourcesChanged, this);
 
     obs_log(LOG_DEBUG, "OutputDialog created");
 }
@@ -85,5 +85,11 @@ void OutputDialog::showEvent(QShowEvent *event)
 void OutputDialog::onOBSSourcesChanged(void *_data, calldata_t *)
 {
     auto dialog = (OutputDialog *)_data;
-    dialog->propsView->ReloadProperties();
+    // Prevent crash
+    QMetaObject::invokeMethod(dialog, "reloadProperties", Qt::QueuedConnection);
+}
+
+void OutputDialog::reloadProperties()
+{
+    propsView->ReloadProperties();
 }

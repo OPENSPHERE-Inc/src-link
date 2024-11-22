@@ -44,6 +44,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define SCREENSHOT_QUALITY 75
 #define REPLY_HTML_NAME "oauth-reply.html"
 
+//#define API_DEBUG
+
 // REST Endpoints
 #ifndef API_SERVER
 #define API_SERVER "http://localhost:3000"
@@ -81,22 +83,29 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
-#define CHECK_CLIENT_TOKEN(...)                             \
-    {                                                       \
-        if (client->refreshToken().isEmpty()) {             \
-            obs_log(LOG_ERROR, "client: No access token."); \
-            return __VA_ARGS__;                             \
-        }                                                   \
+#define CHECK_CLIENT_TOKEN(...)                    \
+    {                                              \
+        if (client->refreshToken().isEmpty()) {    \
+            ERROR_LOG("client: No access token."); \
+            return __VA_ARGS__;                    \
+        }                                          \
     }
 
-#define CHECK_RESPONSE_NOERROR(signal, message, ...)  \
-    {                                                 \
-        if (error != QNetworkReply::NoError) {        \
-            obs_log(LOG_ERROR, message, __VA_ARGS__); \
-            emit signal();                            \
-            return;                                   \
-        }                                             \
+#define CHECK_RESPONSE_NOERROR(signal, message, ...) \
+    {                                                \
+        if (error != QNetworkReply::NoError) {       \
+            ERROR_LOG(message, __VA_ARGS__);         \
+            emit signal();                           \
+            return;                                  \
+        }                                            \
     }
+
+#ifdef API_DEBUG
+#define API_LOG(message, ...) obs_log(LOG_DEBUG, "client: " message, __VA_ARGS__)
+#else
+#define API_LOG(message, ...)
+#endif
+#define ERROR_LOG(message, ...) obs_log(LOG_ERROR, "client: " message, __VA_ARGS__)
 
 //--- SRCLinkApiClient class ---//
 
@@ -110,7 +119,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
       standByOutputs(0),
       uplinkStatus(UPLINK_STATUS_INACTIVE)
 {
-    obs_log(LOG_DEBUG, "client: SRCLinkApiClient creating with %s", API_SERVER);
+    API_LOG("SRCLinkApiClient creating with %s,%s", API_SERVER, API_WS_SERVER);
 
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
@@ -141,7 +150,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(QTStr(REPLY_HTML_NAME));
     QFile replyContent(replyHtmlFile);
     if (!replyContent.open(QIODevice::ReadOnly)) {
-        obs_log(LOG_ERROR, "client: Failed to read reply content html: %s", qUtf8Printable(replyHtmlFile));
+        ERROR_LOG("Failed to read reply content html: %s", qUtf8Printable(replyHtmlFile));
     }
     client->setReplyContent(replyContent.readAll());
 
@@ -199,20 +208,17 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         );
     }
 
-    obs_log(LOG_DEBUG, "client: SRCLinkApiClient created");
+    API_LOG("SRCLinkApiClient created");
 }
 
 SRCLinkApiClient::~SRCLinkApiClient()
 {
-    obs_log(LOG_DEBUG, "client: SRCLinkApiClient destroyed");
+    API_LOG("SRCLinkApiClient destroyed");
 }
 
 void SRCLinkApiClient::login()
 {
-    obs_log(
-        LOG_DEBUG, "client: Starting OAuth 2 with grant flow type %s",
-        qUtf8Printable(GRANTFLOW_STR(client->grantFlow()))
-    );
+    API_LOG("Starting OAuth 2 with grant flow type %s", qUtf8Printable(GRANTFLOW_STR(client->grantFlow())));
     client->link();
 }
 
@@ -279,7 +285,7 @@ void SRCLinkApiClient::clearOnlineResources()
 
 void SRCLinkApiClient::terminate()
 {
-    obs_log(LOG_DEBUG, "client: Terminating API client.");
+    API_LOG("Terminating API client.");
     deleteUplink(true);
 }
 
@@ -299,15 +305,15 @@ const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting account info.");
+    API_LOG("Requesting account info.");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(accountInfoFailed, "client: Requesting account info failed: %d", error);
+        CHECK_RESPONSE_NOERROR(accountInfoFailed, "Requesting account info failed: %d", error);
 
         AccountInfo newAccountInfo = QJsonDocument::fromJson(replyData).object();
         if (!newAccountInfo.isValid()) {
-            obs_log(LOG_ERROR, "client: Received malformed account info data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed account info data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit accountInfoFailed();
             return;
         }
@@ -317,7 +323,7 @@ const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
                                       newAccountInfo.getSubscriptionLicense().getLicenseValid();
 
         accountInfo = newAccountInfo;
-        obs_log(LOG_DEBUG, "client: Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
+        API_LOG("Received account: %s", qUtf8Printable(accountInfo.getAccount().getDisplayName()));
         emit accountInfoReady(accountInfo);
 
         if (emitLicenseChanged) {
@@ -333,21 +339,21 @@ const RequestInvoker *SRCLinkApiClient::requestParties()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting parties.");
+    API_LOG("Requesting parties.");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(partiesFailed, "client: Requesting parties failed: %d", error);
+        CHECK_RESPONSE_NOERROR(partiesFailed, "Requesting parties failed: %d", error);
 
         PartyArray newParties = QJsonDocument::fromJson(replyData).array();
         if (!newParties.every([](const Party &party) { return party.isValid(); })) {
-            obs_log(LOG_ERROR, "client: Received malformed parties data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed parties data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit partiesFailed();
             return;
         }
 
         parties = newParties;
-        obs_log(LOG_DEBUG, "client: Received %d parties", parties.size());
+        API_LOG("Received %d parties", parties.size());
 
         if (settings->getPartyId().isEmpty() && parties.size() > 0) {
             settings->setPartyId(parties[0].getId());
@@ -364,21 +370,21 @@ const RequestInvoker *SRCLinkApiClient::requestPartyEvents()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting party events");
+    API_LOG("Requesting party events");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(partyEventsFailed, "client: Requesting party events failed: %d", error);
+        CHECK_RESPONSE_NOERROR(partyEventsFailed, "Requesting party events failed: %d", error);
 
         PartyEventArray newPartyEvents = QJsonDocument::fromJson(replyData).array();
         if (!newPartyEvents.every([](const PartyEvent &event) { return event.isValid(); })) {
-            obs_log(LOG_ERROR, "client: Received malformed party events data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed party events data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit partyEventsFailed();
             return;
         }
 
         partyEvents = newPartyEvents;
-        obs_log(LOG_DEBUG, "client: Received %d party events", partyEvents.size());
+        API_LOG("Received %d party events", partyEvents.size());
 
         emit partyEventsReady(partyEvents);
     });
@@ -391,21 +397,21 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting participants");
+    API_LOG("Requesting participants");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(participantsFailed, "client: Requesting participants failed: %d", error);
+        CHECK_RESPONSE_NOERROR(participantsFailed, "Requesting participants failed: %d", error);
 
         PartyEventParticipantArray newParticipants = QJsonDocument::fromJson(replyData).array();
         if (!newParticipants.every([](const PartyEventParticipant &participant) { return participant.isValid(); })) {
-            obs_log(LOG_ERROR, "client: Received malformed participants data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed participants data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit participantsFailed();
             return;
         }
 
         participants = newParticipants;
-        obs_log(LOG_DEBUG, "client: Received %d participants", participants.size());
+        API_LOG("Received %d participants", participants.size());
 
         if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
             settings->setParticipantId(participants[0].getId());
@@ -424,21 +430,21 @@ const RequestInvoker *SRCLinkApiClient::requestStages()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting receivers.");
+    API_LOG("Requesting receivers.");
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(stagesFailed, "client: Requesting receivers failed: %d", error);
+        CHECK_RESPONSE_NOERROR(stagesFailed, "Requesting receivers failed: %d", error);
 
         StageArray newStages = QJsonDocument::fromJson(replyData).array();
         if (!newStages.every([](const Stage &stage) { return stage.isValid(); })) {
-            obs_log(LOG_ERROR, "client: Received malformed receivers data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed receivers data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit stagesFailed();
             return;
         }
 
         stages = newStages;
-        obs_log(LOG_DEBUG, "client: Received %d receivers", stages.size());
+        API_LOG("Received %d receivers", stages.size());
 
         emit stagesReady(stages);
     });
@@ -451,20 +457,20 @@ const RequestInvoker *SRCLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting uplink for %s", qUtf8Printable(uuid));
+    API_LOG("Requesting uplink for %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Requesting uplink for %s failed: %d", qUtf8Printable(uuid), error);
+            ERROR_LOG("Requesting uplink for %s failed: %d", qUtf8Printable(uuid), error);
             emit uplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Received uplink for %s", qUtf8Printable(uuid));
+        API_LOG("Received uplink for %s", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
-            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed uplink data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit uplinkFailed(uuid);
             return;
         }
@@ -482,22 +488,22 @@ const RequestInvoker *SRCLinkApiClient::requestDownlink(const QString &sourceUui
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    obs_log(LOG_DEBUG, "client: Requesting downlink for %s", qUtf8Printable(sourceUuid));
+    API_LOG("Requesting downlink for %s", qUtf8Printable(sourceUuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                obs_log(LOG_ERROR, "client: Requesting downlink for %s failed: %d", qUtf8Printable(sourceUuid), error);
+                ERROR_LOG("Requesting downlink for %s failed: %d", qUtf8Printable(sourceUuid), error);
                 emit downlinkFailed(sourceUuid);
                 return;
             }
-            obs_log(LOG_DEBUG, "client: Received downlink for %s", qUtf8Printable(sourceUuid));
+            API_LOG("Received downlink for %s", qUtf8Printable(sourceUuid));
 
             DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
             if (!newDownlink.isValid()) {
-                obs_log(LOG_ERROR, "client: Received malformed downlink data.");
-                obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+                ERROR_LOG("Received malformed downlink data.");
+                API_LOG("dump=%s", replyData.toStdString().c_str());
                 emit downlinkFailed(sourceUuid);
                 return;
             }
@@ -519,14 +525,14 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
     auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    obs_log(LOG_DEBUG, "client: Putting downlink: %s rev.%d", qUtf8Printable(sourceUuid), params.getRevision());
+    API_LOG("Putting downlink: %s rev.%d", qUtf8Printable(sourceUuid), params.getRevision());
     auto invoker = new RequestInvoker(sequencer, this);
     connect(
         invoker, &RequestInvoker::finished,
         [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
                 obs_log(
-                    LOG_ERROR, "client: Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid),
+                    LOG_ERROR, "Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid),
                     params.getRevision(), error
                 );
                 emit putDownlinkFailed(sourceUuid);
@@ -535,15 +541,15 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
 
             DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
             if (!newDownlink.isValid()) {
-                obs_log(LOG_ERROR, "client: Received malformed downlink data.");
-                obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+                ERROR_LOG("Received malformed downlink data.");
+                API_LOG("dump=%s", replyData.toStdString().c_str());
                 emit putDownlinkFailed(sourceUuid);
                 return;
             }
 
             downlinks[sourceUuid] = newDownlink;
             obs_log(
-                LOG_DEBUG, "client: Put downlink %s rev.%d succeeded",
+                LOG_DEBUG, "Put downlink %s rev.%d succeeded",
                 qUtf8Printable(downlinks[sourceUuid].getConnection().getId()), params.getRevision()
             );
 
@@ -563,15 +569,15 @@ const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid
 
     auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting downlink of %s", qUtf8Printable(sourceUuid));
+    API_LOG("Deleting downlink of %s", qUtf8Printable(sourceUuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Deleting downlink of %s failed: %d", qUtf8Printable(sourceUuid), error);
+            ERROR_LOG("Deleting downlink of %s failed: %d", qUtf8Printable(sourceUuid), error);
             emit deleteDownlinkFailed(sourceUuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Delete downlink of %s succeeded", qUtf8Printable(sourceUuid));
+        API_LOG("Delete downlink of %s succeeded", qUtf8Printable(sourceUuid));
 
         websocket->unsubscribe("downlink", {{"uuid", sourceUuid}});
 
@@ -597,24 +603,21 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
 
-    obs_log(
-        LOG_DEBUG, "client: Putting uplink of %s (force=%s)", qUtf8Printable(uuid),
-        qUtf8Printable(body["force"].toString())
-    );
+    API_LOG("Putting uplink of %s (force=%s)", qUtf8Printable(uuid), qUtf8Printable(body["force"].toString()));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+            ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
             emit putUplinkFailed(uuid);
             emit uplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Put uplink of %s succeeded", qUtf8Printable(uuid));
+        API_LOG("Put uplink of %s succeeded", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
-            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed uplink data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit putUplinkFailed(uuid);
             emit uplinkFailed(uuid);
             return;
@@ -642,21 +645,21 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
     QJsonObject body;
     body["uplink_status"] = uplinkStatus;
 
-    obs_log(LOG_DEBUG, "client: Putting uplink status of %s", qUtf8Printable(uuid));
+    API_LOG("Putting uplink status of %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
+            ERROR_LOG("Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
             emit putUplinkStatusFailed(uuid);
             emit uplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Put uplink status of %s succeeded", qUtf8Printable(uuid));
+        API_LOG("Put uplink status of %s succeeded", qUtf8Printable(uuid));
 
         UplinkInfo newUplink = QJsonDocument::fromJson(replyData).object();
         if (!newUplink.isValid()) {
-            obs_log(LOG_ERROR, "client: Received malformed uplink data.");
-            obs_log(LOG_DEBUG, "dump=%s", replyData.toStdString().c_str());
+            ERROR_LOG("Received malformed uplink data.");
+            API_LOG("dump=%s", replyData.toStdString().c_str());
             emit putUplinkStatusFailed(uuid);
             emit uplinkFailed(uuid);
             return;
@@ -678,15 +681,15 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 
     auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
 
-    obs_log(LOG_DEBUG, "client: Deleting uplink of %s", qUtf8Printable(uuid));
+    API_LOG("Deleting uplink of %s", qUtf8Printable(uuid));
     auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Deleting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+            ERROR_LOG("Deleting uplink of %s failed: %d", qUtf8Printable(uuid), error);
             emit deleteUplinkFailed(uuid);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Delete uplink %s succeeded", qUtf8Printable(uuid));
+        API_LOG("Delete uplink %s succeeded", qUtf8Printable(uuid));
 
         websocket->unsubscribe("uplink", {{"uuid", uuid}});
 
@@ -711,15 +714,15 @@ const RequestInvoker *SRCLinkApiClient::putScreenshot(const QString &sourceName,
     imageBuffer.open(QIODevice::WriteOnly);
     image.save(&imageBuffer, "JPG", SCREENSHOT_QUALITY);
 
-    obs_log(LOG_DEBUG, "client: Putting screenshot of %s", qUtf8Printable(sourceName));
+    API_LOG("Putting screenshot of %s", qUtf8Printable(sourceName));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this, sourceName](QNetworkReply::NetworkError error, QByteArray) {
         if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Putting screenshot of %s failed: %d", qUtf8Printable(sourceName), error);
+            ERROR_LOG("Putting screenshot of %s failed: %d", qUtf8Printable(sourceName), error);
             emit putScreenshotFailed(sourceName);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Put screenshot of %s succeeded", qUtf8Printable(sourceName));
+        API_LOG("Put screenshot of %s succeeded", qUtf8Printable(sourceName));
 
         emit putScreenshotSucceeded(sourceName);
     });
@@ -733,11 +736,11 @@ void SRCLinkApiClient::getPicture(const QString &pictureId)
     auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL).arg(pictureId))));
     connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "client: Getting picture of %s failed: %d", qUtf8Printable(pictureId), reply->error());
+            ERROR_LOG("Getting picture of %s failed: %d", qUtf8Printable(pictureId), reply->error());
             emit getPictureFailed(pictureId);
             return;
         }
-        obs_log(LOG_DEBUG, "client: Get picture of %s succeeded", qUtf8Printable(pictureId));
+        API_LOG("Get picture of %s succeeded", qUtf8Printable(pictureId));
 
         auto picture = QImage::fromData(reply->readAll());
 
@@ -775,7 +778,7 @@ void SRCLinkApiClient::onO2LinkedChanged()
 {
     CHECK_CLIENT_TOKEN();
 
-    obs_log(LOG_DEBUG, "client: The API client link has been changed.");
+    API_LOG("The API client link has been changed.");
 }
 
 // This is called when link or refresh token succeeded
@@ -783,7 +786,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
 {
     if (client->linked()) {
         CHECK_CLIENT_TOKEN();
-        obs_log(LOG_DEBUG, "client: The API client has linked up.");
+        API_LOG("The API client has linked up.");
 
         connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
             if (error != QNetworkReply::NoError) {
@@ -803,7 +806,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
         emit loginSucceeded();
 
     } else {
-        obs_log(LOG_DEBUG, "client: The API client has unlinked.");
+        API_LOG("The API client has unlinked.");
 
         websocket->stop();
         clearOnlineResources();
@@ -814,7 +817,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
 
 void SRCLinkApiClient::onO2LinkingFailed()
 {
-    obs_log(LOG_ERROR, "client: The API client linking failed.");
+    ERROR_LOG("The API client linking failed.");
 
     websocket->stop();
 
@@ -836,7 +839,7 @@ void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 
 void SRCLinkApiClient::onWebSocketReady(bool reconnect)
 {
-    obs_log(LOG_DEBUG, "client: WebSocket is ready.");
+    API_LOG("WebSocket is ready.");
     websocket->subscribe("uplink", {{"uuid", uuid}});
     websocket->subscribe("stages");
     websocket->subscribe("participants");
@@ -861,13 +864,13 @@ void SRCLinkApiClient::onWebSocketDisconnected()
 
 void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
 {
-    obs_log(LOG_DEBUG, "client: WebSocket data changed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
+    API_LOG("WebSocket data changed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 
     if (name == "uplink.allocations") {
         StageSeatAllocation newAllocation = payload;
         if (!newAllocation.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed allocation data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed allocation data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -877,8 +880,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "uplink.stages") {
         Stage newStage = payload;
         if (!newStage.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed stage data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed stage data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -888,8 +891,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "uplink.connections") {
         StageConnection newConnection = payload;
         if (!newConnection.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed connection data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed connection data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -907,8 +910,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "downlink.connections") {
         StageConnection newConnection = payload;
         if (!newConnection.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed connection data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed connection data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -918,8 +921,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "stages") {
         Stage newStage = payload;
         if (!newStage.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed stage data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed stage data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -934,8 +937,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "participants") {
         PartyEventParticipant newParticipant = payload;
         if (!newParticipant.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed participant data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed participant data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -952,8 +955,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "accounts") {
         Account newAccount = payload;
         if (!newAccount.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed account data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed account data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -963,8 +966,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "accounts.licenses") {
         SubscriptionLicense newLicense = payload;
         if (!newLicense.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed license data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed license data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -981,8 +984,8 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
     } else if (name == "accounts.resourceUsage") {
         AccountResourceUsage newResourceUsage = payload;
         if (!newResourceUsage.isValid()) {
-            obs_log(LOG_ERROR, "client: Malformed resource usage data received.");
-            obs_log(LOG_DEBUG, "dump=%s", dumpJsonObject(payload).c_str());
+            ERROR_LOG("Malformed resource usage data received.");
+            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
             return;
         }
 
@@ -993,7 +996,7 @@ void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString
 
 void SRCLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &)
 {
-    obs_log(LOG_DEBUG, "client: WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
+    API_LOG("WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
 
     if (name == "uplink.allocations") {
         if (uplink.getAllocation().getId() == id) {

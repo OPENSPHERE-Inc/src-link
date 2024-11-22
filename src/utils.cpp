@@ -20,6 +20,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "utils.hpp"
 #include "plugin-support.h"
 
+//#define API_DEBUG
+
 // The code from obs-websocket plugin
 // https://github.com/obsproject/obs-websocket/blob/a73c92788d70f08f91b8c0477b74f99c999beb09/src/requesthandler/RequestHandler_Sources.cpp#L28
 QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth, uint32_t requestedHeight)
@@ -48,7 +50,9 @@ QImage takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t reques
             imgWidth = (uint32_t)((double)imgHeight * sourceAspectRatio);
     }
 
+#ifdef API_DEBUG
     obs_log(LOG_DEBUG, "screenshot: width=%d, height=%d", imgWidth, imgHeight);
+#endif
 
     // Create final image texture
     QImage ret(imgWidth, imgHeight, QImage::Format::Format_RGBA8888);
