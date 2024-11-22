@@ -510,8 +510,7 @@ void IngressLinkSource::videoRenderCallback(gs_effect_t *effect)
         if (connection.getConnectionAdvices().getUnreachable()) {
             // Display unreachable image
             unreachableRenderer->render(effect, getWidth(), getHeight());
-        } else if (!clearOnMediaEnd &&
-                   (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
+        } else if (!clearOnMediaEnd && (!obs_source_get_width(decoderSource) || !obs_source_get_height(decoderSource))) {
             // Display connecting image
             connectingRenderer->render(effect, getWidth(), getHeight());
         } else {
@@ -812,4 +811,3 @@ obs_source_info createLinkedSourceInfo()
 
     return sourceInfo;
 }
-
