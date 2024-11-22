@@ -84,6 +84,8 @@ signals:
     void downlinkFailed(const QString &uuid);
     void putDownlinkSucceeded(const DownlinkInfo &downlink);
     void putDownlinkFailed(const QString &uuid);
+    void putDownlinkStatusSucceeded(const DownlinkInfo &downlink);
+    void putDownlinkStatusFailed(const QString &uuid);
     void deleteDownlinkSucceeded(const QString &uuid);
     void deleteDownlinkFailed(const QString &uuid);
     void putUplinkSucceeded(const UplinkInfo &uplink);
@@ -139,6 +141,7 @@ public slots:
     const RequestInvoker *requestUplink();
     const RequestInvoker *requestDownlink(const QString &sourceUuid);
     const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
+    const RequestInvoker *putDownlinkStatus(const QString &sourceUuid);
     const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
     const RequestInvoker *putUplink(const bool force = false);
     const RequestInvoker *putUplinkStatus();
@@ -153,6 +156,7 @@ public slots:
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
     void syncUplinkStatus();
+    QString retrievePrivateIp();
 
     int getFreePort();
     void releasePort(const int port);

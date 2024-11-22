@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>549</width>
-    <height>525</height>
+    <height>543</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -141,7 +141,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Ingress Link Settings</string>
+        <string>Downlink Settings</string>
        </property>
       </widget>
      </item>
@@ -607,6 +607,62 @@
     </widget>
    </item>
    <item>
+    <widget class="QWidget" name="privateIpWidget" native="true">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="privateIpLabel">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>120</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Private IP for LAN connection</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="privateIpComboBox">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>30</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <layout class="QHBoxLayout" name="egresslinkSettingsLayout">
      <property name="topMargin">
       <number>10</number>
@@ -623,7 +679,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Egress Link Settings</string>
+        <string>Uplink Settings</string>
        </property>
       </widget>
      </item>

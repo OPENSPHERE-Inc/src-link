@@ -458,7 +458,15 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
             server = QString("srt://%1:%2?mode=caller&%3"
                              "streamid=%4&passphrase=%5");
         }
-        server = server.arg(_connection.getServer())
+
+        auto address = _connection.getServer();
+        auto uplink = apiClient->getUplink();
+        if (address == uplink.getPublicAddress() || uplink.getAllocation().getLan()) {
+            // Seems guest lives in the same network -> switch to lan server.
+            address = _connection.getLanServer();
+        }
+
+        server = server.arg(address)
                      .arg(_connection.getPort())
                      .arg(_connection.getParameters() + (_connection.getParameters().isEmpty() ? "" : "&"))
                      .arg(_connection.getStreamId())

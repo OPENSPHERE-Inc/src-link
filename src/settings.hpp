@@ -68,6 +68,11 @@ public:
     {
         setValue("ingress.networkBufferSize", QString::number(value));
     }
+    inline int getIngressPrivateIpIndex() { return value("ingress.privateIpIndex", "0").toInt(); }
+    inline void setIngressPrivateIpIndex(int value) { setValue("ingress.privateIpIndex", QString::number(value)); }
+    inline QString getIngressPrivateIpValue() { return value("ingress.privateIpValue", ""); }
+    inline void setIngressPrivateIpValue(const QString &value) { setValue("ingress.privateIpValue", value); }
+
     inline int getEgressScreenshotInterval() { return value("egress.screenshotInterval", "5").toInt(); }
     inline void setEgressScreenshotInterval(int value)
     {

@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QRandomGenerator>
 #include <QWidget>
 #include <QMutex>
+#include <QNetworkInterface>
 
 using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
 using OBSAudio = OBSPtr<audio_t *, audio_output_close>;
@@ -167,3 +168,22 @@ inline QString QTStr(const char *lookupVal)
 
 QImage
 takeSourceScreenshot(obs_source_t *source, bool &success, uint32_t requestedWidth = 0, uint32_t requestedHeight = 0);
+
+inline bool isPrivateIPv4(quint32 ip)
+{
+    return (ip & 0xFF000000) == 0x0A000000 || (ip & 0xFFF00000) == 0xAC100000 || (ip & 0xFFFF0000) == 0xC0A80000;
+}
+
+inline QList<QString> getPrivateIPv4Addresses()
+{
+    QList<QString> privateAddresses;
+    auto addresses = QNetworkInterface::allAddresses();
+
+    foreach (auto &address, addresses) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol && isPrivateIPv4(address.toIPv4Address())) {
+            privateAddresses.append(address.toString());
+        }
+    }
+
+    return privateAddresses;
+}

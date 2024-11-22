@@ -26,6 +26,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../utils.hpp"
 #include "ingress-link-source.hpp"
 
+#define CONNECTION_STATUS_INTERVAL_MSECS 60000
+
 #define SETTINGS_JSON_NAME "ingress-link-source.json"
 #define FILLER_IMAGE_NAME "filler.jpg"
 #define PORTS_ERROR_IMAGE_NAME "ports-error.jpg"
@@ -90,15 +92,15 @@ IngressLinkSource::IngressLinkSource(
     audioThread = new SourceAudioThread(this, this);
     audioThread->start();
 
-    connect(
-        apiClient, SIGNAL(putDownlinkSucceeded(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &))
-    );
+    connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
     connect(apiClient, SIGNAL(putDownlinkFailed(const QString &)), this, SLOT(onPutDownlinkFailed(const QString &)));
+    connect(
+        apiClient, SIGNAL(putDownlinkStatusFailed(const QString &)), this, SLOT(onPutDownlinkFailed(const QString &))
+    );
     connect(
         apiClient, SIGNAL(deleteDownlinkSucceeded(const QString &)), this,
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
-    connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
     connect(apiClient, SIGNAL(stagesReady(const StageArray &)), this, SLOT(onStagesReady(const StageArray &)));
     connect(apiClient, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
@@ -117,6 +119,11 @@ IngressLinkSource::IngressLinkSource(
         },
         this
     );
+
+    statusTimer = new QTimer(this);
+    statusTimer->setInterval(CONNECTION_STATUS_INTERVAL_MSECS);
+    statusTimer->start();
+    connect(statusTimer, SIGNAL(timeout()), this, SLOT(onStatusTimerTimeout()));
 
     obs_log(LOG_INFO, "%s: Source created", qUtf8Printable(name));
 }
@@ -193,6 +200,7 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
 {
     auto newRequest = connRequest;
     newRequest.setProtocol(apiClient->getSettings()->getIngressProtocol());
+    newRequest.setLanServer(apiClient->retrievePrivateIp());
 
     auto stageId = obs_data_get_string(settings, "stage_id");
     newRequest.setStageId(stageId);
@@ -656,6 +664,16 @@ void IngressLinkSource::updateCallback(obs_data_t *settings)
 {
     // Note: apiClient instance might live in a different thread
     emit settingsUpdate(settings);
+}
+
+// Call putDownlinkStatus() every minute when connection is available
+void IngressLinkSource::onStatusTimerTimeout()
+{
+    if (connection.isEmpty()) {
+        return;
+    }
+
+    apiClient->putDownlinkStatus(uuid);
 }
 
 //--- SourceLinkAudioThread class ---//

@@ -61,6 +61,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PARTICIPANTS_URL (API_SERVER "/api/v1/participants/my")
 #define STAGES_URL (API_SERVER "/api/v1/stages")
 #define DOWNLINK_URL (API_SERVER "/api/v1/downlink/%1")
+#define DOWNLINK_STATUS_URL (API_SERVER "/api/v1/downlink/%1/status")
 #define UPLINK_URL (API_SERVER "/api/v1/uplink/%1")
 #define UPLINK_STATUS_URL (API_SERVER "/api/v1/uplink/%1/status")
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
@@ -134,6 +135,9 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         settings->setValue("uuid", uuid);
         bfree(defaultUuid);
     }
+
+    // Retrieve private IP addresses
+    retrievePrivateIp();
 
     client->setRequestUrl(AUTHORIZE_URL);
     client->setTokenUrl(TOKEN_URL);
@@ -299,6 +303,20 @@ void SRCLinkApiClient::syncUplinkStatus()
         uplinkStatus = nextUplinkStatus;
         putUplinkStatus();
     }
+}
+
+QString SRCLinkApiClient::retrievePrivateIp()
+{
+    auto privateAddresses = getPrivateIPv4Addresses();
+    auto index = privateAddresses.indexOf(settings->getIngressPrivateIpValue());
+    if (index < 0) {
+        // IP had been changed -> fallback to index
+        index = std::min<qsizetype>(settings->getIngressPrivateIpIndex(), privateAddresses.size() - 1);
+        settings->setIngressPrivateIpValue(privateAddresses[index]);
+    }
+    settings->setIngressPrivateIpIndex(index);
+
+    return settings->getIngressPrivateIpValue();
 }
 
 const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
@@ -531,11 +549,11 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
         invoker, &RequestInvoker::finished,
         [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
             if (error != QNetworkReply::NoError) {
-                obs_log(
-                    LOG_ERROR, "Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid),
-                    params.getRevision(), error
+                ERROR_LOG(
+                    "Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid), params.getRevision(), error
                 );
                 emit putDownlinkFailed(sourceUuid);
+                emit downlinkFailed(sourceUuid);
                 return;
             }
 
@@ -544,6 +562,7 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
                 ERROR_LOG("Received malformed downlink data.");
                 API_LOG("dump=%s", replyData.toStdString().c_str());
                 emit putDownlinkFailed(sourceUuid);
+                emit downlinkFailed(sourceUuid);
                 return;
             }
 
@@ -556,9 +575,53 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
             websocket->subscribe("downlink", {{"uuid", sourceUuid}});
 
             emit putDownlinkSucceeded(downlinks[sourceUuid]);
+            emit downlinkReady(downlinks[sourceUuid]);
         }
     );
     invoker->put(req, QJsonDocument(params).toJson());
+
+    return invoker;
+}
+
+const RequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceUuid)
+{
+    CHECK_CLIENT_TOKEN(nullptr);
+
+    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_STATUS_URL).arg(sourceUuid)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    API_LOG("Putting downlink status: %s", qUtf8Printable(sourceUuid));
+    auto invoker = new RequestInvoker(sequencer, this);
+    connect(
+        invoker, &RequestInvoker::finished,
+        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
+            if (error != QNetworkReply::NoError) {
+                ERROR_LOG("Putting downlink status %s failed: %d", qUtf8Printable(sourceUuid), error);
+                emit putDownlinkStatusFailed(sourceUuid);
+                emit downlinkFailed(sourceUuid);
+                return;
+            }
+
+            DownlinkInfo newDownlink = QJsonDocument::fromJson(replyData).object();
+            if (!newDownlink.isValid()) {
+                ERROR_LOG("Received malformed downlink data.");
+                API_LOG("dump=%s", replyData.toStdString().c_str());
+                emit putDownlinkStatusFailed(sourceUuid);
+                emit downlinkFailed(sourceUuid);
+                return;
+            }
+
+            downlinks[sourceUuid] = newDownlink;
+            obs_log(
+                LOG_DEBUG, "Put downlink status %s succeeded",
+                qUtf8Printable(downlinks[sourceUuid].getConnection().getId())
+            );
+
+            emit putDownlinkStatusSucceeded(downlinks[sourceUuid]);
+            emit downlinkReady(downlinks[sourceUuid]);
+        }
+    );
+    invoker->put(req, QJsonDocument().toJson());
 
     return invoker;
 }

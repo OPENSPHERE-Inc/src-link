@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGraphicsPixmapItem>
 #include <QImageReader>
 #include <QMessageBox>
+#include <QNetworkInterface>
 
 #include "../utils.hpp"
 #include "../plugin-support.h"
@@ -44,6 +45,11 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->ssIntervalComboBox->addItem(QTStr("15secs"), 15);
     ui->ssIntervalComboBox->addItem(QTStr("30secs"), 30);
     ui->ssIntervalComboBox->addItem(QTStr("60secs"), 60);
+
+    auto addresses = getPrivateIPv4Addresses();
+    foreach (auto &address, addresses) {
+        ui->privateIpComboBox->addItem(address, address);
+    }
 
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
@@ -78,6 +84,7 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->pbkeylenLabel->setText(QTStr("PBKeyLen"));
     ui->egressLinkSettingsLabel->setText(QTStr("UplinkSettings"));
     ui->ssIntervalLabel->setText(QTStr("ScreenshotInterval"));
+    ui->privateIpLabel->setText(QTStr("PrivateIPForLAN"));
 
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }
@@ -141,13 +148,15 @@ void SettingsDialog::saveSettings()
     auto ingressProtocol = ui->protocolComboBox->currentData().toString();
     auto ingressSrtLatecy = ui->latencySpinBox->value();
     auto ingressSrtPbkeylen = ui->pbkeylenComboBox->currentData().toInt();
+    auto ingressPrivateIp = ui->privateIpComboBox->currentData().toString();
     auto ingressRefreshNeeded = ingressPortMin != apiClient->getSettings()->getIngressPortMin() ||
                                 ingressPortMax != apiClient->getSettings()->getIngressPortMax() ||
                                 ingressReconnectDelayTime != apiClient->getSettings()->getIngressReconnectDelayTime() ||
                                 ingressNetworkBuffer != apiClient->getSettings()->getIngressNetworkBufferSize() ||
                                 ingressProtocol != apiClient->getSettings()->getIngressProtocol() ||
                                 ingressSrtLatecy != apiClient->getSettings()->getIngressSrtLatency() ||
-                                ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen();
+                                ingressSrtPbkeylen != apiClient->getSettings()->getIngressSrtPbkeylen() ||
+                                ingressPrivateIp != apiClient->getSettings()->getIngressPrivateIpValue();
 
     auto egressScreenshotInterval = ui->ssIntervalComboBox->currentData().toInt();
     auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
@@ -162,6 +171,8 @@ void SettingsDialog::saveSettings()
     settings->setIngressSrtLatency(ingressSrtLatecy);
     settings->setIngressSrtPbkeylen(ingressSrtPbkeylen);
     settings->setIngressAdvancedSettings(ui->advancedSettingsCheckBox->isChecked());
+    settings->setIngressPrivateIpIndex(ui->privateIpComboBox->currentIndex());
+    settings->setIngressPrivateIpValue(ingressPrivateIp);
     settings->setEgressScreenshotInterval(egressScreenshotInterval);
 
     apiClient->putUplink();
@@ -186,6 +197,13 @@ void SettingsDialog::loadSettings()
     ui->pbkeylenComboBox->setCurrentIndex(ui->pbkeylenComboBox->findData(settings->getIngressSrtPbkeylen()));
     ui->advancedSettingsCheckBox->setChecked(settings->getIngressAdvancedSettings());
     ui->ssIntervalComboBox->setCurrentIndex(ui->ssIntervalComboBox->findData(settings->getEgressScreenshotInterval()));
+
+    auto privateIpIndex = ui->privateIpComboBox->findData(settings->getIngressPrivateIpValue());
+    if (privateIpIndex < 0) {
+        // Private IP had been changed -> Fallback saved index.
+        privateIpIndex = settings->getIngressPrivateIpIndex();
+    }
+    ui->privateIpComboBox->setCurrentIndex(privateIpIndex);
 
     bool advanced = ui->advancedSettingsCheckBox->isChecked();
     ui->reconnectDelayTimeWidget->setVisible(advanced);

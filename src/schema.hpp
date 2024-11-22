@@ -774,6 +774,8 @@ public:
     inline void setSeatName(const QString &value) { insert("seat_name", value); }
     inline bool getDisabled() const { return value("disabled").toBool(); }
     inline void setDisabled(bool value) { insert("disabled", value); }
+    inline bool getLan() const { return value("lan").toBool(); }
+    inline void setLan(bool value) { insert("lan", value); }
 
     inline PartyView getPartyView() const { return value("party_view").toObject(); }
     inline void setPartyView(const PartyView &value) { insert("party_view", value); }
@@ -798,6 +800,7 @@ public:
         auto validAccountId = maybe((*this)["account_id"], (*this)["account_id"].isString());
         auto validSeatName = maybe((*this)["seat_name"], (*this)["seat_name"].isString());
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto validLan = maybe((*this)["lan"], (*this)["lan"].isBool());
         auto validByol = maybe((*this)["byol"], (*this)["byol"].isBool());
         auto validStageView = getStageView().isValid();
         auto validPartyView = getPartyView().isValid();
@@ -806,17 +809,17 @@ public:
         auto validStageSeatView = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validMemberId && validAccountId &&
-                     validSeatName && validDisabled && validByol && validStageView && validPartyView &&
+                     validSeatName && validDisabled && validLan && validByol && validStageView && validPartyView &&
                      validPartyEventView && validAccountView && validStageSeatView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "PartyEventParticipant: _d=%d, party_id=%d, party_event_id=%d, stage_id=%d, member_id=%d, "
-            "account_id=%d, seat_name=%d, disabled=%d, byol=%d, stage_view=%d, party_view=%d, "
+            "account_id=%d, seat_name=%d, disabled=%d, lan=%d, byol=%d, stage_view=%d, party_view=%d, "
             "party_event_view=%d, account_view=%d, stage_seat_view=%d",
             validId, validPartyId, validPartyEventId, validStageId, validMemberId, validAccountId, validSeatName,
-            validDisabled, validByol, validStageView, validPartyView, validPartyEventView, validAccountView,
+            validDisabled, validLan, validByol, validStageView, validPartyView, validPartyEventView, validAccountView,
             validStageSeatView
         );
 #endif
@@ -837,7 +840,7 @@ public:
 
     inline bool isValid() const
     {
-        auto validUnreachable = (*this)["unreachable"].isBool();
+        auto validUnreachable = maybe((*this)["unreachable"], (*this)["unreachable"].isBool());
 
         auto valid = validUnreachable;
 
@@ -892,6 +895,8 @@ public:
     inline void setAllocationId(const QString &value) { insert("allocation_id", value); }
     inline ConnectionAdvices getConnectionAdvices() const { return value("connection_advices").toObject(); }
     inline void setConnectionAdvices(const ConnectionAdvices &value) { insert("connection_advices", value); }
+    inline QString getLanServer() const { return value("lan_server").toString(); }
+    inline void setLanServer(const QString &value) { insert("lan_server", value); }
 
     inline bool isValid() const
     {
@@ -914,11 +919,12 @@ public:
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
         auto validAllocationId = maybe((*this)["allocation_id"], (*this)["allocation_id"].isString());
         auto vlaidConnectionAdvices = maybe((*this)["connection_advices"], getConnectionAdvices().isValid());
+        auto validLanServer = maybe((*this)["lan_server"], (*this)["lan_server"].isString());
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
-                     validDisabled && validAllocationId && vlaidConnectionAdvices;
+                     validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -926,10 +932,10 @@ public:
             "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
             "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
             "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
-            "allocation_id=%d, connection_advices=%d",
+            "allocation_id=%d, connection_advices=%d, lan_server=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
-            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices
+            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer
         );
 #endif
 
@@ -962,6 +968,8 @@ public:
     inline void setAccountId(const QString &value) { insert("account_id", value); }
     inline bool getDisabled() const { return value("disabled").toBool(); }
     inline void setDisabled(bool value) { insert("disabled", value); }
+    inline bool getLan() const { return value("lan").toBool(); }
+    inline void setLan(bool value) { insert("lan", value); }
 
     inline bool isValid() const
     {
@@ -974,17 +982,18 @@ public:
         auto validParticipantId = (*this)["participant_id"].isString();
         auto validAccountId = (*this)["account_id"].isString();
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
+        auto validLan = maybe((*this)["lan"], (*this)["lan"].isBool());
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validSeatName && validMemberId &&
-                     validParticipantId && validAccountId && validDisabled;
+                     validParticipantId && validAccountId && validDisabled && validLan;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "StageSeatAllocation: id=%d, party_id=%d, party_event_id=%d, stage_id=%d, seat_name=%d, "
-            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d",
+            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d, lan=%d",
             validId, validPartyId, validPartyEventId, validStageId, validSeatName, validMemberId, validParticipantId,
-            validAccountId, validDisabled
+            validAccountId, validDisabled, validLan
         );
 #endif
 
@@ -1003,6 +1012,8 @@ public:
     inline void setStage(const Stage &value) { insert("stage", value); }
     inline StageConnectionArray getConnections() const { return value("connections").toArray(); }
     inline void setConnections(const StageConnectionArray &value) { insert("connections", value); }
+    inline QString getPublicAddress() const { return value("public_address").toString(); }
+    inline void setPublicAddress(const QString &value) { insert("public_address", value); }
 
     inline bool isValid() const
     {
@@ -1010,13 +1021,14 @@ public:
         auto validStage = maybe((*this)["stage"], getStage().isValid());
         auto validConnections = (*this)["connections"].isArray() &&
                                 getConnections().every([](const StageConnection &value) { return value.isValid(); });
+        auto validPublicAddress = (*this)["public_address"].isString();
 
-        auto valid = validAllocation && validStage && validConnections;
+        auto valid = validAllocation && validStage && validConnections && validPublicAddress;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: allocation=%d, stage=%d, connections=%d", validAllocation,
-            validStage, validConnections
+            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: allocation=%d, stage=%d, connections=%d, public_address",
+            validAllocation, validStage, validConnections, validPublicAddress
         );
 #endif
 
@@ -1111,6 +1123,8 @@ public:
     inline void setHeight(int value) { insert("height", value); }
     inline int getRevision() const { return value("revision").toInt(); }
     inline void setRevision(int value) { insert("revision", value); }
+    inline QString getLanServer() const { return value("lan_server").toString(); }
+    inline void setLanServer(const QString &value) { insert("lan_server", value); }
 
     inline bool isValid() const
     {
@@ -1128,18 +1142,21 @@ public:
         auto validWidth = (*this)["width"].isDouble();
         auto validHeight = (*this)["height"].isDouble();
         auto validRevision = (*this)["revision"].isDouble();
+        auto validLanServer = (*this)["lan_server"].isString();
 
         auto valid = validStageId && validSeatName && validSourceName && validProtocol && validPort && validStreamId &&
                      validPassphrase && validParameters && validRelay && validMaxBitrate && validMinBitrate &&
-                     validWidth && validHeight && validRevision;
+                     validWidth && validHeight && validRevision && validLanServer;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "DownlinkRequestBody: stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, port=%d, stream_id=%d, "
-            "passphrase=%d, parameters=%d, relay=%d, max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d",
+            "passphrase=%d, parameters=%d, relay=%d, max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d"
+            "lan_server=%d",
             validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
-            validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision
+            validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision,
+            validLanServer
         );
 #endif
 
