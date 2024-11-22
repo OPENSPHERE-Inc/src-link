@@ -77,6 +77,7 @@ private slots:
     void onPutDownlinkFailed(const QString &uuid);
     void onDeleteDownlinkSucceeded(const QString &uuid);
     void onDownlinkReady(const DownlinkInfo &downlink);
+    void onStagesReady(const StageArray &stages);
     void onLoginSucceeded();
     void onLogoutSucceeded();
     void onSettingsUpdate(obs_data_t *settings);

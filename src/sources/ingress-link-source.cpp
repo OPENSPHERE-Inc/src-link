@@ -105,6 +105,7 @@ IngressLinkSource::IngressLinkSource(
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
     connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
+    connect(apiClient, SIGNAL(stagesReady(const StageArray &)), this, SLOT(onStagesReady(const StageArray &)));
     connect(apiClient, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
             reactivate();
@@ -588,6 +589,40 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
         revision = incomingConnection.getRevision();
         resetDecoder(incomingConnection);
     }
+}
+
+void IngressLinkSource::onStagesReady(const StageArray &stages)
+{
+    auto stageId = connRequest.getStageId();
+    auto seatName = connRequest.getSeatName();
+    auto sourceName = connRequest.getSourceName();
+
+    if (!connection.isEmpty() || stageId.isEmpty() || seatName.isEmpty() || sourceName.isEmpty()) {
+        return;
+    }
+
+    // No connection but stage/seat/source selected situation
+    auto stage = stages.find([this, stageId, seatName, sourceName](const Stage &stage) {
+        if (stage.getId() != stageId) {
+            return false;
+        }
+        auto seat =
+            stage.getSeats().find([this, seatName](const StageSeat &seat) { return seat.getName() == seatName; });
+        if (seat.isEmpty()) {
+            return false;
+        }
+        auto source = stage.getSources().find([this, sourceName](const StageSource &source) {
+            return source.getName() == sourceName;
+        });
+        return !source.isEmpty();
+    });
+
+    if (stage.isEmpty()) {
+        return;
+    }
+
+    // Stage/seat/source found -> Re-put connection
+    putConnection();
 }
 
 // This is called when link or refresh token succeeded
