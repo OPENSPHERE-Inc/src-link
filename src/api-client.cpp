@@ -314,7 +314,7 @@ QString SRCLinkApiClient::retrievePrivateIp()
         index = std::min<qsizetype>(settings->getIngressPrivateIpIndex(), privateAddresses.size() - 1);
         settings->setIngressPrivateIpValue(privateAddresses[index]);
     }
-    settings->setIngressPrivateIpIndex(index);
+    settings->setIngressPrivateIpIndex((int)index);
 
     return settings->getIngressPrivateIpValue();
 }
