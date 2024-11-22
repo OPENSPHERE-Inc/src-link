@@ -83,6 +83,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
 #define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
+#ifdef API_DEBUG
+#define API_LOG(...) obs_log(LOG_DEBUG, "client: " __VA_ARGS__)
+#else
+#define API_LOG(...)
+#endif
+#define ERROR_LOG(...) obs_log(LOG_ERROR, "client: " __VA_ARGS__)
+
 #define CHECK_CLIENT_TOKEN(...)                    \
     {                                              \
         if (client->refreshToken().isEmpty()) {    \
@@ -99,13 +106,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
             return;                                  \
         }                                            \
     }
-
-#ifdef API_DEBUG
-#define API_LOG(message, ...) obs_log(LOG_DEBUG, "client: " message, __VA_ARGS__)
-#else
-#define API_LOG(message, ...)
-#endif
-#define ERROR_LOG(message, ...) obs_log(LOG_ERROR, "client: " message, __VA_ARGS__)
 
 //--- SRCLinkApiClient class ---//
 

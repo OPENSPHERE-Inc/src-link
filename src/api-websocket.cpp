@@ -28,12 +28,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- Macros ---//
 #ifdef API_DEBUG
-#define API_LOG(message, ...) obs_log(LOG_DEBUG, "websocket: " message, __VA_ARGS__)
+#define API_LOG(...) obs_log(LOG_DEBUG, "websocket: " __VA_ARGS__)
 #else
-#define API_LOG(message, ...)
+#define API_LOG(...)
 #endif
-#define WARNING_LOG(message, ...) obs_log(LOG_WARNING, "websocket: " message, __VA_ARGS__)
-#define ERROR_LOG(message, ...) obs_log(LOG_ERROR, "websocket: " message, __VA_ARGS__)
+#define WARNING_LOG(...) obs_log(LOG_WARNING, "websocket: " __VA_ARGS__)
+#define ERROR_LOG(...) obs_log(LOG_ERROR, "websocket: " __VA_ARGS__)
 
 //--- SRCLinkWebSocketClient class ---//
 
@@ -97,6 +97,7 @@ void SRCLinkWebSocketClient::onDisconnected()
 
 void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &)
 {
+    UNUSED_PARAMETER(elapsedTime);
     API_LOG("Pong received: %llu", elapsedTime);
 }
 

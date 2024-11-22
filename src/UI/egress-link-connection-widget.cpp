@@ -20,7 +20,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "egress-link-connection-widget.hpp"
 
-
 //--- EgressLinkConnectionWidget class ---//
 
 EgressLinkConnectionWidget::EgressLinkConnectionWidget(
