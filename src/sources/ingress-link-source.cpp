@@ -46,6 +46,7 @@ IngressLinkSource::IngressLinkSource(
 {
     name = obs_source_get_name(_source);
     obs_log(LOG_DEBUG, "%s: Source creating", qUtf8Printable(name));
+    connRequest.setPort(0);
 
     if (!strcmp(obs_data_get_json(settings), "{}")) {
         // Initial creation -> Load recently settings from file
@@ -54,13 +55,6 @@ IngressLinkSource::IngressLinkSource(
 
     // Capture source's settings first
     captureSettings(settings);
-
-    // Allocate port (non-relay only)
-    if (!connRequest.getRelay()) {
-        connRequest.setPort(apiClient->getFreePort());
-    } else {
-        connRequest.setPort(0);
-    }
 
     // Create decoder private source (SRT, RIST, etc.)
     OBSDataAutoRelease decoderSettings = createDecoderSettings();
@@ -234,6 +228,15 @@ void IngressLinkSource::captureSettings(obs_data_t *settings)
     newRequest.setRevision(revision);
 
     connRequest = newRequest;
+
+    // Re-allocate port
+    if (connRequest.getPort()) {
+        apiClient->releasePort(connRequest.getPort());
+        connRequest.setPort(0);
+    }
+    if (!connRequest.getRelay()) {
+        connRequest.setPort(apiClient->getFreePort());
+    }
 }
 
 obs_data_t *IngressLinkSource::createDecoderSettings()
@@ -641,15 +644,6 @@ void IngressLinkSource::reactivate()
     obs_log(LOG_DEBUG, "%s: Source reactivating with rev.%d", qUtf8Printable(name), revision);
     OBSSourceAutoRelease source = obs_weak_source_get_source(weakSource);
     OBSDataAutoRelease settings = obs_source_get_settings(source);
-
-    // Re-allocate port
-    if (connRequest.getPort()) {
-        apiClient->releasePort(connRequest.getPort());
-        connRequest.setPort(0);
-    }
-    if (!connRequest.getRelay()) {
-        connRequest.setPort(apiClient->getFreePort());
-    }
 
     onSettingsUpdate(settings);
     obs_log(LOG_DEBUG, "%s: Source reactivated with rev.%d", qUtf8Printable(name), revision);
