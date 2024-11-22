@@ -602,17 +602,17 @@ void IngressLinkSource::onStagesReady(const StageArray &stages)
     }
 
     // No connection but stage/seat/source selected situation
-    auto stage = stages.find([this, stageId, seatName, sourceName](const Stage &stage) {
-        if (stage.getId() != stageId) {
+    auto stage = stages.find([this, stageId, seatName, sourceName](const Stage &_stage) {
+        if (_stage.getId() != stageId) {
             return false;
         }
         auto seat =
-            stage.getSeats().find([this, seatName](const StageSeat &seat) { return seat.getName() == seatName; });
+            _stage.getSeats().find([this, seatName](const StageSeat &_seat) { return _seat.getName() == seatName; });
         if (seat.isEmpty()) {
             return false;
         }
-        auto source = stage.getSources().find([this, sourceName](const StageSource &source) {
-            return source.getName() == sourceName;
+        auto source = _stage.getSources().find([this, sourceName](const StageSource &_source) {
+            return _source.getName() == sourceName;
         });
         return !source.isEmpty();
     });
