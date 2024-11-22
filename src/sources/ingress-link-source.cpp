@@ -812,3 +812,4 @@ obs_source_info createLinkedSourceInfo()
 
     return sourceInfo;
 }
+
