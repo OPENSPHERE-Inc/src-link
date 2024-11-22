@@ -30,7 +30,7 @@ SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction)
 - **SOURCE**: Guests can send multiple sources in parallel. The number of sources is specified by the host, and the guest is free to select video and audio from its own OBS sources.
 - **MEMBER**:  Registered guests who can connect to the receiver and standby.
 - **INVITATION CODE**: To invite a guest to the receiver, the host generates an invitation code and sends it to the guest. The guest becomes a member by redeeming the code.
-- **ACCOUNT CODE**: To request a host to join, a guest sends his/her account code to the host. The host uses the account code to register as a member.
+- **GUEST CODE**: To request a host to join, a guest sends his/her guest code to the host. The host uses the guest code to register as a member.
 - **DOWNLINK**: Host-side input connections
 - **UPLINK**: Guest-side output connection
 
@@ -131,7 +131,8 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
 8. Press OK to close the source properties and the source will go into receive standby (if set up correctly, the red warning indicator will disappear).
 
-9. Open the [Host](https://src-link.live/receivers) menu of the SRC-Link Control Panel again and add members to the receiver for each person scheduled to appear. There are two ways to do this: send an invitation code to the guest or receive an account code from the guest and enter it. Both invitation codes and account codes are in the format `abcd-efgh-1234-5678`.
+9. Open the [Host](https://src-link.live/receivers) menu of the SRC-Link Control Panel again and add members to the receiver for each person scheduled to appear. There are two ways to do this: send an invitation code to the guest or receive an guest code from the guest and enter it. Invitation codes are the format `SRCH-xxxx-xxxx-xxxx-xxxx` and guest codes are in the format
+ `SRCG-xxxx-xxxx-xxxx-xxxx`.
 
    If you send an invitation code, wait for it to be accepted by the guest.
 
@@ -157,11 +158,11 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    OBS Studio and SRC-Link Control Panel are now connected and ready to use.
 
-5. Join the host's receiver. There are two ways to join: send an account code to the host to be added, or have the host generate an invitation code and enter it yourself.
+5. Join the host's receiver. There are two ways to join: send an guest code to the host to be added, or have the host generate an invitation code and enter it yourself.
 
-   - For account codes
+   - For guest codes
      
-     Open the [Account Code](https://src-link.live/accounts/access-codes) menu in the SRC-Link Control Panel and copy the default sample account code already generated, or click “Create” to create a new one.
+     Open the [Guest code](https://src-link.live/accounts/access-codes) menu in the SRC-Link Control Panel and copy the default sample guest code already generated, or click “Create” to create a new one.
 
    - For Invitation Codes
 
