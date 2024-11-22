@@ -590,6 +590,9 @@ void IngressLinkSource::onDownlinkReady(const DownlinkInfo &downlink)
         // Prevent infinite loop
         revision = incomingConnection.getRevision();
         resetDecoder(incomingConnection);
+    } else {
+        // Just update data
+        connection = incomingConnection;
     }
 }
 
