@@ -13,11 +13,11 @@ SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction)
 **Key features**
 
 - A host can receive multiple video/audio streams from guests in parallel. The guest to receive can be selected from among the members.
-- Guests can connect to receiver and enter standby mode. The standby state allows transmission to begin at any time, and the host's commands initiate video and audio transmission.
+- Guests can connect to receiver and enter standby state. The standby state allows transmission to begin at any time, and the host's commands initiate video and audio transmission.
 - There is no need to send connection information (address, stream ID, password, etc.) to guests.
   Guests do not need to configure them in OBS Studio.
 - The host can view the guest's standby status and video screenshots (updated every 5 to 30 seconds) on the SRC-Link Control Panel.
-- Since a guest in standby mode is literally just waiting without transmitting video or audio, there can theoretically be far more streams (whether 10, 100, or 1,000) than the host can receive.
+- Since a guest in standby state is literally just waiting without transmitting video or audio, there can theoretically be far more streams (whether 10, 100, or 1,000) than the host can receive.
   * However, there is a limit in the SRC-Link Control Panel plan.
 - SRT is used as the transmission protocol for video and audio. Stream ID and passphrase are controlled by the SRC-Link Control Panel.
 
