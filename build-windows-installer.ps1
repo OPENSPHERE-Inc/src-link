@@ -10,6 +10,7 @@ $OutputName = "${ProductName}-${ProductVersion}-windows-x64"
 
 $Env:API_SERVER = "https://replaceYourApiServer"
 $Env:API_WS_SERVER = "wss://replaceYourApiServer"
+$Env:FRONTEND_SERVER = "https://replaceYourFrontendServer"
 $Env:CLIENT_ID = "replaceYourClientId"
 $env:CLIENT_SECRET = "replaceYourClientSecret"
 $env:SCHEMA_DEBUG = "true"

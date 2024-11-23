@@ -107,7 +107,11 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    Then add/remove as many sources as you want to receive from one guest (e.g. 2 sources for a webcam and a game screen).
 
-2. By default, you are registered as a member of the receiver, but this is mainly for testing purposes, so you can delete or disable it (click the eye icon) if you do not need it (you can also send and receive yourself, but the video may loop).
+2. **Basically, the host doesn't need to register as a member with the receiver.**
+
+   If you wish to register yourself as a member for testing purposes, you may do so. 
+   You can also send and receive yourself, but the video may loop.
+   Refer to the guest's instructions on how to stream the video.
 
 3. Install the SRC-Link plugin in OBS Studio [Download here](https://github.com/OPENSPHERE-Inc/src-link/releases)
 
@@ -197,8 +201,11 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    次にゲスト1人から受信したいインプット数分だけソースを追加／削除します（例: ウェブカメラとゲーム画面なら 2 個）
 
-2. 初期状態で自分自身がレシーバーにメンバー登録されていますが、これは主にテスト用途なので、
-   不要なら削除するか無効化（眼アイコンをクリック）してください（自分で送信して自分で受信することもできますが映像がループする場合があります）
+2. **基本的に、ホストはレシーバーにメンバー登録する必要はありません。**
+
+   テストの目的で自分自身を登録したい場合は、そのようにできます。
+   自分で送信して自分で受信することもできますが映像がループする場合があります。
+   映像の送信方法は [ゲストの手順](#ゲスト向け) を参照してください。
 
 3. OBS Studio に SRC-Link プラグインをインストールします [ダウンロードはこちら](https://github.com/OPENSPHERE-Inc/src-link/releases)
 
@@ -295,7 +302,7 @@ This plugin is developed under [obs-plugintemplate](https://github.com/obsprojec
 
 ## Using Open Source Libraries
 
-- [Qt6](https://www.qt.io/)
-- [O2 (OAuth client)](https://github.com/pipacs/o2)
-- [Font Awesome](https://fontawesome.com/)
+- [Qt6 + Qt WebSockets](https://www.qt.io/)
+- [o2](https://github.com/pipacs/o2) (Qt based OAuth2 client)
+- [Font Awesome](https://fontawesome.com) Free 6.7.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.
 - [OBS Studio](https://obsproject.com/)

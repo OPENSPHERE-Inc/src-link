@@ -53,6 +53,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #ifndef API_WS_SERVER
 #define API_WS_SERVER "ws://localhost:3000"
 #endif
+#ifndef FRONTEND_SERVER
+#define FRONTEND_SERVER "http://localhost:3001"
+#endif
 #define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
 #define TOKEN_URL (API_SERVER "/oauth2/token")
 #define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
@@ -68,10 +71,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
 // Control Panel Pages
-#define STAGES_PAGE_URL (API_SERVER "/receivers")
-#define CONTROL_PANEL_PAGE_URL (API_SERVER "/")
-#define MEMBERSHIPS_PAGE (API_SERVER "/memberships")
-#define SIGNUP_PAGE (API_SERVER "/accounts/register")
+#define STAGES_PAGE_URL (FRONTEND_SERVER "/receivers")
+#define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/")
+#define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
+#define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -120,7 +123,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
       standByOutputs(0),
       uplinkStatus(UPLINK_STATUS_INACTIVE)
 {
-    API_LOG("SRCLinkApiClient creating with %s,%s", API_SERVER, API_WS_SERVER);
+    API_LOG("SRCLinkApiClient creating with %s,%s,%s", API_SERVER, API_WS_SERVER, FRONTEND_SERVER);
 
     networkManager = new QNetworkAccessManager(this);
     client = new O2(this, networkManager, settings);
@@ -155,8 +158,9 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     QFile replyContent(replyHtmlFile);
     if (!replyContent.open(QIODevice::ReadOnly)) {
         ERROR_LOG("Failed to read reply content html: %s", qUtf8Printable(replyHtmlFile));
+    } else {
+        client->setReplyContent(replyContent.readAll());
     }
-    client->setReplyContent(replyContent.readAll());
 
     connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
     connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));

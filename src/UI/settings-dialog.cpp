@@ -22,10 +22,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QImageReader>
 #include <QMessageBox>
 #include <QNetworkInterface>
+#include <QFile>
 
 #include "../utils.hpp"
 #include "../plugin-support.h"
 #include "settings-dialog.hpp"
+
+#define OSS_INFO_FILE "oss.md"
 
 SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     : QDialog(parent),
@@ -85,6 +88,18 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->egressLinkSettingsLabel->setText(QTStr("UplinkSettings"));
     ui->ssIntervalLabel->setText(QTStr("ScreenshotInterval"));
     ui->privateIpLabel->setText(QTStr("PrivateIPForLAN"));
+    ui->authorLabel->setText(QTStr("AppInfo").arg(PLUGIN_VERSION));
+    ui->ossLabel->setText(QTStr("OpenSourceLibraries"));
+
+    // Read oss info markdown
+    QString ossInfoFile =
+        QString("%1/%2").arg(obs_get_module_data_path(obs_current_module())).arg(QTStr(OSS_INFO_FILE));
+    QFile ossInfoContent(ossInfoFile);
+    if (!ossInfoContent.open(QIODevice::ReadOnly)) {
+        obs_log(LOG_ERROR, "Failed to read OSS info Markdown: %s", qUtf8Printable(ossInfoFile));
+    } else {
+        ui->ossTextBrowser->setMarkdown(ossInfoContent.readAll());
+    }
 
     obs_log(LOG_DEBUG, "SettingsDialog created");
 }

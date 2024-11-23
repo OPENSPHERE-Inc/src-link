@@ -44,7 +44,10 @@
         </font>
        </property>
        <property name="text">
-        <string>Connection name</string>
+        <string/>
+       </property>
+       <property name="textFormat">
+        <enum>Qt::TextFormat::PlainText</enum>
        </property>
       </widget>
      </item>
@@ -82,6 +85,12 @@
      </property>
      <property name="text">
       <string>Description</string>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::TextFormat::PlainText</enum>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
