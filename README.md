@@ -61,7 +61,7 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 - **ソース**: ゲストは複数のソースをパラで送信できます。ソースの数はホストによって指定され、ゲストは自身の OBS ソースから自由にビデオとオーディオを選択できます。
 - **メンバー**: レシーバーに接続して待機可能な、登録済みのゲストです。
 - **招待コード**: レシーバーにゲストを招待するには、ホストが招待コードを生成してゲストへ送付します。ゲストはコードを引き換える事でメンバーになります。
-- **アカウントコード**: ゲストからホストに参加を申し込むには、自身のアカウントコードをホストに送付します。ホストはアカウントコードを使用してメンバー登録します。
+- **ゲストコード**: ゲストからホストに参加を申し込むには、自身のゲストコードをホストに送付します。ホストはゲストコードを使用してメンバー登録します。
 - **ダウンリンク**: ホスト側の入力接続
 - **アップリンク**: ゲスト側の出力接続
 
@@ -87,7 +87,7 @@ Separate [paid subscription plans](https://src-link.live/subscriptions/plans) ar
 
 Please download latest install package from [Release](https://github.com/OPENSPHERE-Inc/src-link/releases)
 
-> NOTE: The windows copies installs `Qt6WebSockets.dll` and Qt6's `tls` plugins folder under your `obs-studio/bin/64bit` as required library.
+> NOTE: The windows installer copies `Qt6WebSockets.dll` and Qt6's `tls` plugins folder under your `obs-studio/bin/64bit` as required library.
 
 **[JP]**
 
@@ -234,8 +234,8 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 8. OK を押してソースプロパティを閉じるとソースが受信スタンバイ状態となります（正しく設定されていれば、赤い警告表示が消えます）
 
 9. 再び SRC-Link Control Panel の [ホスト](https://src-link.live/receivers) メニューを開いて、レシーバーに出演予定者分だけメンバー追加します。
-   ゲストに招待コードを送るやり方と、ゲストからアカウントコードを受け取って入力する方法の二通りあります。
-   招待コード・アカウントコード共には `abcd-efgh-1234-5678` の形式です。
+   ゲストに招待コードを送るやり方と、ゲストからゲストコードを受け取って入力する方法の二通りあります。
+   招待コード・ゲストコード共には `abcd-efgh-1234-5678` の形式です。
 
    招待コードを送った場合は、ゲストによって承認されるのを待ちます。
 
@@ -263,10 +263,10 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    こちらで OBS Studio と SRC-Link Control Panel が接続され、使用可能になりました。
 
-5. ホストのレシーバーに参加します。参加する方法は、ホストへアカウントコードを送付して追加してもらうやり方と、ホストに招待コードを生成してもらって自分で入力するやり方の二通りあります。
-   - アカウントコードの場合
+5. ホストのレシーバーに参加します。参加する方法は、ホストへゲストコードを送付して追加してもらうやり方と、ホストに招待コードを生成してもらって自分で入力するやり方の二通りあります。
+   - ゲストコードの場合
 
-     SRC-Link Control Panel で [アカウントコード](https://src-link.live/accounts/access-codes) メニューを開き、デフォルトでサンプル生成済みのアカウントコードをコピーするか、
+     SRC-Link Control Panel で [ゲストコード](https://src-link.live/accounts/access-codes) メニューを開き、デフォルトでサンプル生成済みのゲストコードをコピーするか、
      新たに「作成」をクリックして新しい物を作ってください。
 
    - 招待コードの場合
