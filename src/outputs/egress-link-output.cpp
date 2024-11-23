@@ -798,7 +798,7 @@ void EgressLinkOutput::onSnapshotTimerTimeout()
 // Called every OUTPUT_MONITORING_INTERVAL_MSECS
 void EgressLinkOutput::onMonitoringTimerTimeout()
 {
-    auto interlockType = apiClient->getSettings()->value("interlock_type");
+    auto interlockType = apiClient->getSettings()->value("interlock_type", DEFAULT_INTERLOCK_TYPE);
     if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
         if (interlockType == "always_on") {
             start();

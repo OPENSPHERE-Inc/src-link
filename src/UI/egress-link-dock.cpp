@@ -46,7 +46,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->interlockTypeComboBox->addItem(QTStr("AlwaysON"), "always_on");
 
     ui->interlockTypeComboBox->setCurrentIndex(
-        ui->interlockTypeComboBox->findData(apiClient->getSettings()->value("interlock_type", "virtual_cam"))
+        ui->interlockTypeComboBox->findData(apiClient->getSettings()->value("interlock_type", DEFAULT_INTERLOCK_TYPE))
     );
 
     connect(
