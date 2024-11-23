@@ -30,6 +30,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../schema.hpp"
 #include "../utils.hpp"
 
+#define DEFAULT_INTERLOCK_TYPE "virtual_cam"
+
 #define PROGRAM_OUT_SOURCE QString()
 #define INTERLOCK_TYPE_NONE QString()
 
