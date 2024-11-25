@@ -90,6 +90,7 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->privateIpLabel->setText(QTStr("PrivateIPForLAN"));
     ui->authorLabel->setText(QTStr("AppInfo").arg(PLUGIN_VERSION));
     ui->ossLabel->setText(QTStr("OpenSourceLibraries"));
+    setWindowTitle(QTStr("SourceLinkSettings"));
 
     // Read oss info markdown
     QString ossInfoFile =
