@@ -1,3 +1,6 @@
 [submodule "lib/o2"]
 	path = lib/o2
 	url = https://github.com/OPENSPHERE-Inc/o2.git
+[submodule "lib/json"]
+	path = lib/json
+	url = https://github.com/nlohmann/json.git

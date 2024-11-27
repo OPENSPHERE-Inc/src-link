@@ -78,6 +78,9 @@ set(o2_SRCS
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
+add_subdirectory(${CMAKE_SOURCE_DIR}/lib/json)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+
 target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE src/plugin-main.cpp

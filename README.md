@@ -12,7 +12,7 @@ SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction)
 
 **Key features**
 
-- A host can receive multiple video/audio streams from guests in parallel. The guest to receive can be selected from among the members.
+- A host can receive multiple clean-feed (video/audio streams) from guests in parallel. The guest to receive can be selected from among the members.
 - Guests can connect to receiver and enter standby state. The standby state allows transmission to begin at any time, and the host's commands initiate video and audio transmission.
 - There is no need to send connection information (address, stream ID, password, etc.) to guests.
   Guests do not need to configure them in OBS Studio.
@@ -42,7 +42,7 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 
 **主な機能**
 
-- ホストは、ゲストから複数の映像音声をパラで受信することができます。受信対象はメンバーの中から選択することができます。
+- ホストは、ゲストから複数のクリーンフィード（映像音声）をパラで受信することができます。受信対象はメンバーの中から選択することができます。
 - ゲストは、レシーバーに接続してスタンバイ状態になることができます。
   スタンバイ状態は送信開始がいつでも可能な状態で、ホストのコマンドによって映像音声の送信を開始します。
 - ゲストに接続情報（アドレス、ストリームID、パスワード等）を送付する必要はありません。
@@ -304,5 +304,6 @@ This plugin is developed under [obs-plugintemplate](https://github.com/obsprojec
 
 - [Qt6 + Qt WebSockets](https://www.qt.io/)
 - [o2](https://github.com/pipacs/o2) (Qt based OAuth2 client)
+- [json](https://github.com/nlohmann/json) (JSON for Modern C++)
 - [Font Awesome](https://fontawesome.com) Free 6.7.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.
 - [OBS Studio](https://obsproject.com/)
