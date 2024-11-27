@@ -770,7 +770,7 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 }
 
 // Upload screenshot via websocket
-const void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
+void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
 {
     CHECK_CLIENT_TOKEN();
 

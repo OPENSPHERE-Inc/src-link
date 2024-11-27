@@ -36,7 +36,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 template<typename T> class TypedJsonArray : public QJsonArray {
 public:
     TypedJsonArray() = default;
-    TypedJsonArray(const QJsonArray &json) : QJsonArray(json) {}
+    TypedJsonArray(const QJsonArray &_json) : QJsonArray(_json) {}
 
     inline QList<T> values() const
     {
@@ -84,15 +84,15 @@ inline bool maybe(const QJsonValue &value, bool result)
     return value.isNull() || value.isUndefined() || result;
 }
 
-inline const std::string dumpJsonObject(const QJsonObject &json)
+inline const std::string dumpJsonObject(const QJsonObject &_json)
 {
-    return QJsonDocument(json).toJson().toStdString();
+    return QJsonDocument(_json).toJson().toStdString();
 }
 
 class SubscriptionFeatures : public QJsonObject {
 public:
     SubscriptionFeatures() = default;
-    SubscriptionFeatures(const QJsonObject &json) : QJsonObject(json) {}
+    SubscriptionFeatures(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline bool getHostAbility() const { return value("host_ability").toBool(); }
     inline void setHostAbility(bool value) { insert("host_ability", value); }
@@ -162,7 +162,7 @@ public:
 class SavedSubscriptionPlan : public QJsonObject {
 public:
     SavedSubscriptionPlan() = default;
-    SavedSubscriptionPlan(const QJsonObject &json) : QJsonObject(json) {}
+    SavedSubscriptionPlan(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -197,7 +197,7 @@ public:
 class SubscriptionLicense : public QJsonObject {
 public:
     SubscriptionLicense() = default;
-    SubscriptionLicense(const QJsonObject &json) : QJsonObject(json) {}
+    SubscriptionLicense(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline SavedSubscriptionPlan getSavedPlan() const { return value("saved_plan").toObject(); }
     inline void setSavedPlan(const SavedSubscriptionPlan &value) { insert("saved_plan", value); }
@@ -228,7 +228,7 @@ public:
 class AccountResourceUsage : public QJsonObject {
 public:
     AccountResourceUsage() = default;
-    AccountResourceUsage(const QJsonObject &json) : QJsonObject(json) {}
+    AccountResourceUsage(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline int getStages() const { return value("stages").toInt(); }
     inline void setStages(int value) { insert("stages", value); }
@@ -283,7 +283,7 @@ public:
 class Account : public QJsonObject {
 public:
     Account() = default;
-    Account(const QJsonObject &json) : QJsonObject(json) {}
+    Account(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -314,7 +314,7 @@ public:
 class AccountInfo : public QJsonObject {
 public:
     AccountInfo() = default;
-    AccountInfo(const QJsonObject &json) : QJsonObject(json) {}
+    AccountInfo(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline Account getAccount() const { return value("account").toObject(); }
     inline void setAccount(const Account &value) { insert("account", value); }
@@ -345,7 +345,7 @@ public:
 class StageSource : public QJsonObject {
 public:
     StageSource() = default;
-    StageSource(const QJsonObject &json) : QJsonObject(json) {}
+    StageSource(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -378,7 +378,7 @@ typedef TypedJsonArray<StageSource> StageSourceArray;
 class StageSeat : public QJsonObject {
 public:
     StageSeat() = default;
-    StageSeat(const QJsonObject &json) : QJsonObject(json) {}
+    StageSeat(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -405,7 +405,7 @@ typedef TypedJsonArray<StageSeat> StageSeatArray;
 class SrtrelayServer : public QJsonObject {
 public:
     SrtrelayServer() = default;
-    SrtrelayServer(const QJsonObject &json) : QJsonObject(json) {}
+    SrtrelayServer(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getAddress() const { return value("address").toString(); }
     inline void setAddress(const QString &value) { insert("address", value); }
@@ -432,7 +432,7 @@ typedef TypedJsonArray<SrtrelayServer> SrtrelayServerArray;
 class StageSeatView : public QJsonObject {
 public:
     StageSeatView() = default;
-    StageSeatView(const QJsonObject &json) : QJsonObject(json) {}
+    StageSeatView(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getDisplayName() const { return value("display_name").toString(); }
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
@@ -454,7 +454,7 @@ public:
 class AccountView : public QJsonObject {
 public:
     AccountView() = default;
-    AccountView(const QJsonObject &json) : QJsonObject(json) {}
+    AccountView(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getDisplayName() const { return value("display_name").toString(); }
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
@@ -482,7 +482,7 @@ public:
 class Stage : public QJsonObject {
 public:
     Stage() = default;
-    Stage(const QJsonObject &json) : QJsonObject(json) {}
+    Stage(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -542,7 +542,7 @@ public:
 class StageView : public QJsonObject {
 public:
     StageView() = default;
-    StageView(const QJsonObject &json) : QJsonObject(json) {}
+    StageView(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -575,7 +575,7 @@ typedef TypedJsonArray<Stage> StageArray;
 class Party : public QJsonObject {
 public:
     Party() = default;
-    Party(const QJsonObject &json) : QJsonObject(json) {}
+    Party(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -618,7 +618,7 @@ public:
 class PartyView : public QJsonObject {
 public:
     PartyView() = default;
-    PartyView(const QJsonObject &json) : QJsonObject(json) {}
+    PartyView(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -645,7 +645,7 @@ typedef TypedJsonArray<Party> PartyArray;
 class PartyEvent : public QJsonObject {
 public:
     PartyEvent() = default;
-    PartyEvent(const QJsonObject &json) : QJsonObject(json) {}
+    PartyEvent(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -713,7 +713,7 @@ public:
 class PartyEventView : public QJsonObject {
 public:
     PartyEventView() = default;
-    PartyEventView(const QJsonObject &json) : QJsonObject(json) {}
+    PartyEventView(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
@@ -756,7 +756,7 @@ typedef TypedJsonArray<PartyEvent> PartyEventArray;
 class PartyEventParticipant : public QJsonObject {
 public:
     PartyEventParticipant() = default;
-    PartyEventParticipant(const QJsonObject &json) : QJsonObject(json) {}
+    PartyEventParticipant(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -833,7 +833,7 @@ typedef TypedJsonArray<PartyEventParticipant> PartyEventParticipantArray;
 class ConnectionAdvices : public QJsonObject {
 public:
     ConnectionAdvices() = default;
-    ConnectionAdvices(const QJsonObject &json) : QJsonObject(json) {}
+    ConnectionAdvices(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline bool getUnreachable() const { return value("unreachable").toBool(); }
     inline void setUnreachable(bool value) { insert("unreachable", value); }
@@ -855,7 +855,7 @@ public:
 class StageConnection : public QJsonObject {
 public:
     StageConnection() = default;
-    StageConnection(const QJsonObject &json) : QJsonObject(json) {}
+    StageConnection(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -948,7 +948,7 @@ typedef TypedJsonArray<StageConnection> StageConnectionArray;
 class StageSeatAllocation : public QJsonObject {
 public:
     StageSeatAllocation() = default;
-    StageSeatAllocation(const QJsonObject &json) : QJsonObject(json) {}
+    StageSeatAllocation(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getId() const { return value("_id").toString(); }
     inline void setId(const QString &value) { insert("_id", value); }
@@ -1004,7 +1004,7 @@ public:
 class UplinkInfo : public QJsonObject {
 public:
     UplinkInfo() = default;
-    UplinkInfo(const QJsonObject &json) : QJsonObject(json) {}
+    UplinkInfo(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline StageSeatAllocation getAllocation() const { return value("allocation").toObject(); }
     inline void setAllocation(const StageSeatAllocation &value) { insert("allocation", value); }
@@ -1039,7 +1039,7 @@ public:
 class DownlinkInfo : public QJsonObject {
 public:
     DownlinkInfo() = default;
-    DownlinkInfo(const QJsonObject &json) : QJsonObject(json) {}
+    DownlinkInfo(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline StageConnection getConnection() const { return value("connection").toObject(); }
     inline void setConnection(const StageConnection &value) { insert("connection", value); }
@@ -1061,7 +1061,7 @@ public:
 class WebSocketMessage : public QJsonObject {
 public:
     WebSocketMessage() = default;
-    WebSocketMessage(const QJsonObject &json) : QJsonObject(json) {}
+    WebSocketMessage(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getEvent() const { return value("event").toString(); }
     inline void setEvent(const QString &value) { insert("event", value); }
@@ -1095,7 +1095,7 @@ public:
 class DownlinkRequestBody : public QJsonObject {
 public:
     DownlinkRequestBody() = default;
-    DownlinkRequestBody(const QJsonObject &json) : QJsonObject(json) {}
+    DownlinkRequestBody(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getStageId() const { return value("stage_id").toString(); }
     inline void setStageId(const QString &value) { insert("stage_id", value); }
