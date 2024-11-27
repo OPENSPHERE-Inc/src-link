@@ -304,5 +304,6 @@ This plugin is developed under [obs-plugintemplate](https://github.com/obsprojec
 
 - [Qt6 + Qt WebSockets](https://www.qt.io/)
 - [o2](https://github.com/pipacs/o2) (Qt based OAuth2 client)
+- [json](https://github.com/nlohmann/json) (JSON for Modern C++)
 - [Font Awesome](https://fontawesome.com) Free 6.7.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.
 - [OBS Studio](https://obsproject.com/)
