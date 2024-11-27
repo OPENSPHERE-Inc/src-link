@@ -146,7 +146,7 @@ public slots:
     const RequestInvoker *putUplink(const bool force = false);
     const RequestInvoker *putUplinkStatus();
     const RequestInvoker *deleteUplink(const bool parallel = false);
-    const RequestInvoker *putScreenshot(const QString &sourceName, const QImage &image);
+    const void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
     void refreshIngress() { emit ingressRefreshNeeded(); }
     void refreshEgress() { emit egressRefreshNeeded(); }

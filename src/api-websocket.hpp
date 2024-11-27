@@ -23,6 +23,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QJsonObject>
 #include <QTimer>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 class SRCLinkApiClient;
 
 class SRCLinkWebSocketClient : public QObject {
@@ -61,5 +64,6 @@ public slots:
     void stop();
     void subscribe(const QString &name, const QJsonObject &payload = QJsonObject());
     void unsubscribe(const QString &name, const QJsonObject &payload = QJsonObject());
+    void invoke(const QString &name, const json &payload = json());
     bool isStarted() const { return started; }
 };

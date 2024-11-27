@@ -769,33 +769,25 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
+// Upload screenshot via websocket
+const void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
 {
-    CHECK_CLIENT_TOKEN(nullptr);
-
-    auto req = QNetworkRequest(QUrl(QString(SCREENSHOTS_URL).arg(uuid).arg(sourceName)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "image/jpeg");
+    CHECK_CLIENT_TOKEN();
 
     QByteArray imageBytes;
     QBuffer imageBuffer(&imageBytes);
     imageBuffer.open(QIODevice::WriteOnly);
     image.save(&imageBuffer, "JPG", SCREENSHOT_QUALITY);
 
-    API_LOG("Putting screenshot of %s", qUtf8Printable(sourceName));
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this, sourceName](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Putting screenshot of %s failed: %d", qUtf8Printable(sourceName), error);
-            emit putScreenshotFailed(sourceName);
-            return;
-        }
-        API_LOG("Put screenshot of %s succeeded", qUtf8Printable(sourceName));
+    json payload;
+    payload["uuid"] = qUtf8Printable(uuid);
+    payload["source_name"] = qUtf8Printable(sourceName);
+    payload["mime_type"] = "image/jpeg";
 
-        emit putScreenshotSucceeded(sourceName);
-    });
-    invoker->put(req, imageBuffer.data());
+    auto bufferPtr = imageBuffer.data().constData();
+    payload["body"] = json::binary_t(std::vector<uint8_t>(bufferPtr, bufferPtr + imageBuffer.data().size()));
 
-    return invoker;
+    websocket->invoke("screenshots.put", payload);
 }
 
 void SRCLinkApiClient::getPicture(const QString &pictureId)

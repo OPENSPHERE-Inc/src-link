@@ -183,3 +183,21 @@ void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject 
 
     client->sendTextMessage(QJsonDocument(message).toJson());
 }
+
+void SRCLinkWebSocketClient::invoke(const QString &name, const json &payload)
+{
+    if (!started || !client->isValid()) {
+        return;
+    }
+
+    API_LOG("Invoke: %s", qUtf8Printable(name));
+
+    json message;
+
+    message["event"] = "invoke";
+    message["name"] = qUtf8Printable(name);
+    message["payload"] = payload;
+
+    auto bson = json::to_bson(message);
+    client->sendBinaryMessage(QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()));
+}
