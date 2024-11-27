@@ -780,6 +780,7 @@ void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &im
     image.save(&imageBuffer, "JPG", SCREENSHOT_QUALITY);
 
     json payload;
+
     payload["uuid"] = qUtf8Printable(uuid);
     payload["source_name"] = qUtf8Printable(sourceName);
     payload["mime_type"] = "image/jpeg";

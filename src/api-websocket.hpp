@@ -59,11 +59,13 @@ public:
     explicit SRCLinkWebSocketClient(QUrl wsUrl, SRCLinkApiClient *apiClient, QObject *parent = nullptr);
     ~SRCLinkWebSocketClient();
 
+    // Do not place slots
+    void invoke(const QString &name, const json &payload = json());
+
 public slots:
     void start();
     void stop();
     void subscribe(const QString &name, const QJsonObject &payload = QJsonObject());
     void unsubscribe(const QString &name, const QJsonObject &payload = QJsonObject());
-    void invoke(const QString &name, const json &payload = json());
     bool isStarted() const { return started; }
 };
