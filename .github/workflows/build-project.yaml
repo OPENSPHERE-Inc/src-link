@@ -137,6 +137,11 @@ jobs:
           config: ${{ needs.check-event.outputs.config }}
           codesign: ${{ fromJSON(needs.check-event.outputs.codesign) }}
           codesignIdent: ${{ steps.codesign.outputs.codesignIdent }}
+          clientId: ${{ vars.CLIENT_ID }}
+          clientSecret: ${{ secrets.CLIENT_SECRET }}
+          apiServer: ${{ vars.API_SERVER }}
+          apiWsServer: ${{ vars.API_WS_SERVER }}
+          frontendServer: ${{ vars.FRONTEND_SERVER }}
 
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
@@ -206,6 +211,11 @@ jobs:
         with:
           target: x86_64
           config: ${{ needs.check-event.outputs.config }}
+          clientId: ${{ vars.CLIENT_ID }}
+          clientSecret: ${{ secrets.CLIENT_SECRET }}
+          apiServer: ${{ vars.API_SERVER }}
+          apiWsServer: ${{ vars.API_WS_SERVER }}
+          frontendServer: ${{ vars.FRONTEND_SERVER }}
 
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
@@ -266,7 +276,12 @@ jobs:
         with:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
-
+          clientId: ${{ vars.CLIENT_ID }}
+          clientSecret: ${{ secrets.CLIENT_SECRET }}
+          apiServer: ${{ vars.API_SERVER }}
+          apiWsServer: ${{ vars.API_WS_SERVER }}
+          frontendServer: ${{ vars.FRONTEND_SERVER }}
+          
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
         with:
