@@ -59,7 +59,6 @@ class IngressLinkSource : public QObject {
     OBSSignal renameSignal;
     int revision;
     StageConnection connection;
-    QTimer *statusTimer;
 
     void captureSettings(obs_data_t *settings);
     // Return value must be release via obs_data_release()
@@ -83,7 +82,6 @@ private slots:
     void onLogoutSucceeded();
     void onSettingsUpdate(obs_data_t *settings);
     void reactivate();
-    void onStatusTimerTimeout();
 
 public:
     explicit IngressLinkSource(

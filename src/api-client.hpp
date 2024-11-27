@@ -131,7 +131,7 @@ public slots:
     void logout();
     bool isLoggedIn();
     const RequestInvoker *refresh();
-    void resyncOnlineResources();
+    void syncOnlineResources();
     void clearOnlineResources();
     const RequestInvoker *requestAccountInfo();
     const RequestInvoker *requestParties();
@@ -155,7 +155,7 @@ public slots:
     void openControlPanelPage(); // Just open web browser
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
-    void syncUplinkStatus();
+    void syncUplinkStatus(bool force = false);
     QString retrievePrivateIp();
 
     int getFreePort();
