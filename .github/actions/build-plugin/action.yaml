@@ -20,6 +20,21 @@ inputs:
     description: 'Working directory for packaging'
     required: false
     default: ${{ github.workspace }}
+  clientId:
+    description: 'Client ID for API access'
+    required: true
+  clientSecret:
+    description: 'Client secret for API access'
+    required: true
+  apiServer:
+    description: 'API server URL'
+    required: true
+  apiWsServer:
+    description: 'API WebSocket server URL'
+    required: true
+  frontendServer:
+    description: 'Frontend site URL'
+    required: true
 runs:
   using: composite
   steps:
@@ -30,11 +45,11 @@ runs:
       env:
         CODESIGN_IDENT: ${{ inputs.codesignIdent }}
         CODESIGN_TEAM: ${{ inputs.codesignTeam }}
-        API_SERVER: ${{ vars.API_SERVER }}
-        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
-        CLIENT_ID: ${{ vars.CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
+        API_SERVER: ${{ inputs.apiServer }}
+        API_WS_SERVER: ${{ inputs.apiWsServer }}
+        CLIENT_ID: ${{ inputs.clientId }}
+        CLIENT_SECRET: ${{ inputs.clientSecret }}
+        FRONTEND_SERVER: ${{ inputs.frontendServer }}
       run: |
         : Run macOS Build
 
@@ -61,11 +76,11 @@ runs:
       shell: zsh --no-rcs --errexit --pipefail {0}
       working-directory: ${{ inputs.workingDirectory }}
       env:
-        API_SERVER: ${{ vars.API_SERVER }}
-        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
-        CLIENT_ID: ${{ vars.CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
+        API_SERVER: ${{ inputs.apiServer }}
+        API_WS_SERVER: ${{ inputs.apiWsServer }}
+        CLIENT_ID: ${{ inputs.clientId }}
+        CLIENT_SECRET: ${{ inputs.clientSecret }}
+        FRONTEND_SERVER: ${{ inputs.frontendServer }}
       run: |
         : Run Ubuntu Build
 
@@ -81,11 +96,11 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       env:
-        API_SERVER: ${{ vars.API_SERVER }}
-        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
-        CLIENT_ID: ${{ vars.CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
+        API_SERVER: ${{ inputs.apiServer }}
+        API_WS_SERVER: ${{ inputs.apiWsServer }}
+        CLIENT_ID: ${{ inputs.clientId }}
+        CLIENT_SECRET: ${{ inputs.clientSecret }}
+        FRONTEND_SERVER: ${{ inputs.frontendServer }}
       run: |
         # Run Windows Build
         if ( $Env:RUNNER_DEBUG -ne $null ) {
