@@ -26,8 +26,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../utils.hpp"
 #include "ingress-link-source.hpp"
 
-#define CONNECTION_STATUS_INTERVAL_MSECS 60000
-
 #define SETTINGS_JSON_NAME "ingress-link-source.json"
 #define FILLER_IMAGE_NAME "filler.jpg"
 #define PORTS_ERROR_IMAGE_NAME "ports-error.jpg"
@@ -119,11 +117,6 @@ IngressLinkSource::IngressLinkSource(
         },
         this
     );
-
-    statusTimer = new QTimer(this);
-    statusTimer->setInterval(CONNECTION_STATUS_INTERVAL_MSECS);
-    statusTimer->start();
-    connect(statusTimer, SIGNAL(timeout()), this, SLOT(onStatusTimerTimeout()));
 
     obs_log(LOG_INFO, "%s: Source created", qUtf8Printable(name));
 }
@@ -664,16 +657,6 @@ void IngressLinkSource::updateCallback(obs_data_t *settings)
 {
     // Note: apiClient instance might live in a different thread
     emit settingsUpdate(settings);
-}
-
-// Call putDownlinkStatus() every minute when connection is available
-void IngressLinkSource::onStatusTimerTimeout()
-{
-    if (connection.isEmpty()) {
-        return;
-    }
-
-    apiClient->putDownlinkStatus(uuid);
 }
 
 //--- SourceLinkAudioThread class ---//

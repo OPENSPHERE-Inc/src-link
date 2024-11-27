@@ -200,7 +200,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
                 return;
             }
 
-            resyncOnlineResources();
+            syncOnlineResources();
             connect(
                 putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
                 [this](QNetworkReply::NetworkError) {
@@ -268,7 +268,7 @@ void SRCLinkApiClient::releasePort(const int port)
     usedPorts[port] = false;
 }
 
-void SRCLinkApiClient::resyncOnlineResources()
+void SRCLinkApiClient::syncOnlineResources()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -294,16 +294,21 @@ void SRCLinkApiClient::clearOnlineResources()
 void SRCLinkApiClient::terminate()
 {
     API_LOG("Terminating API client.");
+    uplink = QJsonObject();
     deleteUplink(true);
 }
 
 // Call putUplinkStatus() when uplinkStatus is changed
-void SRCLinkApiClient::syncUplinkStatus()
+void SRCLinkApiClient::syncUplinkStatus(bool force)
 {
+    if (uplink.isEmpty()) {
+        return;
+    }
+
     auto nextUplinkStatus = activeOutputs > 0    ? UPLINK_STATUS_ACTIVE
                             : standByOutputs > 0 ? UPLINK_STATUS_STANDBY
                                                  : UPLINK_STATUS_INACTIVE;
-    if (nextUplinkStatus != uplinkStatus) {
+    if (force || nextUplinkStatus != uplinkStatus) {
         uplinkStatus = nextUplinkStatus;
         putUplinkStatus();
     }
@@ -853,7 +858,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
                 return;
             }
 
-            resyncOnlineResources();
+            syncOnlineResources();
             connect(
                 putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
                 [this](QNetworkReply::NetworkError) {
@@ -907,11 +912,16 @@ void SRCLinkApiClient::onWebSocketReady(bool reconnect)
 
     foreach (auto sourceUuid, downlinks.keys()) {
         websocket->subscribe("downlink", {{"uuid", sourceUuid}});
+
+        if (reconnect) {
+            putDownlinkStatus(sourceUuid);
+        }
     }
 
     if (reconnect) {
         requestAccountInfo();
-        resyncOnlineResources();
+        syncOnlineResources();
+        syncUplinkStatus(true);
     }
 
     emit webSocketReady(reconnect);
