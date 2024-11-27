@@ -30,6 +30,11 @@ runs:
       env:
         CODESIGN_IDENT: ${{ inputs.codesignIdent }}
         CODESIGN_TEAM: ${{ inputs.codesignTeam }}
+        API_SERVER: ${{ vars.API_SERVER }}
+        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
+        CLIENT_ID: ${{ vars.CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
       run: |
         : Run macOS Build
 
@@ -55,6 +60,12 @@ runs:
       if: runner.os == 'Linux'
       shell: zsh --no-rcs --errexit --pipefail {0}
       working-directory: ${{ inputs.workingDirectory }}
+      env:
+        API_SERVER: ${{ vars.API_SERVER }}
+        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
+        CLIENT_ID: ${{ vars.CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
       run: |
         : Run Ubuntu Build
 
@@ -69,6 +80,12 @@ runs:
     - name: Run Windows Build
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        API_SERVER: ${{ vars.API_SERVER }}
+        API_WS_SERVER: ${{ vars.API_WS_SERVER }}
+        CLIENT_ID: ${{ vars.CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        FRONTEND_SERVER: ${{ vars.FRONTEND_SERVER }}
       run: |
         # Run Windows Build
         if ( $Env:RUNNER_DEBUG -ne $null ) {
