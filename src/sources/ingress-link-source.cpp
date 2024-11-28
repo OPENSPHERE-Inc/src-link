@@ -107,6 +107,7 @@ IngressLinkSource::IngressLinkSource(
     });
     connect(apiClient, &SRCLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
     connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
+    connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
     connect(this, SIGNAL(settingsUpdate(obs_data_t *)), this, SLOT(onSettingsUpdate(obs_data_t *)));
 
     renameSignal.Connect(
@@ -634,6 +635,10 @@ void IngressLinkSource::onStagesReady(const StageArray &stages)
 // This is called when link or refresh token succeeded
 void IngressLinkSource::onLoginSucceeded()
 {
+    if (!connection.isEmpty()) {
+        return;
+    }
+
     // Re-put connection
     putConnection();
 }

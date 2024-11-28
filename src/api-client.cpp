@@ -846,28 +846,32 @@ void SRCLinkApiClient::onO2LinkedChanged()
     API_LOG("The API client link has been changed.");
 }
 
-// This is called when link or refresh token succeeded
+// This is called when link, unlink or refresh token succeeded
 void SRCLinkApiClient::onO2LinkingSucceeded()
 {
     if (client->linked()) {
         CHECK_CLIENT_TOKEN();
         API_LOG("The API client has linked up.");
 
-        connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-            if (error != QNetworkReply::NoError) {
-                return;
-            }
-
-            syncOnlineResources();
-            connect(
-                putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
-                [this](QNetworkReply::NetworkError) {
-                    // WebSocket will be started even if uplink upload failed.
-                    websocket->start();
+        if (accountInfo.isEmpty()) {
+            // Called only the first time after logging in
+            connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
+                if (error != QNetworkReply::NoError) {
+                    return;
                 }
-            );
-        });
 
+                syncOnlineResources();
+                connect(
+                    putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
+                    [this](QNetworkReply::NetworkError) {
+                        // WebSocket will be started even if uplink upload failed.
+                        websocket->start();
+                    }
+                );
+            });
+        }
+
+        // This signal needs to be emit.
         emit loginSucceeded();
 
     } else {
