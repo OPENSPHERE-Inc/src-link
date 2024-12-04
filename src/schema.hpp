@@ -897,6 +897,8 @@ public:
     inline void setConnectionAdvices(const ConnectionAdvices &value) { insert("connection_advices", value); }
     inline QString getLanServer() const { return value("lan_server").toString(); }
     inline void setLanServer(const QString &value) { insert("lan_server", value); }
+    inline int getLatency() const { return value("latency").toInt(); }
+    inline void setLatency(int value) { insert("latency", value); }
 
     inline bool isValid() const
     {
@@ -920,11 +922,12 @@ public:
         auto validAllocationId = maybe((*this)["allocation_id"], (*this)["allocation_id"].isString());
         auto vlaidConnectionAdvices = maybe((*this)["connection_advices"], getConnectionAdvices().isValid());
         auto validLanServer = maybe((*this)["lan_server"], (*this)["lan_server"].isString());
+        auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
-                     validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer;
+                     validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer && validLatency;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -932,10 +935,10 @@ public:
             "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
             "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
             "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
-            "allocation_id=%d, connection_advices=%d, lan_server=%d",
+            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
-            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer
+            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer, validLatency
         );
 #endif
 
@@ -970,6 +973,8 @@ public:
     inline void setDisabled(bool value) { insert("disabled", value); }
     inline bool getLan() const { return value("lan").toBool(); }
     inline void setLan(bool value) { insert("lan", value); }
+    inline int getLatency() const { return value("latency").toInt(); }
+    inline void setLatency(int value) { insert("latency", value); }
 
     inline bool isValid() const
     {
@@ -983,17 +988,18 @@ public:
         auto validAccountId = (*this)["account_id"].isString();
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
         auto validLan = maybe((*this)["lan"], (*this)["lan"].isBool());
+        auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validSeatName && validMemberId &&
-                     validParticipantId && validAccountId && validDisabled && validLan;
+                     validParticipantId && validAccountId && validDisabled && validLan && validLatency;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "StageSeatAllocation: id=%d, party_id=%d, party_event_id=%d, stage_id=%d, seat_name=%d, "
-            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d, lan=%d",
+            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d, lan=%d, latency=%d",
             validId, validPartyId, validPartyEventId, validStageId, validSeatName, validMemberId, validParticipantId,
-            validAccountId, validDisabled, validLan
+            validAccountId, validDisabled, validLan, validLatency
         );
 #endif
 
