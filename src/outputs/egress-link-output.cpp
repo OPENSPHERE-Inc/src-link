@@ -20,6 +20,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-frontend-api.h>
 #include <util/config-file.h>
 
+#include <QUrlQuery>
+
 #include "egress-link-output.hpp"
 #include "audio-source.hpp"
 
@@ -449,16 +451,6 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
     obs_data_apply(egressSettings, settings);
 
     if (_connection.getProtocol() == "srt") {
-        QString server;
-        if (_connection.getRelay()) {
-            // FIXME: Currently encryption not supported !
-            server = QString("srt://%1:%2?mode=caller&%3"
-                             "streamid=publish/%4/%5");
-        } else {
-            server = QString("srt://%1:%2?mode=caller&%3"
-                             "streamid=%4&passphrase=%5");
-        }
-
         auto address = _connection.getServer();
         auto uplink = apiClient->getUplink();
         if (address == uplink.getPublicAddress() || uplink.getAllocation().getLan()) {
@@ -466,14 +458,37 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
             address = _connection.getLanServer();
         }
 
-        server = server.arg(address)
-                     .arg(_connection.getPort())
-                     .arg(_connection.getParameters() + (_connection.getParameters().isEmpty() ? "" : "&"))
-                     .arg(_connection.getStreamId())
-                     .arg(_connection.getPassphrase());
+        QUrl server;
+        server.setScheme("srt");
+        server.setHost(address);
+        server.setPort(_connection.getPort());
 
-        obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server));
-        obs_data_set_string(egressSettings, "server", qUtf8Printable(server));
+        QUrlQuery parameters(_connection.getParameters());
+
+        if (_connection.getLatency()) {
+            // Override latency with participant's settings
+            parameters.removeQueryItem("latency");
+            parameters.addQueryItem(
+                "latency", QString::number(_connection.getLatency() * 1000)
+            ); // Convert to microseconds
+        }
+
+        if (_connection.getRelay()) {
+            // FIXME: Currently encryption not supported !
+            parameters.addQueryItem("mode", "caller");
+            parameters.addQueryItem(
+                "streamid", QString("publish/%1/%2").arg(_connection.getStreamId()).arg(_connection.getPassphrase())
+            );
+        } else {
+            parameters.addQueryItem("mode", "caller");
+            parameters.addQueryItem("streamid", _connection.getStreamId());
+            parameters.addQueryItem("passphrase", _connection.getPassphrase());
+        }
+
+        server.setQuery(parameters);
+
+        obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server.toString()));
+        obs_data_set_string(egressSettings, "server", qUtf8Printable(server.toString()));
     } else {
         return nullptr;
     }

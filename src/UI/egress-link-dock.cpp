@@ -139,6 +139,7 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
         ui->participantComboBox->clear();
 
         // Display stage's names instead of party event
+        ui->participantComboBox->addItem("", ""); // No selection
         foreach (const auto &participant, participants.values()) {
             ui->participantComboBox->addItem(participant.getStageView().getName(), participant.getId());
         }
