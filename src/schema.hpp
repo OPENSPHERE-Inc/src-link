@@ -500,6 +500,8 @@ public:
     inline void setSrtrelayServers(const SrtrelayServerArray &value) { insert("srtrelay_servers", value); }
     inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
 
     inline bool isValid() const
     {
@@ -521,17 +523,18 @@ public:
                 getSrtrelayServers().every([](const SrtrelayServer &value) { return value.isValid(); })
         );
         auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validName && validDescription && validPictureId && validSources && validSeats &&
-                     validSrtrelayServers && validOwnerAccountView;
+                     validSrtrelayServers && validOwnerAccountView && validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, srtrelay_servers=%d, "
-            "owner_account_view=%d",
+            "owner_account_view=%d, owner_user_id=%d",
             validId, validName, validDescription, validPictureId, validSources, validSeats, validSrtrelayServers,
-            validOwnerAccountView
+            validOwnerAccountView, validOwnerUserId
         );
 #endif
 
@@ -587,9 +590,10 @@ public:
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
     inline int getCapacity() const { return value("capacity").toInt(); }
     inline void setCapacity(int value) { insert("capacity", value); }
-
     inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
 
     inline bool isValid() const
     {
@@ -599,15 +603,17 @@ public:
         auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
         auto validCapacity = maybe((*this)["capacity"], (*this)["capacity"].isDouble());
         auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validName && validDescription && validPictureId && validCapacity &&
-                     validOwnerAccountView;
+                     validOwnerAccountView && validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "Party: _id=%d, name=%d, description=%d, picture_id=%d, capacity=%d, owner_account_view=%d", validId,
-            validName, validDescription, validPictureId, validCapacity, validOwnerAccountView
+            "Party: _id=%d, name=%d, description=%d, picture_id=%d, capacity=%d, owner_account_view=%d, "
+            "owner_user_id=%d",
+            validId, validName, validDescription, validPictureId, validCapacity, validOwnerAccountView, validOwnerUserId
         );
 #endif
 
@@ -668,13 +674,14 @@ public:
     inline void setStatusChangedAt(const QDateTime &value) { insert("status_changed_at", value.toString(Qt::ISODate)); }
     inline int getCapacity() const { return value("capacity").toInt(); }
     inline void setCapacity(int value) { insert("capacity", value); }
-
     inline PartyView getPartyView() const { return value("party_view").toObject(); }
     inline void setPartyView(const PartyView &value) { insert("party_view", value); }
     inline StageView getStageView() const { return value("stage_view").toObject(); }
     inline void setStageView(const StageView &value) { insert("stage_view", value); }
     inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
 
     inline bool isValid() const
     {
@@ -690,19 +697,20 @@ public:
         auto validPartyView = getPartyView().isValid();
         auto validStageView = getStageView().isValid();
         auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validName && validDescription && validStartTime && validEndTime && validPictureId &&
                      validStatus && validStatusChangedAt && validCapacity && validPartyView && validStageView &&
-                     validOwnerAccountView;
+                     validOwnerAccountView && validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "PartyEvent: _id=%d, name=%d, description=%d, start_time=%d, end_time=%d, picture_id=%d, "
             "status=%d, status_changed_at=%d, capacity=%d, party_view=%d, stage_view=%d, "
-            "owner_account_view=%d",
+            "owner_account_view=%d, owner_user_id=%d",
             validId, validName, validDescription, validStartTime, validEndTime, validPictureId, validStatus,
-            validStatusChangedAt, validCapacity, validPartyView, validStageView, validOwnerAccountView
+            validStatusChangedAt, validCapacity, validPartyView, validStageView, validOwnerAccountView, validOwnerUserId
         );
 #endif
 
@@ -776,7 +784,6 @@ public:
     inline void setDisabled(bool value) { insert("disabled", value); }
     inline bool getLan() const { return value("lan").toBool(); }
     inline void setLan(bool value) { insert("lan", value); }
-
     inline PartyView getPartyView() const { return value("party_view").toObject(); }
     inline void setPartyView(const PartyView &value) { insert("party_view", value); }
     inline PartyEventView getPartyEventView() const { return value("party_event_view").toObject(); }
@@ -789,6 +796,10 @@ public:
     inline void setStageSeatView(const StageSeatView &value) { insert("stage_seat_view", value); }
     inline bool getByol() const { return value("byol").toBool(); }
     inline void setByol(bool value) { insert("byol", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
+    inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
 
     inline bool isValid() const
     {
@@ -807,20 +818,23 @@ public:
         auto validPartyEventView = getPartyEventView().isValid();
         auto validAccountView = maybe((*this)["account_view"], getAccountView().isValid());
         auto validStageSeatView = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validMemberId && validAccountId &&
                      validSeatName && validDisabled && validLan && validByol && validStageView && validPartyView &&
-                     validPartyEventView && validAccountView && validStageSeatView;
+                     validPartyEventView && validAccountView && validStageSeatView && validOwnerUserId &&
+                     validOwnerAccountView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "PartyEventParticipant: _d=%d, party_id=%d, party_event_id=%d, stage_id=%d, member_id=%d, "
             "account_id=%d, seat_name=%d, disabled=%d, lan=%d, byol=%d, stage_view=%d, party_view=%d, "
-            "party_event_view=%d, account_view=%d, stage_seat_view=%d",
+            "party_event_view=%d, account_view=%d, stage_seat_view=%d, owner_user_id=%d, owner_account_view=%d",
             validId, validPartyId, validPartyEventId, validStageId, validMemberId, validAccountId, validSeatName,
             validDisabled, validLan, validByol, validStageView, validPartyView, validPartyEventView, validAccountView,
-            validStageSeatView
+            validStageSeatView, validOwnerUserId, validOwnerAccountView
         );
 #endif
 
@@ -899,6 +913,8 @@ public:
     inline void setLanServer(const QString &value) { insert("lan_server", value); }
     inline int getLatency() const { return value("latency").toInt(); }
     inline void setLatency(int value) { insert("latency", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
 
     inline bool isValid() const
     {
@@ -923,11 +939,13 @@ public:
         auto vlaidConnectionAdvices = maybe((*this)["connection_advices"], getConnectionAdvices().isValid());
         auto validLanServer = maybe((*this)["lan_server"], (*this)["lan_server"].isString());
         auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
-                     validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer && validLatency;
+                     validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer && validLatency &&
+                     validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -935,10 +953,11 @@ public:
             "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
             "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
             "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
-            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d",
+            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d, owner_user_id=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
-            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer, validLatency
+            validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer, validLatency,
+            validOwnerUserId
         );
 #endif
 
@@ -975,6 +994,8 @@ public:
     inline void setLan(bool value) { insert("lan", value); }
     inline int getLatency() const { return value("latency").toInt(); }
     inline void setLatency(int value) { insert("latency", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
 
     inline bool isValid() const
     {
@@ -989,17 +1010,19 @@ public:
         auto validDisabled = maybe((*this)["disabled"], (*this)["disabled"].isBool());
         auto validLan = maybe((*this)["lan"], (*this)["lan"].isBool());
         auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validSeatName && validMemberId &&
-                     validParticipantId && validAccountId && validDisabled && validLan && validLatency;
+                     validParticipantId && validAccountId && validDisabled && validLan && validLatency &&
+                     validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "StageSeatAllocation: id=%d, party_id=%d, party_event_id=%d, stage_id=%d, seat_name=%d, "
-            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d, lan=%d, latency=%d",
+            "member_id=%d, participant_id=%d, account_id=%d, disabled=%d, lan=%d, latency=%d, owner_user_id=%d",
             validId, validPartyId, validPartyEventId, validStageId, validSeatName, validMemberId, validParticipantId,
-            validAccountId, validDisabled, validLan, validLatency
+            validAccountId, validDisabled, validLan, validLatency, validOwnerUserId
         );
 #endif
 

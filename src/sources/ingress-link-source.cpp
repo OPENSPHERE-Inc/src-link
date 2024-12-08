@@ -334,7 +334,15 @@ obs_properties_t *IngressLinkSource::getProperties()
     );
     obs_property_list_add_string(stageList, "", "");
     foreach (auto &stage, apiClient->getStages().values()) {
-        obs_property_list_add_string(stageList, qUtf8Printable(stage.getName()), qUtf8Printable(stage.getId()));
+        obs_property_list_add_string(
+            stageList,
+            stage.getOwnerUserId() == apiClient->getAccountInfo().getAccount().getId()
+                ? qUtf8Printable(stage.getName())
+                : qUtf8Printable(
+                      QString("%1 (%2)").arg(stage.getName()).arg(stage.getOwnerAccountView().getDisplayName())
+                  ),
+            qUtf8Printable(stage.getId())
+        );
     }
 
     // Connection group -> Seat list

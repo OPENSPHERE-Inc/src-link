@@ -142,7 +142,12 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
         if (participants.size()) {
             ui->participantComboBox->addItem("", ""); // No selection
             foreach (const auto &participant, participants.values()) {
-                ui->participantComboBox->addItem(participant.getStageView().getName(), participant.getId());
+                ui->participantComboBox->addItem(
+                    QString("%1 (%2)")
+                        .arg(participant.getStageView().getName())
+                        .arg(participant.getOwnerAccountView().getDisplayName()),
+                    participant.getId()
+                );
             }
         }
 

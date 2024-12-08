@@ -29,7 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_RETRY_DELAY_SECS 1
 #define OUTPUT_JSON_NAME "output.json"
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
-#define OUTPUT_RETRY_TIMEOUT_MSECS 3000
+#define OUTPUT_RETRY_TIMEOUT_MSECS 3500
 #define OUTPUT_SCREENSHOT_HEIGHT 720
 
 inline audio_t *createSilenceAudio()
