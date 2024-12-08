@@ -56,7 +56,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #ifndef FRONTEND_SERVER
 #define FRONTEND_SERVER "http://localhost:3001"
 #endif
-#define AUTHORIZE_URL (API_SERVER "/oauth2/authorize")
 #define TOKEN_URL (API_SERVER "/oauth2/token")
 #define ACCOUNT_INFO_URL (API_SERVER "/api/v1/accounts/me")
 #define PARTIES_URL (API_SERVER "/api/v1/parties/my")
@@ -71,6 +70,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
 // Control Panel Pages
+#define AUTHORIZE_URL (FRONTEND_SERVER "/oauth2/authorize")
 #define STAGES_PAGE_URL (FRONTEND_SERVER "/receivers")
 #define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/")
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")

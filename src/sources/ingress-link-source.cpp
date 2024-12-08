@@ -246,29 +246,38 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
     auto decoderSettings = obs_data_create();
 
     if (!connection.getAllocationId().isEmpty() && connection.getProtocol() == "srt") {
-        QString input;
+        QUrl input;
+        input.setScheme("srt");
+        input.setHost("0.0.0.0");
+        input.setPort(connection.getPort());
+
+        QUrlQuery parameters(connection.getParameters());
+
+        if (connection.getLatency()) {
+            // Override latency with participant's settings
+            parameters.removeQueryItem("latency");
+            parameters.addQueryItem(
+                "latency", QString::number(connection.getLatency() * 1000)
+            ); // Convert to microseconds
+        }
 
         if (connection.getRelay()) {
             // FIXME: Currently encryption not supported !
-            input = QString("srt://%1:%2?mode=caller&%3"
-                            "streamid=play/%4/%5")
-                        .arg(connection.getServer())
-                        .arg(connection.getPort())
-                        .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
-                        .arg(connection.getStreamId())
-                        .arg(connection.getPassphrase());
-
+            parameters.addQueryItem("mode", "caller");
+            parameters.addQueryItem(
+                "streamid", QString("play/%1/%2").arg(connection.getStreamId()).arg(connection.getPassphrase())
+            );
+            input.setHost(connection.getServer());
         } else {
-            input = QString("srt://0.0.0.0:%1?mode=listener&%2"
-                            "streamid=%3&passphrase=%4")
-                        .arg(connection.getPort())
-                        .arg(connection.getParameters() + (connection.getParameters().isEmpty() ? "" : "&"))
-                        .arg(connection.getStreamId())
-                        .arg(connection.getPassphrase());
+            parameters.addQueryItem("mode", "listener");
+            parameters.addQueryItem("streamid", connection.getStreamId());
+            parameters.addQueryItem("passphrase", connection.getPassphrase());
         }
 
-        obs_data_set_string(decoderSettings, "input", qUtf8Printable(input));
-        obs_log(LOG_DEBUG, "%s: SRT input is %s", qUtf8Printable(name), qUtf8Printable(input));
+        input.setQuery(parameters);
+
+        obs_data_set_string(decoderSettings, "input", qUtf8Printable(input.toString()));
+        obs_log(LOG_DEBUG, "%s: SRT input is %s", qUtf8Printable(name), qUtf8Printable(input.toString()));
 
     } else {
         obs_data_set_string(decoderSettings, "input", "");
@@ -325,7 +334,15 @@ obs_properties_t *IngressLinkSource::getProperties()
     );
     obs_property_list_add_string(stageList, "", "");
     foreach (auto &stage, apiClient->getStages().values()) {
-        obs_property_list_add_string(stageList, qUtf8Printable(stage.getName()), qUtf8Printable(stage.getId()));
+        obs_property_list_add_string(
+            stageList,
+            stage.getOwnerUserId() == apiClient->getAccountInfo().getAccount().getId()
+                ? qUtf8Printable(stage.getName())
+                : qUtf8Printable(
+                      QString("%1 (%2)").arg(stage.getName()).arg(stage.getOwnerAccountView().getDisplayName())
+                  ),
+            qUtf8Printable(stage.getId())
+        );
     }
 
     // Connection group -> Seat list

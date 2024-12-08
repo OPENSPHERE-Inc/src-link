@@ -53,6 +53,10 @@ OutputAudioSource::~OutputAudioSource()
 
 uint64_t OutputAudioSource::popAudio(uint64_t startTsIn, uint32_t mixers, audio_output_data *audioData)
 {
+    if (!active) {
+        return startTsIn;
+    }
+
     QMutexLocker locker(&audioBufferMutex);
     {
         if (audioBufferFrames < AUDIO_OUTPUT_FRAMES) {
