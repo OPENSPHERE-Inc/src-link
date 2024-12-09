@@ -106,6 +106,7 @@ void EgressLinkDock::setClientActive(bool active)
         ui->accountNameLabel->setText(QTStr("NotLoggedInYet"));
         ui->uplinkWidget->setVisible(false);
         ui->signupWidget->setVisible(true);
+        ui->participantComboBox->clear();
         clearConnections();
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
