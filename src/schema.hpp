@@ -1056,7 +1056,7 @@ public:
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: allocation=%d, stage=%d, connections=%d, public_address",
+            valid ? LOG_DEBUG : LOG_ERROR, "UplinkInfo: allocation=%d, stage=%d, connections=%d, public_address=%d",
             validAllocation, validStage, validConnections, validPublicAddress
         );
 #endif

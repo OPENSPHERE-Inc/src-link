@@ -140,7 +140,7 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
 
         // Display stage's names instead of party event
         if (participants.size()) {
-            ui->participantComboBox->addItem("", ""); // No selection
+            ui->participantComboBox->addItem("", PARTICIPANT_SEELCTION_NONE); // No selection (id == "none")
             foreach (const auto &participant, participants.values()) {
                 ui->participantComboBox->addItem(
                     participant.getOwnerAccountView().isEmpty()
@@ -185,16 +185,16 @@ void EgressLinkDock::onActiveParticipantChanged(int)
         return _participant.getId() == participantId;
     });
 
+    // Apply default picture first
+    ui->participantPictureLabel->setProperty("pictureId", "");
+    ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
+
     if (!participant.isEmpty()) {
         auto stage = participant.getStageView();
         if (!stage.getPictureId().isEmpty()) {
-            // Apply stage picture
+            // Override with stage picture
             ui->participantPictureLabel->setProperty("pictureId", stage.getPictureId());
             apiClient->getPicture(stage.getPictureId());
-        } else {
-            // Apply default picture
-            ui->participantPictureLabel->setProperty("pictureId", "");
-            ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
         }
     }
 

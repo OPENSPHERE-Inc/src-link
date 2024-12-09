@@ -671,11 +671,15 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject body;
-    body["participant_id"] = settings->getParticipantId();
+    auto participantId = settings->getParticipantId();
+    body["participant_id"] = participantId != PARTICIPANT_SEELCTION_NONE ? participantId : "";
     body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
 
-    API_LOG("Putting uplink of %s (force=%s)", qUtf8Printable(uuid), qUtf8Printable(body["force"].toString()));
+    API_LOG(
+        "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),
+        qUtf8Printable(body["participant_id"].toString()), qUtf8Printable(body["force"].toString())
+    );
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
         if (error != QNetworkReply::NoError) {
