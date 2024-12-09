@@ -63,7 +63,8 @@ type = "http"
 [auth.http]
 # Streams are authenticated using HTTP POST calls against this URL
 # Should be compatible to nginx-rtmp on_publish/on_subscribe directives
-url = "https://api.src-link.live/srtrelay/v1/auth"
+# for SRC-Link auth server: Please replace "xxxxxx" to actual account ID. See receiver edit page.
+url = "https://api.src-link.live/srtrelay/v1/auth/xxxxxx"
 
 # auth timeout duration
 #timeout = "1s"
