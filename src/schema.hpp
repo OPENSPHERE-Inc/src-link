@@ -819,7 +819,7 @@ public:
         auto validAccountView = maybe((*this)["account_view"], getAccountView().isValid());
         auto validStageSeatView = maybe((*this)["stage_seat_view"], getStageSeatView().isValid());
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
-        auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerAccountView = maybe((*this)["owner_account_view"], getOwnerAccountView().isValid());
 
         auto valid = validId && validPartyId && validPartyEventId && validStageId && validMemberId && validAccountId &&
                      validSeatName && validDisabled && validLan && validByol && validStageView && validPartyView &&
