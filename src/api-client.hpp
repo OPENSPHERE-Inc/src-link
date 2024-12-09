@@ -35,6 +35,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_ACTIVE "active"
 #define UPLINK_STATUS_STANDBY "standby"
 
+#define PARTICIPANT_SEELCTION_NONE "none"
+
 class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
