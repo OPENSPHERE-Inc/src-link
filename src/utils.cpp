@@ -1,4 +1,3 @@
-
 /*
 SRC-Link
 Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
