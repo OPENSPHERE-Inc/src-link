@@ -38,8 +38,8 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     setSource(_source);
 
     setThemeID(ui->settingsButton, "cogsIcon", "icon-cogs");
-    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);  // Until OBS 30
-    ui->visibilityCheckBox->setProperty("class", "indicator-visibility");  // Since OBS 31
+    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);      // Until OBS 30
+    ui->visibilityCheckBox->setProperty("class", "indicator-visibility"); // Since OBS 31
     ui->visibilityCheckBox->setChecked(output->getVisible());
 
     onOutputStatusChanged(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
