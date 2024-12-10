@@ -37,8 +37,9 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     // Must be called after output and outputDialog initialization
     setSource(_source);
 
-    ui->settingsButton->setProperty("themeID", "cogsIcon");
-    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);
+    setThemeID(ui->settingsButton, "cogsIcon", "icon-cogs");
+    ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);  // Until OBS 30
+    ui->visibilityCheckBox->setProperty("class", "indicator-visibility");  // Since OBS 31
     ui->visibilityCheckBox->setChecked(output->getVisible());
 
     onOutputStatusChanged(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
@@ -116,23 +117,23 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     switch (status) {
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
         ui->statusValueLabel->setText(QTStr("Active"));
-        setThemeID(ui->statusValueLabel, "good");
+        setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_STAND_BY:
         ui->statusValueLabel->setText(QTStr("StandBy"));
-        setThemeID(ui->statusValueLabel, "good");
+        setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(QTStr("Error"));
-        setThemeID(ui->statusValueLabel, "error");
+        setThemeID(ui->statusValueLabel, "error", "text-danger");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
         ui->statusValueLabel->setText(QTStr("Inactive"));
-        setThemeID(ui->statusValueLabel, "");
+        setThemeID(ui->statusValueLabel, "", "");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_DISABLED:
         ui->statusValueLabel->setText(QTStr("Disabled"));
-        setThemeID(ui->statusValueLabel, "");
+        setThemeID(ui->statusValueLabel, "", "");
         break;
     }
 }

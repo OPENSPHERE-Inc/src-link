@@ -317,11 +317,23 @@ void SetComboItemEnabled(QComboBox *c, int idx, bool enabled)
 			       : Qt::NoItemFlags);
 }
 
-void setThemeID(QWidget *widget, const QString &themeID)
+// themeID: until OBS 30
+// themeClasses: since OBS 31
+void setThemeID(QWidget *widget, const QString &themeID, const QString &themeClasses)
 {
+	auto changed = false;
+
 	if (widget->property("themeID").toString() != themeID) {
 		widget->setProperty("themeID", themeID);
+		changed = true;
+	}
 
+	if (widget->property("class").toString() != themeClasses) {
+		widget->setProperty("class", themeClasses);
+		changed = true;
+	}
+
+	if (changed) {
 		/* force style sheet recalculation */
 		QString qss = widget->styleSheet();
 		widget->setStyleSheet("/* */");
