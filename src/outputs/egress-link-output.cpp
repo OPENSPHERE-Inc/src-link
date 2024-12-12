@@ -55,32 +55,6 @@ inline audio_t *createSilenceAudio()
     return audio;
 }
 
-inline bool isSourceAvailable(obs_source_t *source)
-{
-    auto width = obs_source_get_width(source);
-    auto height = obs_source_get_height(source);
-    if (width == 0 || height == 0) {
-        return false;
-    }
-
-    auto found = !!obs_scene_from_source(source);
-    if (found) {
-        return true;
-    }
-
-    obs_frontend_source_list scenes = {0};
-    obs_frontend_get_scenes(&scenes);
-
-    for (size_t i = 0; i < scenes.sources.num && !found; i++) {
-        obs_scene_t *scene = obs_scene_from_source(scenes.sources.array[i]);
-        found = !!obs_scene_find_source_recursive(scene, obs_source_get_name(source));
-    }
-
-    obs_frontend_source_list_free(&scenes);
-
-    return found;
-}
-
 //--- EgressLinkOutput class ---//
 
 EgressLinkOutput::EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiClient)
@@ -139,8 +113,14 @@ void EgressLinkOutput::onOBSFrontendEvent(enum obs_frontend_event event, void *p
 {
     auto output = (EgressLinkOutput *)param;
     // Force stop on shutdown
-    if (event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN) {
+    switch (event) {
+    case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:
+    case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
         output->stop();
+        break;
+    default:
+        // Nothing to do
+        break;
     }
 }
 
@@ -525,7 +505,7 @@ void EgressLinkOutput::start()
         if (activeSourceUuid != "program") {
             // Get reference for specific source
             source = obs_get_source_by_uuid(qUtf8Printable(activeSourceUuid));
-            if (!source) {
+            if (!source || !isSourceAvailable(source)) {
                 obs_log(LOG_ERROR, "%s: Source not found: %s", qUtf8Printable(name), qUtf8Printable(activeSourceUuid));
                 setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
