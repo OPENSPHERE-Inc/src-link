@@ -126,6 +126,8 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     case EGRESS_LINK_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(QTStr("Error"));
         setThemeID(ui->statusValueLabel, "error", "text-danger");
+        // Try to remove error sources from combo
+        updateSourceList();
         break;
     case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
         ui->statusValueLabel->setText(QTStr("Inactive"));
@@ -154,7 +156,8 @@ void EgressLinkConnectionWidget::updateSourceList()
                 auto type = obs_source_get_type(_source);
                 auto flags = obs_source_get_output_flags(_source);
 
-                if (flags & OBS_SOURCE_VIDEO && (type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE)) {
+                if (flags & OBS_SOURCE_VIDEO && (type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE) &&
+                    isSourceAvailable(_source)) {
                     widget->ui->videoSourceComboBox->addItem(obs_source_get_name(_source), obs_source_get_uuid(_source));
                 }
                 return true;

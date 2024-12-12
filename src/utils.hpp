@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs.hpp>
+#include <obs-frontend-api.h>
 #include <util/threading.h>
 
 #include <QString>
@@ -186,4 +187,51 @@ inline QList<QString> getPrivateIPv4Addresses()
     }
 
     return privateAddresses;
+}
+
+// Decide source/scene is private or not
+inline bool sourceIsPrivate(obs_source_t *source)
+{
+    auto finder = source;
+    auto callback = [](void *param, obs_source_t *_source) {
+        auto _finder = (obs_source_t **)param;
+        if (_source == *_finder) {
+            *_finder = nullptr;
+            return false;
+        }
+        return true;
+    };
+
+    obs_enum_scenes(callback, &finder);
+    if (finder != nullptr) {
+        obs_enum_sources(callback, &finder);
+    }
+
+    return finder != nullptr;
+}
+
+inline bool isSourceAvailable(obs_source_t *source)
+{
+    auto width = obs_source_get_width(source);
+    auto height = obs_source_get_height(source);
+    if (width == 0 || height == 0) {
+        return false;
+    }
+
+    auto found = !!obs_scene_from_source(source);
+    if (found) {
+        return true;
+    }
+
+    obs_frontend_source_list scenes = {0};
+    obs_frontend_get_scenes(&scenes);
+
+    for (size_t i = 0; i < scenes.sources.num && !found; i++) {
+        obs_scene_t *scene = obs_scene_from_source(scenes.sources.array[i]);
+        found = !!obs_scene_find_source_recursive(scene, obs_source_get_name(source));
+    }
+
+    obs_frontend_source_list_free(&scenes);
+
+    return found;
 }
