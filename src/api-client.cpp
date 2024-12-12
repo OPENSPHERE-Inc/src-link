@@ -93,6 +93,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define API_LOG(...)
 #endif
 #define ERROR_LOG(...) obs_log(LOG_ERROR, "client: " __VA_ARGS__)
+#define WARNING_LOG(...) obs_log(LOG_WARNING, "client: " __VA_ARGS__)
 
 #define CHECK_CLIENT_TOKEN(...)                    \
     {                                              \
@@ -121,7 +122,8 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
       client(nullptr),
       activeOutputs(0),
       standByOutputs(0),
-      uplinkStatus(UPLINK_STATUS_INACTIVE)
+      uplinkStatus(UPLINK_STATUS_INACTIVE),
+      terminating(false)
 {
     API_LOG("SRCLinkApiClient creating with %s,%s,%s", API_SERVER, API_WS_SERVER, FRONTEND_SERVER);
 
@@ -294,6 +296,7 @@ void SRCLinkApiClient::clearOnlineResources()
 void SRCLinkApiClient::terminate()
 {
     API_LOG("Terminating API client.");
+    terminating = true;
     uplink = QJsonObject();
     deleteUplink(true);
 }
@@ -487,6 +490,10 @@ const RequestInvoker *SRCLinkApiClient::requestUplink()
     API_LOG("Requesting uplink for %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (terminating) {
+            WARNING_LOG("Ignore the response during terminating");
+            return;
+        }
         if (error != QNetworkReply::NoError) {
             ERROR_LOG("Requesting uplink for %s failed: %d", qUtf8Printable(uuid), error);
             emit uplinkFailed(uuid);
@@ -682,6 +689,10 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     );
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (terminating) {
+            WARNING_LOG("Ignore the response during terminating");
+            return;
+        }
         if (error != QNetworkReply::NoError) {
             ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
             emit putUplinkFailed(uuid);
@@ -724,6 +735,10 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
     API_LOG("Putting uplink status of %s", qUtf8Printable(uuid));
     auto invoker = new RequestInvoker(sequencer, this);
     connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (terminating) {
+            WARNING_LOG("Ignore the response during terminating");
+            return;
+        }
         if (error != QNetworkReply::NoError) {
             ERROR_LOG("Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
             emit putUplinkStatusFailed(uuid);
