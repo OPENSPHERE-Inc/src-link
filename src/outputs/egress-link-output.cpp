@@ -301,6 +301,10 @@ obs_properties_t *EgressLinkOutput::getProperties()
             auto _videoEncoderGroup = obs_property_group_content(obs_properties_get(_props, "video_encoder_group"));
             auto _encoderId = obs_data_get_string(_settings, "video_encoder");
 
+            // Apply encoder's defaults
+            OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(_encoderId);
+            applyDefaults(_settings, encoderDefaults);
+
             obs_properties_remove_by_name(_videoEncoderGroup, "video_encoder_settings_group");
 
             auto encoderProps = obs_get_encoder_properties(_encoderId);
@@ -311,9 +315,7 @@ obs_properties_t *EgressLinkOutput::getProperties()
                 );
             }
 
-            // Apply encoder's defaults
-            OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(_encoderId);
-            applyDefaults(_settings, encoderDefaults);
+            obs_properties_apply_settings(_videoEncoderGroup, _settings);
 
             obs_log(LOG_DEBUG, "%s: Video encoder changed", qUtf8Printable(_output->getName()));
             return true;
