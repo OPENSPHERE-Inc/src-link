@@ -52,6 +52,7 @@ class SRCLinkApiClient : public QObject {
     int standByOutputs;
     SRCLinkWebSocketClient *websocket;
     QString uplinkStatus;
+    bool terminating;
 
     // Online rsources
     AccountInfo accountInfo;
