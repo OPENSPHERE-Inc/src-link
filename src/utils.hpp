@@ -120,7 +120,7 @@ inline bool encoderAvailable(const char *encoder)
     return false;
 }
 
-// Hardcoded in obs-studio/UI/window-basic-settings.cpp
+// Hardcoded in obs-studio/UI/window-basic-main-outputs.cpp
 inline const char *getSimpleVideoEncoder(const char *encoder)
 {
     if (!strcmp(encoder, SIMPLE_ENCODER_X264)) {
@@ -138,11 +138,16 @@ inline const char *getSimpleVideoEncoder(const char *encoder)
     } else if (!strcmp(encoder, SIMPLE_ENCODER_AMD_AV1)) {
         return "av1_texture_amf";
     } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC)) {
-        return encoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
+        return encoderAvailable("obs_nvenc_h264_tex") ? "obs_nvenc_h264_tex" // Since OBS 31
+               : encoderAvailable("jim_nvenc")        ? "jim_nvenc"          // Until OBS 30
+                                                      : "ffmpeg_nvenc";
     } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC)) {
-        return encoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
+        return encoderAvailable("obs_nvenc_hevc_tex") ? "obs_nvenc_hevc_tex" // Since OBS 31
+               : encoderAvailable("jim_hevc_nvenc")   ? "jim_hevc_nvenc"     // Until OBS 30
+                                                      : "ffmpeg_hevc_nvenc";
     } else if (!strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1)) {
-        return "jim_av1_nvenc";
+        return encoderAvailable("obs_nvenc_av1_tex") ? "obs_nvenc_av1_tex" // Since OBS 31
+                                                     : "jim_av1_nvenc";    // Until OBS 30
     } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_H264)) {
         return "com.apple.videotoolbox.videoencoder.ave.avc";
     } else if (!strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC)) {

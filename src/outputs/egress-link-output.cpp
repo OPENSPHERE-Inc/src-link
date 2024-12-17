@@ -333,7 +333,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
 
     auto config = obs_frontend_get_profile_config();
     auto mode = config_get_string(config, "Output", "Mode");
-    bool advanced_out = strcmp(mode, "Advanced") == 0 || strcmp(mode, "advanced");
+    bool advanced_out = !strcmp(mode, "Advanced") || !strcmp(mode, "advanced");
 
     const char *videoEncoderId;
     uint64_t videoBitrate;
