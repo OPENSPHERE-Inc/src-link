@@ -137,8 +137,13 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     OPTIONAL)
 elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
   install(
-    FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/Qt6WebSockets.framework"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
     CONFIGURATIONS RelWithDebInfo Debug Release
     DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
+    OPTIONAL)
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION .
     OPTIONAL)
 endif()
