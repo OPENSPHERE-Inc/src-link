@@ -144,6 +144,6 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION .
+    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
     OPTIONAL)
 endif()
