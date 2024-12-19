@@ -313,9 +313,10 @@ obs_properties_t *EgressLinkOutput::getProperties()
                     _videoEncoderGroup, "video_encoder_settings_group", obs_encoder_get_display_name(_encoderId),
                     OBS_GROUP_NORMAL, encoderProps
                 );
-            }
 
-            obs_properties_apply_settings(_videoEncoderGroup, _settings);
+                // Do not apply to _videoEncoderGroup because it will cause memoryleak.
+                obs_properties_apply_settings(encoderProps, _settings);
+            }
 
             obs_log(LOG_DEBUG, "%s: Video encoder changed", qUtf8Printable(_output->getName()));
             return true;
