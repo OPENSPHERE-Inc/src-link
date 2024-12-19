@@ -110,8 +110,6 @@ target_include_directories(
   PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
           ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers)
 
-set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
-
 if(NOT buildspec)
   file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)
 endif()
@@ -124,6 +122,21 @@ string(
   qt6
   version)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
+    OPTIONAL)
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
+    OPTIONAL)
+endif()
+
+set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
   install(
     FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
@@ -134,16 +147,5 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
     DESTINATION bin/64bit
-    OPTIONAL)
-elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
-    OPTIONAL)
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
     OPTIONAL)
 endif()
