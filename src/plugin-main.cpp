@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QMainWindow>
+#include <QFileInfo>
 #include <QDir>
 #include <QAction>
 
@@ -79,6 +80,12 @@ void frontendEventCallback(enum obs_frontend_event event, void *)
 
 bool obs_module_load(void)
 {
+#ifdef __APPLE__
+    QFileInfo moduleFile(obs_get_module_binary_path(obs_current_module()));
+    auto libraryPath = QString("%1/../Frameworks").arg(moduleFile.dir().path());
+    QCoreApplication::addLibraryPath(libraryPath);
+#endif
+
     apiClient = new SRCLinkApiClient();
 
     obs_frontend_add_event_callback(frontendEventCallback, nullptr);
