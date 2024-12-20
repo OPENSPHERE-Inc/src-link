@@ -20,6 +20,7 @@ SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction)
 - Since a guest in standby state is literally just waiting without transmitting video or audio, there can theoretically be far more streams (whether 10, 100, or 1,000) than the host can receive.
   * However, there is a limit in the SRC-Link Control Panel plan.
 - SRT is used as the transmission protocol for video and audio. Stream ID and passphrase are controlled by the SRC-Link Control Panel.
+- **(Since 0.5.5)** Operation Teams allows to share receiver among your organization staffs to operate live streaming program jointly.
 
 **Glossary**
 
@@ -51,6 +52,7 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 - スタンバイ状態のゲストは、文字通り映像音声を送信せずに待機しているだけなので、理論上、ホストが受信可能なストリーム数よりはるかに多い数（10 でも 100 でも 1,000 でも）存在できます。
   ※ただし、SRC-Link Control Panel のプランで上限があります。
 - 映像音声の伝送プロトコルは SRT を使用しています。ストリームIDやパスフレーズは SRC-Link Control Panel により制御されます。
+- **(0.5.5 より)** 運営チームを使用すると、組織のスタッフ間でレシーバーを共有し、ライブ配信を共同で運営できます。
 
 **用語集**
 
