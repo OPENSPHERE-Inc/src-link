@@ -126,13 +126,15 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
-    OPTIONAL)
+    DESTINATION "."
+    REGEX "Headers" EXCLUDE)
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
-    OPTIONAL)
+    DESTINATION ".")
+
+  configure_file(Frameworks.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake" @ONLY)
+  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake")
 endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
@@ -141,11 +143,9 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
   install(
     FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit
-    OPTIONAL)
+    DESTINATION bin/64bit)
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit
-    OPTIONAL)
+    DESTINATION bin/64bit)
 endif()

@@ -82,7 +82,7 @@ bool obs_module_load(void)
 {
 #ifdef __APPLE__
     QFileInfo moduleFile(obs_get_module_binary_path(obs_current_module()));
-    auto libraryPath = QString("%1/../Frameworks").arg(moduleFile.dir().path());
+    auto libraryPath = QString("%1/../../../").arg(moduleFile.dir().path());
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 

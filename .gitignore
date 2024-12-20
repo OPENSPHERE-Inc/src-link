@@ -38,3 +38,4 @@
 !build-windows-installer.ps1
 !src-link_usage_image.jpg
 !/srtrelay
+!Frameworks.cmake.in
