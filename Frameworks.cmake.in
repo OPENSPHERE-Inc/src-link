@@ -1,0 +1,30 @@
+if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework")
+    file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
+    TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" USE_SOURCE_PERMISSIONS)
+    execute_process(
+    COMMAND /usr/bin/codesign
+        --force
+        --sign "@CODESIGN_IDENTITY@"
+        --timestamp
+        -o runtime
+        --generate-entitlement-der
+        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins/QtWebSockets.framework"
+    )
+endif()
+
+if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls")
+    file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
+    TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" USE_SOURCE_PERMISSIONS)
+    file(GLOB_RECURSE dylib_files "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins/tls/*.dylib")
+    foreach(dylib_file IN LISTS dylib_files)
+    execute_process(
+        COMMAND /usr/bin/codesign
+        --force
+        --sign "@CODESIGN_IDENTITY@"
+        --timestamp
+        -o runtime
+        --generate-entitlement-der
+        "${dylib_file}"
+    )
+    endforeach()
+endif()
