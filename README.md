@@ -67,9 +67,11 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 
 ## Requirements
 
-[OBS Studio](https://obsproject.com/) >= 30.1.0 (Qt6, Windows x64)
+[OBS Studio](https://obsproject.com/) >= 30.1.0 (Qt6, x64/ARM64/AppleSilicon)
 
-> Mac OS, Linux isn't tested yet.
+(*) MacOS, Linux Up to 30.2.3
+
+(*) Linux required install `qt6-websockets` separately.
 
 **[EN]**
 
