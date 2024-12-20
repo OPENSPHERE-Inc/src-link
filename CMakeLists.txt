@@ -126,13 +126,28 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
+    DESTINATION "."
     OPTIONAL)
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${CMAKE_PROJECT_NAME}.plugin/Contents/Frameworks"
+    DESTINATION "."
     OPTIONAL)
+
+  install(
+    CODE [===[
+    if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework")
+      file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
+        TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" USE_SOURCE_PERMISSIONS)
+    endif()
+    ]===])
+  install(
+    CODE [===[
+    if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls")
+      file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
+        TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" USE_SOURCE_PERMISSIONS)
+    endif()
+    ]===])
 endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
