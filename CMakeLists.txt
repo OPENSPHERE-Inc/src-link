@@ -127,27 +127,14 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
     CONFIGURATIONS RelWithDebInfo Debug Release
     DESTINATION "."
-    OPTIONAL)
+    REGEX "Headers" EXCLUDE)
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "."
-    OPTIONAL)
+    DESTINATION ".")
 
-  install(
-    CODE [===[
-    if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework")
-      file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
-        TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/QtWebSockets.framework" USE_SOURCE_PERMISSIONS)
-    endif()
-    ]===])
-  install(
-    CODE [===[
-    if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" AND NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls")
-      file(INSTALL DESTINATION "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/package/Library/Application Support/obs-studio/plugins"
-        TYPE DIRECTORY FILES "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/tls" USE_SOURCE_PERMISSIONS)
-    endif()
-    ]===])
+  configure_file(Frameworks.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake" @ONLY)
+  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake")
 endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
@@ -156,11 +143,9 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
   install(
     FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit
-    OPTIONAL)
+    DESTINATION bin/64bit)
   install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit
-    OPTIONAL)
+    DESTINATION bin/64bit)
 endif()
