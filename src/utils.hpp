@@ -215,14 +215,17 @@ inline bool sourceIsPrivate(obs_source_t *source)
     return finder != nullptr;
 }
 
-inline bool isSourceAvailable(obs_source_t *source)
+inline bool isSourceVisible(obs_source_t *source)
 {
     auto width = obs_source_get_width(source);
+    width += (width & 1);
     auto height = obs_source_get_height(source);
-    if (width == 0 || height == 0) {
-        return false;
-    }
+    height += (height & 1);
+    return width != 0 && height != 0;
+}
 
+inline bool isSourceAvailable(obs_source_t *source)
+{
     auto found = !!obs_scene_from_source(source);
     if (found) {
         return true;
@@ -230,12 +233,16 @@ inline bool isSourceAvailable(obs_source_t *source)
 
     obs_frontend_source_list scenes = {0};
     obs_frontend_get_scenes(&scenes);
-
-    for (size_t i = 0; i < scenes.sources.num && !found; i++) {
-        obs_scene_t *scene = obs_scene_from_source(scenes.sources.array[i]);
-        found = !!obs_scene_find_source_recursive(scene, obs_source_get_name(source));
+    {
+        for (size_t i = 0; i < scenes.sources.num && !found; i++) {
+            if (scenes.sources.array[i] == source) {
+                found = true;
+                break;
+            }
+            obs_scene_t *scene = obs_scene_from_source(scenes.sources.array[i]);
+            found = !!obs_scene_find_source_recursive(scene, obs_source_get_name(source));
+        }
     }
-
     obs_frontend_source_list_free(&scenes);
 
     return found;
