@@ -508,7 +508,7 @@ void EgressLinkOutput::start()
         if (activeSourceUuid != "program") {
             // Get reference for specific source
             source = obs_get_source_by_uuid(qUtf8Printable(activeSourceUuid));
-            if (!source || !isSourceAvailable(source)) {
+            if (!source || !isSourceAvailable(source) || !isSourceVisible(source)) {
                 obs_log(LOG_ERROR, "%s: Source not found: %s", qUtf8Printable(name), qUtf8Printable(activeSourceUuid));
                 setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
                 return;
@@ -862,7 +862,7 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
             return;
         }
 
-        if (source && !isSourceAvailable(source)) {
+        if (source && (!isSourceAvailable(source) || !isSourceAvailable(source))) {
             obs_log(LOG_DEBUG, "%s: Source removed or inactive", qUtf8Printable(name));
             stop();
             return;
