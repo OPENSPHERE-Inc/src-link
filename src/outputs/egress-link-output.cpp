@@ -908,6 +908,12 @@ void EgressLinkOutput::start()
         //--- Gather parameters ---//
         auto streaming = !connection.isEmpty();
         auto recording = obs_data_get_bool(settings, "recording");
+
+        if (!streaming && reconstructPipeline) {
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
+            apiClient->incrementStandByOutputs();
+        }
+
         if (!streaming && !recording) {
             // Both of output and recording are not enabled
             return;
@@ -993,11 +999,6 @@ void EgressLinkOutput::start()
             if (!createRecordingOutput(egressSettings)) {
                 setRecordingStatus(RECORDING_OUTPUT_STATUS_ERROR);
             }
-        }
-
-        if (goStandBy) {
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
-            apiClient->incrementStandByOutputs();
         }
 
         if (!streamingOutput && !recordingOutput) {
