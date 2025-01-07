@@ -1111,7 +1111,7 @@ public:
         auto validId = (*this)["id"].isString();
         auto validPayload = maybe((*this)["payload"], (*this)["payload"].isObject());
 
-        auto valid = validEvent && validName && validId && validPayload;
+        auto valid = validEvent && validReason && validName && validId && validPayload;
 
 #ifdef SCHEMA_DEBUG
         obs_log(

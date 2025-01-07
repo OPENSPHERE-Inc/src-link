@@ -62,21 +62,21 @@ inline audio_t *createSilenceAudio()
 inline QString makeFormatToolTip()
 {
     static const char *format_list[][2] = {
-        {"1", "FilenameFormatting.TT.1"},       {"2", "FilenameFormatting.TT.2"},
-        {"CCYY", "FilenameFormatting.TT.CCYY"}, {"YY", "FilenameFormatting.TT.YY"},
-        {"MM", "FilenameFormatting.TT.MM"},     {"DD", "FilenameFormatting.TT.DD"},
-        {"hh", "FilenameFormatting.TT.hh"},     {"mm", "FilenameFormatting.TT.mm"},
-        {"ss", "FilenameFormatting.TT.ss"},     {"%", "FilenameFormatting.TT.Percent"},
-        {"a", "FilenameFormatting.TT.a"},       {"A", "FilenameFormatting.TT.A"},
-        {"b", "FilenameFormatting.TT.b"},       {"B", "FilenameFormatting.TT.B"},
-        {"d", "FilenameFormatting.TT.d"},       {"H", "FilenameFormatting.TT.H"},
-        {"I", "FilenameFormatting.TT.I"},       {"m", "FilenameFormatting.TT.m"},
-        {"M", "FilenameFormatting.TT.M"},       {"p", "FilenameFormatting.TT.p"},
-        {"s", "FilenameFormatting.TT.s"},       {"S", "FilenameFormatting.TT.S"},
-        {"y", "FilenameFormatting.TT.y"},       {"Y", "FilenameFormatting.TT.Y"},
-        {"z", "FilenameFormatting.TT.z"},       {"Z", "FilenameFormatting.TT.Z"},
-        {"FPS", "FilenameFormatting.TT.FPS"},   {"CRES", "FilenameFormatting.TT.CRES"},
-        {"ORES", "FilenameFormatting.TT.ORES"}, {"VF", "FilenameFormatting.TT.VF"},
+        {"1", "FilenameFormatting.TT.1"},       {"CCYY", "FilenameFormatting.TT.CCYY"},
+        {"YY", "FilenameFormatting.TT.YY"},     {"MM", "FilenameFormatting.TT.MM"},
+        {"DD", "FilenameFormatting.TT.DD"},     {"hh", "FilenameFormatting.TT.hh"},
+        {"mm", "FilenameFormatting.TT.mm"},     {"ss", "FilenameFormatting.TT.ss"},
+        {"%", "FilenameFormatting.TT.Percent"}, {"a", "FilenameFormatting.TT.a"},
+        {"A", "FilenameFormatting.TT.A"},       {"b", "FilenameFormatting.TT.b"},
+        {"B", "FilenameFormatting.TT.B"},       {"d", "FilenameFormatting.TT.d"},
+        {"H", "FilenameFormatting.TT.H"},       {"I", "FilenameFormatting.TT.I"},
+        {"m", "FilenameFormatting.TT.m"},       {"M", "FilenameFormatting.TT.M"},
+        {"p", "FilenameFormatting.TT.p"},       {"s", "FilenameFormatting.TT.s"},
+        {"S", "FilenameFormatting.TT.S"},       {"y", "FilenameFormatting.TT.y"},
+        {"Y", "FilenameFormatting.TT.Y"},       {"z", "FilenameFormatting.TT.z"},
+        {"Z", "FilenameFormatting.TT.Z"},       {"FPS", "FilenameFormatting.TT.FPS"},
+        {"CRES", "FilenameFormatting.TT.CRES"}, {"ORES", "FilenameFormatting.TT.ORES"},
+        {"VF", "FilenameFormatting.TT.VF"},
     };
 
     QString html = "<table>";
