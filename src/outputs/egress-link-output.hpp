@@ -85,7 +85,7 @@ class EgressLinkOutput : public QObject {
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
-    obs_data_t *createRecordingSettings(obs_data_t *settings);
+    obs_data_t *createRecordingSettings(obs_data_t *egressSettings);
     void setStatus(EgressLinkOutputStatus value);
     void setRecordingStatus(RecordingOutputStatus value);
     void restartStreaming();

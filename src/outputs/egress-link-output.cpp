@@ -606,11 +606,11 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
     return egressSettings;
 }
 
-obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
+obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *egressSettings)
 {
     obs_data_t *recordingSettings = obs_data_create();
     auto config = obs_frontend_get_profile_config();
-    QString filenameFormat = obs_data_get_string(settings, "filename_formatting");
+    QString filenameFormat = obs_data_get_string(egressSettings, "filename_formatting");
     if (filenameFormat.isEmpty()) {
         filenameFormat = QString("%1_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
     }
@@ -624,8 +624,8 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
     // TODO: Add filtering for other platforms
 #endif
 
-    auto path = obs_data_get_string(settings, "path");
-    auto recFormat = obs_data_get_string(settings, "rec_format");
+    auto path = obs_data_get_string(egressSettings, "path");
+    auto recFormat = obs_data_get_string(egressSettings, "rec_format");
 
     // Add filter name to filename format
     QString sourceName = qUtf8Printable(name);
@@ -634,7 +634,7 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
 
     obs_data_set_string(recordingSettings, "path", qUtf8Printable(compositePath));
 
-    auto splitFile = obs_data_get_string(settings, "split_file");
+    auto splitFile = obs_data_get_string(egressSettings, "split_file");
     if (strlen(splitFile) > 0) {
         obs_data_set_string(recordingSettings, "directory", path);
         obs_data_set_string(recordingSettings, "format", qUtf8Printable(filenameFormat));
@@ -643,10 +643,11 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
         obs_data_set_bool(recordingSettings, "allow_overwrite", false);
         obs_data_set_bool(recordingSettings, "split_file", true);
 
-        auto maxTimeSec = !strcmp(splitFile, "by_time") ? obs_data_get_int(settings, "split_file_time_mins") * 60 : 0;
+        auto maxTimeSec = !strcmp(splitFile, "by_time") ? obs_data_get_int(egressSettings, "split_file_time_mins") * 60
+                                                        : 0;
         obs_data_set_int(recordingSettings, "max_time_sec", maxTimeSec);
 
-        auto maxSizeMb = !strcmp(splitFile, "by_size") ? obs_data_get_int(settings, "split_file_size_mb") : 0;
+        auto maxSizeMb = !strcmp(splitFile, "by_size") ? obs_data_get_int(egressSettings, "split_file_size_mb") : 0;
         obs_data_set_int(recordingSettings, "max_size_mb", maxSizeMb);
     }
 
