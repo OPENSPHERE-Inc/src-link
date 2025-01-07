@@ -366,8 +366,8 @@ obs_properties_t *EgressLinkOutput::getProperties()
     //--- Recording group ---//
     auto recordingGroup = obs_properties_create();
 
-    auto recordingChangeHandler = [](void *, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
-        auto splitFile = obs_data_get_string(settings, "split_file");
+    auto recordingChangeHandler = [](void *, obs_properties_t *_props, obs_property_t *, obs_data_t *_settings) {
+        auto splitFile = obs_data_get_string(_settings, "split_file");
         obs_property_set_visible(obs_properties_get(_props, "split_file_time_mins"), !strcmp(splitFile, "by_time"));
         obs_property_set_visible(obs_properties_get(_props, "split_file_size_mb"), !strcmp(splitFile, "by_size"));
         return true;
