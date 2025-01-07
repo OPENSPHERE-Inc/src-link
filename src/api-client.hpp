@@ -53,6 +53,7 @@ class SRCLinkApiClient : public QObject {
     SRCLinkWebSocketClient *websocket;
     QString uplinkStatus;
     bool terminating;
+    QTimer *tokenRefreshTimer;
 
     // Online rsources
     AccountInfo accountInfo;
@@ -112,6 +113,7 @@ private slots:
     void onO2OpenBrowser(const QUrl &url);
     void onO2RefreshFinished(QNetworkReply::NetworkError);
     void onWebSocketReady(bool reconnect);
+    void onWebSocketAborted(const QString &reason);
     void onWebSocketDisconnected();
     void onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload);
     void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);

@@ -67,7 +67,6 @@ class EgressLinkOutput : public QObject {
     OBSEncoderAutoRelease audioEncoder;
     OBSSourceAutoRelease source; // NULL if main output is used.
     OBSView sourceView;
-    video_t *sourceVideo;
     OBSAudio audioSilence;
     OutputAudioSource *audioSource;
     QMutex outputMutex;
@@ -77,7 +76,7 @@ class EgressLinkOutput : public QObject {
     QString activeSourceUuid;
     int storedSettingsRev;
     int activeSettingsRev;
-    uint64_t connectionAttemptingAt;
+    uint64_t connectionAttemptingAt; // milliseconds
     QTimer *snapshotTimer;
     QTimer *monitoringTimer;
     int width;
@@ -89,15 +88,17 @@ class EgressLinkOutput : public QObject {
     obs_data_t *createRecordingSettings(obs_data_t *settings);
     void setStatus(EgressLinkOutputStatus value);
     void setRecordingStatus(RecordingOutputStatus value);
-    void releaseResources(bool stopStatus = false);
     void restartStreaming();
     void restartRecording();
     void retrieveConnection();
+    bool createSource(QString sourceUuid);
     video_t *createVideo(obs_video_info *vi);
     audio_t *createAudio(QString audioSourceUuid);
-    obs_data_t *createStreamingOutput();
+    bool createStreamingOutput(obs_data_t *egressSettings);
     bool createRecordingOutput(obs_data_t *egressSettings);
-    bool createEncoders(obs_data_t *egressSettings, QString audioSourceUuid, video_t *video, audio_t *audio);
+    bool createVideoEncoder(obs_data_t *egressSettings, video_t *video, int width, int height);
+    bool createAudioEncoder(obs_data_t *egressSettings, QString audioSourceUuid, audio_t *audio);
+    void destroyPipeline();
 
     static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 

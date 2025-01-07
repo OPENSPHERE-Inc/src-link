@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <util/config-file.h>
+#include <util/dstr.h>
 #include <util/platform.h>
 
 #include <QUrlQuery>
@@ -99,17 +100,18 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiC
       name(_name),
       apiClient(_apiClient),
       streamingOutput(nullptr),
+      recordingOutput(nullptr),
       service(nullptr),
       videoEncoder(nullptr),
       audioEncoder(nullptr),
       audioSource(nullptr),
       sourceView(nullptr),
-      sourceVideo(nullptr),
       source(nullptr),
       settings(nullptr),
       storedSettingsRev(0),
       activeSettingsRev(0),
-      status(EGRESS_LINK_OUTPUT_STATUS_INACTIVE)
+      status(EGRESS_LINK_OUTPUT_STATUS_INACTIVE),
+      recordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE)
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qUtf8Printable(name));
 
@@ -417,24 +419,58 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     uint64_t videoBitrate;
     const char *audioEncoderId;
     uint64_t audioBitrate;
+    const char *recFormat;
+    bool recSplitFile = false;
+    const char *recSplitFileType = "Time";
+    uint64_t recSplitFileTimeMins = 15;
+    uint64_t recSplitFileSizeMb = 2048;
+    const char *path;
+
     if (advanced_out) {
         videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
         videoBitrate = config_get_uint(config, "AdvOut", "FFVBitrate");
         audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
         audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
+        recFormat = config_get_string(config, "AdvOut", "RecFormat2");
+        recSplitFile = config_get_bool(config, "AdvOut", "RecSplitFile");
+        recSplitFileTimeMins = config_get_uint(config, "AdvOut", "RecSplitFileTime");
+        recSplitFileSizeMb = config_get_uint(config, "AdvOut", "RecSplitFileSize");
+
+        const char *recType = config_get_string(config, "AdvOut", "RecType");
+        bool ffmpegRecording = !astrcmpi(recType, "ffmpeg") && config_get_bool(config, "AdvOut", "FFOutputToFile");
+        path = config_get_string(config, "AdvOut", ffmpegRecording ? "FFFilePath" : "RecFilePath");
     } else {
         videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
         videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
         audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
+        recFormat = config_get_string(config, "SimpleOutput", "RecFormat2");
+        path = config_get_string(config, "SimpleOutput", "FilePath");
     }
+
     obs_data_set_default_string(defaults, "video_encoder", videoEncoderId);
     obs_data_set_default_int(defaults, "bitrate", videoBitrate);
     obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
     obs_data_set_default_int(defaults, "audio_bitrate", audioBitrate);
-
     obs_data_set_default_string(defaults, "audio_source", "");
     obs_data_set_default_bool(defaults, "visible", true);
+    obs_data_set_default_string(defaults, "path", path);
+    obs_data_set_default_string(defaults, "rec_format", recFormat);
+
+    const char *splitFileValue = "";
+    if (recSplitFile && strcmp(recSplitFileType, "Manual")) {
+        if (!strcmp(recSplitFileType, "Size")) {
+            splitFileValue = "by_size";
+        } else {
+            splitFileValue = "by_time";
+        }
+    }
+    obs_data_set_default_string(defaults, "split_file", splitFileValue);
+    obs_data_set_default_int(defaults, "split_file_time_mins", recSplitFileTimeMins);
+    obs_data_set_default_int(defaults, "split_file_size_mb", recSplitFileSizeMb);
+
+    QString filenameFormatting = QString("%1_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
+    obs_data_set_default_string(defaults, "filename_formatting", qUtf8Printable(filenameFormatting));
 
     // Apply encoder's defaults
     OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(videoEncoderId);
@@ -576,7 +612,7 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
     auto config = obs_frontend_get_profile_config();
     QString filenameFormat = obs_data_get_string(settings, "filename_formatting");
     if (filenameFormat.isEmpty()) {
-        filenameFormat = QString("%1_%2_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
+        filenameFormat = QString("%1_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
     }
 
     // Sanitize filename
@@ -617,6 +653,7 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *settings)
     return recordingSettings;
 }
 
+// Modifies state of members: connection
 void EgressLinkOutput::retrieveConnection()
 {
     // Find connection specified by name
@@ -629,6 +666,24 @@ void EgressLinkOutput::retrieveConnection()
     }
 }
 
+// Add reference of source which specified by sourceUuid
+// Modifies state of members: source
+bool EgressLinkOutput::createSource(QString sourceUuid)
+{
+    // Get reference for specific source
+    source = obs_get_source_by_uuid(qUtf8Printable(sourceUuid));
+    if (!source || !isSourceAvailable(source) || !isSourceVisible(source)) {
+        obs_log(LOG_ERROR, "%s: Source not found: %s", qUtf8Printable(name), qUtf8Printable(sourceUuid));
+        source = nullptr;
+        return false;
+    }
+    // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
+    obs_source_inc_showing(source);
+
+    return true;
+}
+
+// Modifies state of members: sourceView
 video_t *EgressLinkOutput::createVideo(obs_video_info *vi)
 {
     auto video = obs_get_video();
@@ -650,17 +705,17 @@ video_t *EgressLinkOutput::createVideo(obs_video_info *vi)
             return nullptr;
         }
 
-        sourceVideo = obs_view_add2(sourceView, &ovi);
-        if (!sourceVideo) {
+        video = obs_view_add2(sourceView, &ovi);
+        if (!video) {
             obs_log(LOG_ERROR, "%s: Failed to create source video", qUtf8Printable(name));
             return nullptr;
         }
-        video = sourceVideo;
     }
 
     return video;
 }
 
+// Modifies state of members: audioSource, audioSilence
 audio_t *EgressLinkOutput::createAudio(QString audioSourceUuid)
 {
     auto audio = obs_get_audio();
@@ -703,39 +758,30 @@ audio_t *EgressLinkOutput::createAudio(QString audioSourceUuid)
     return audio;
 }
 
-obs_data_t *EgressLinkOutput::createStreamingOutput()
+// Modify state of members: service, streamingOutput
+bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
 {
-    if (connection.isEmpty()) {
-        obs_log(LOG_ERROR, "%s: Connection is empty", qUtf8Printable(name));
-        return nullptr;
-    }
-
-    auto egressSettings = createEgressSettings(connection);
-    if (!egressSettings) {
-        obs_log(LOG_ERROR, "%s: Unsupported connection for", qUtf8Printable(name));
-        return nullptr;
-    }
-
     // Service : always use rtmp_custom
     service = obs_service_create("rtmp_custom", qUtf8Printable(name), egressSettings, nullptr);
     if (!service) {
         obs_log(LOG_ERROR, "%s: Failed to create service", qUtf8Printable(name));
-        return nullptr;
+        return false;
     }
 
     // Output : always use ffmpeg_mpegts_muxer
     streamingOutput = obs_output_create("ffmpeg_mpegts_muxer", qUtf8Printable(name), egressSettings, nullptr);
     if (!streamingOutput) {
         obs_log(LOG_ERROR, "%s: Failed to create streaming output", qUtf8Printable(name));
-        return nullptr;
+        return false;
     }
 
     obs_output_set_reconnect_settings(streamingOutput, OUTPUT_MAX_RETRIES, OUTPUT_RETRY_DELAY_SECS);
     obs_output_set_service(streamingOutput, service);
 
-    return egressSettings;
+    return true;
 }
 
+// Modifies state of members: recordingOutput
 bool EgressLinkOutput::createRecordingOutput(obs_data_t *egressSettings)
 {
     auto recFormat = obs_data_get_string(egressSettings, "rec_format");
@@ -756,11 +802,9 @@ bool EgressLinkOutput::createRecordingOutput(obs_data_t *egressSettings)
     return true;
 }
 
-bool EgressLinkOutput::createEncoders(
-    obs_data_t *egressSettings, QString audioSourceUuid, video_t *video, audio_t *audio
-)
+// Modifies state of members: videoEncoder, width, height
+bool EgressLinkOutput::createVideoEncoder(obs_data_t *egressSettings, video_t *video, int _width, int _height)
 {
-    //--- Setup video encoder ---//
     auto videoEncoderId = obs_data_get_string(egressSettings, "video_encoder");
     if (!videoEncoderId) {
         obs_log(LOG_ERROR, "%s: Video encoder did't set", qUtf8Printable(name));
@@ -773,13 +817,21 @@ bool EgressLinkOutput::createEncoders(
         return false;
     }
 
+    width = _width;
+    height = _height;
+
     // Scale to connection's resolution
     // TODO: Keep aspect ratio?
     obs_encoder_set_scaled_size(videoEncoder, width, height);
     obs_encoder_set_gpu_scale_type(videoEncoder, OBS_SCALE_LANCZOS);
     obs_encoder_set_video(videoEncoder, video);
 
-    //--- Setup audio encoder ---//
+    return true;
+}
+
+// Modifies state of members: audioEncoder
+bool EgressLinkOutput::createAudioEncoder(obs_data_t *egressSettings, QString audioSourceUuid, audio_t *audio)
+{
     auto audioEncoderId = obs_data_get_string(egressSettings, "audio_encoder");
     if (!audioEncoderId) {
         obs_log(LOG_ERROR, "%s: Audio encoder did't set", qUtf8Printable(name));
@@ -812,49 +864,58 @@ bool EgressLinkOutput::createEncoders(
 
 void EgressLinkOutput::start()
 {
-    // Force free resources
-    releaseResources();
-
     QMutexLocker locker(&outputMutex);
     [&]() {
-        if (status != EGRESS_LINK_OUTPUT_STATUS_INACTIVE) {
-            return;
-        }
+        //--- Determine source ---//
+        QString sourceUuid = obs_data_get_string(settings, "source_uuid");
+        bool visible = obs_data_get_bool(settings, "visible");
+        if (sourceUuid.isEmpty() || !visible) {
+            // Ensure resources are released
+            destroyPipeline();
 
-        activeSettingsRev = storedSettingsRev;
-        activeSourceUuid = obs_data_get_string(settings, "source_uuid");
-        if (activeSourceUuid.isEmpty() || !obs_data_get_bool(settings, "visible")) {
             setStatus(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
             return;
-        }
-
-        if (activeSourceUuid != "program") {
-            // Get reference for specific source
-            source = obs_get_source_by_uuid(qUtf8Printable(activeSourceUuid));
-            if (!source || !isSourceAvailable(source) || !isSourceVisible(source)) {
-                obs_log(LOG_ERROR, "%s: Source not found: %s", qUtf8Printable(name), qUtf8Printable(activeSourceUuid));
-                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-                return;
-            }
-            // DO NOT use obs_source_inc_active() because source's audio will be mixed in main output unexpectedly.
-            obs_source_inc_showing(source);
         }
 
         //--- Retrieve connection ---//
         retrieveConnection();
 
-        if (connection.isEmpty()) {
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
-            apiClient->incrementStandByOutputs();
+        // No connection -> Go stand-by state
+        bool goStandBy = connection.isEmpty() && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY;
+        // Connection available -> Go active state
+        bool goActive = !connection.isEmpty() && status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE;
+        // Determine demand of pipline reconstruction
+        bool reconstructPipeline = sourceUuid != activeSourceUuid || goStandBy || goActive ||
+                                   activeSettingsRev != storedSettingsRev;
+
+        if (reconstructPipeline) {
+            // Ensure resources are released
+            destroyPipeline();
+
+            // Do this before returning for screenshot
+            if (sourceUuid != "program") {
+                if (!createSource(sourceUuid)) {
+                    setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                    return;
+                }
+            }
+
+            activeSourceUuid = sourceUuid;
+            activeSettingsRev = storedSettingsRev;
         }
 
+        //--- Gather parameters ---//
+        auto streaming = !connection.isEmpty();
         auto recording = obs_data_get_bool(settings, "recording");
-        if (connection.isEmpty() && !recording) {
+        if (!streaming && !recording) {
             // Both of output and recording are not enabled
             return;
         }
 
-        //--- Determine video source ---//
+        OBSDataAutoRelease egressSettings = nullptr;
+        int encoderWidth;
+        int encoderHeight;
+
         obs_video_info vi = {0};
         if (!obs_get_video_info(&vi)) {
             // Abort when no video situation
@@ -863,55 +924,79 @@ void EgressLinkOutput::start()
             return;
         }
 
-        auto video = createVideo(&vi);
-        if (!video) {
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-            return;
+        if (streaming) {
+            // Uplink connection is available
+            // Capture connection's specified resolution
+            encoderWidth = connection.getWidth();
+            encoderHeight = connection.getHeight();
+
+            egressSettings = createEgressSettings(connection);
+        } else {
+            // No uplink connections
+            // Use output resolution
+            encoderWidth = vi.output_width;
+            encoderHeight = vi.output_height;
+
+            egressSettings = obs_data_create();
+            obs_data_apply(egressSettings, settings);
         }
 
-        //--- Determine audio source ---//
-        QString audioSourceUuid = obs_data_get_string(settings, "audio_source");
-        if (audioSourceUuid.isEmpty()) {
-            // Use source embeded audio
-            audioSourceUuid = activeSourceUuid;
+        //--- Create encoders ---//
+        if (!videoEncoder) {
+            // Determine video source
+            auto video = createVideo(&vi);
+            if (!video) {
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
+
+            // Create video encoder
+            if (!createVideoEncoder(egressSettings, video, encoderWidth, encoderHeight)) {
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
         }
 
-        auto audio = createAudio(audioSourceUuid);
-        if (!audio) {
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-            return;
+        if (!audioEncoder) {
+            // Determine audio source
+            QString audioSourceUuid = obs_data_get_string(settings, "audio_source");
+            if (audioSourceUuid.isEmpty()) {
+                // Use source embeded audio
+                audioSourceUuid = activeSourceUuid;
+            }
+
+            auto audio = createAudio(audioSourceUuid);
+            if (!audio) {
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
+
+            // Create audio encoder
+            if (!createAudioEncoder(egressSettings, audioSourceUuid, audio)) {
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
         }
 
         //--- Create outputs ---//
-        OBSDataAutoRelease egressSettings = nullptr;
-
-        if (!connection.isEmpty()) {
+        if (!streamingOutput && streaming) {
             // Uplink connection is available
-            // Capture connection's specified resolution
-            width = connection.getWidth();
-            height = connection.getHeight();
-
             // No abort happen even if failed to create output
-            egressSettings = createStreamingOutput();
-            if (!egressSettings) {
+            if (!createStreamingOutput(egressSettings)) {
                 setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
             }
-
-        } else {
-            // No uplink connections
-            egressSettings = obs_data_create();
-            obs_data_apply(egressSettings, settings);
-
-            // Use output resolution
-            width = vi.output_width;
-            height = vi.output_height;
         }
 
-        if (recording) {
+        if (!recordingOutput && recording) {
             // Recording is enabled
             if (!createRecordingOutput(egressSettings)) {
                 setRecordingStatus(RECORDING_OUTPUT_STATUS_ERROR);
             }
+        }
+
+        if (goStandBy) {
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
+            apiClient->incrementStandByOutputs();
         }
 
         if (!streamingOutput && !recordingOutput) {
@@ -919,32 +1004,8 @@ void EgressLinkOutput::start()
             return;
         }
 
-        //--- Create encoders ---//
-        if (!createEncoders(egressSettings, audioSourceUuid, video, audio)) {
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-            return;
-        }
-
-        //--- Start streaming output ---//
-        // Save current timestamp to reduce reconnection with timeout
-        connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
-
-        if (streamingOutput) {
-            obs_output_set_video_encoder(streamingOutput, videoEncoder);
-            obs_output_set_audio_encoder(streamingOutput, audioEncoder, 0); // Don't support multiple audio outputs
-
-            if (!obs_output_start(streamingOutput)) {
-                obs_log(LOG_ERROR, "%s: Failed to start streaming output", qUtf8Printable(name));
-                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-            } else {
-                obs_log(LOG_INFO, "%s: Activated streaming output", qUtf8Printable(name));
-                setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
-                apiClient->incrementActiveOutputs();
-            }
-        }
-
         //--- Start recording output ---//
-        if (recordingOutput) {
+        if (reconstructPipeline && recordingOutput) {
             obs_output_set_video_encoder(recordingOutput, videoEncoder);
             obs_output_set_audio_encoder(recordingOutput, audioEncoder, 0); // Don't support multiple audio outputs
 
@@ -952,8 +1013,32 @@ void EgressLinkOutput::start()
                 obs_log(LOG_ERROR, "%s: Failed to start recording output", qUtf8Printable(name));
                 setRecordingStatus(RECORDING_OUTPUT_STATUS_ERROR);
             } else {
+                if (source) {
+                    obs_source_inc_showing(source);
+                }
                 obs_log(LOG_INFO, "%s: Activated recording output", qUtf8Printable(name));
                 setRecordingStatus(RECORDING_OUTPUT_STATUS_ACTIVE);
+            }
+        }
+
+        //--- Start streaming output ---//
+        if (reconstructPipeline && streamingOutput) {
+            // Save current timestamp to reduce reconnection with timeout
+            connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
+
+            obs_output_set_video_encoder(streamingOutput, videoEncoder);
+            obs_output_set_audio_encoder(streamingOutput, audioEncoder, 0); // Don't support multiple audio outputs
+
+            if (!obs_output_start(streamingOutput)) {
+                obs_log(LOG_ERROR, "%s: Failed to start streaming output", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+            } else {
+                if (source) {
+                    obs_source_inc_showing(source);
+                }
+                obs_log(LOG_INFO, "%s: Activated streaming output", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
+                apiClient->incrementActiveOutputs();
             }
         }
     }();
@@ -961,67 +1046,77 @@ void EgressLinkOutput::start()
     locker.unlock();
 }
 
-void EgressLinkOutput::releaseResources(bool stopStatus)
+// Modifies state of members:
+//   source, activeSourceUuid, streamingOutput, recordingOutput, service, videoEncoder, audioEncoder, sourceView,
+//   audioSource, audioSilence
+void EgressLinkOutput::destroyPipeline()
 {
-    QMutexLocker locker(&outputMutex);
-    {
-        if (source) {
-            obs_source_dec_showing(source);
-        }
-
-        source = nullptr;
-
-        if (streamingOutput) {
-            if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
-                obs_output_stop(streamingOutput);
+    if (recordingOutput) {
+        if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE) {
+            if (source) {
+                obs_source_dec_showing(source);
             }
+            obs_output_stop(recordingOutput);
         }
-        if (recordingOutput) {
-            if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE) {
-                obs_output_stop(recordingOutput);
-            }
-        }
-
-        streamingOutput = nullptr;
-        recordingOutput = nullptr;
-        service = nullptr;
-        audioEncoder = nullptr;
-        videoEncoder = nullptr;
-
-        if (audioSource) {
-            delete audioSource;
-            audioSource = nullptr;
-        }
-
-        audioSilence = nullptr;
-
-        if (sourceView) {
-            obs_view_set_source(sourceView, 0, nullptr);
-            obs_view_remove(sourceView);
-        }
-
-        sourceView = nullptr;
-
-        if (stopStatus && status != EGRESS_LINK_OUTPUT_STATUS_INACTIVE) {
-            obs_log(LOG_INFO, "%s: Inactivated output", qUtf8Printable(name));
-        }
-
-        if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
-            apiClient->decrementStandByOutputs();
-        } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
-            apiClient->decrementActiveOutputs();
-        }
-
-        setStatus(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
-        setRecordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE);
     }
-    locker.unlock();
+    recordingOutput = nullptr;
+
+    if (streamingOutput) {
+        if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+            if (source) {
+                obs_source_dec_showing(source);
+            }
+            obs_output_stop(streamingOutput);
+        }
+    }
+    streamingOutput = nullptr;
+
+    service = nullptr;
+    audioEncoder = nullptr;
+    videoEncoder = nullptr;
+
+    if (sourceView) {
+        obs_view_set_source(sourceView, 0, nullptr);
+        obs_view_remove(sourceView);
+    }
+    sourceView = nullptr;
+
+    if (source) {
+        obs_source_dec_showing(source);
+    }
+    source = nullptr;
+    activeSourceUuid = QString();
+
+    if (audioSource) {
+        delete audioSource;
+        audioSource = nullptr;
+    }
+    audioSilence = nullptr;
+
+    if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+        apiClient->decrementStandByOutputs();
+    } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+        apiClient->decrementActiveOutputs();
+    }
+
+    setStatus(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
+    setRecordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE);
 }
 
 void EgressLinkOutput::stop()
 {
-    releaseResources(true);
+    QMutexLocker locker(&outputMutex);
+    {
+        auto stopStatus = status != EGRESS_LINK_OUTPUT_STATUS_INACTIVE;
+
+        destroyPipeline();
+
+        if (stopStatus) {
+            obs_log(LOG_INFO, "%s: Inactivated output", qUtf8Printable(name));
+        }
+    }
     apiClient->syncUplinkStatus();
+    locker.unlock();
 }
 
 void EgressLinkOutput::restartStreaming()
@@ -1029,9 +1124,9 @@ void EgressLinkOutput::restartStreaming()
     QMutexLocker locker(&outputMutex);
     {
         if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
-            obs_output_force_stop(streamingOutput);
+            connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
-            connectionAttemptingAt = os_gettime_ns();
+            obs_output_force_stop(streamingOutput);
 
             if (!obs_output_start(streamingOutput)) {
                 obs_log(LOG_ERROR, "%s: Failed to restart streaming output", qUtf8Printable(name));
@@ -1130,18 +1225,16 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
         }
 
         auto streamingAlive = streamingOutput && obs_output_active(streamingOutput);
-        if (!streamingAlive) {
-            if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
-                // Reconnect
-                obs_log(LOG_DEBUG, "%s: Attempting restart output", qUtf8Printable(name));
-                restartStreaming();
-                return;
+        if (!streamingAlive && status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+            // Periodic check the uplink connection is available and activate
+            start();
+            return;
+        }
 
-            } else if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
-                // Periodic check the uplink connection is available and activate
-                start();
-                return;
-            }
+        if (activeSettingsRev < storedSettingsRev && !obs_output_reconnecting(streamingOutput)) {
+            obs_log(LOG_DEBUG, "%s: Attempting change settings", qUtf8Printable(name));
+            start();
+            return;
         }
 
         auto recordingAlive = recordingOutput && obs_output_active(recordingOutput);
@@ -1151,9 +1244,10 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
             return;
         }
 
-        if (activeSettingsRev < storedSettingsRev && !obs_output_reconnecting(streamingOutput)) {
-            obs_log(LOG_DEBUG, "%s: Attempting change settings", qUtf8Printable(name));
-            start();
+        if (!streamingAlive && status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+            // Reconnect
+            obs_log(LOG_DEBUG, "%s: Attempting restart output", qUtf8Printable(name));
+            restartStreaming();
             return;
         }
 

@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QWidget>
 #include <QTimer>
+#include <QPixmap>
 
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
@@ -39,6 +40,8 @@ class EgressLinkConnectionWidget : public QWidget {
     OBSSignal sourceCreateSignal;
     OBSSignal sourceRemoveSignal;
     QTimer *intervalTimer;
+    QPixmap recordingIcon;
+    QPixmap streamingIcon;
 
     static void onOBSSourcesChanged(void *data, calldata_t *cd);
     static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
@@ -47,6 +50,7 @@ private slots:
     void onSettingsButtonClick();
     void onVideoSourceChanged(int index);
     void onOutputStatusChanged(EgressLinkOutputStatus status);
+    void onRecordingStatusChanged(RecordingOutputStatus status);
     void updateSourceList();
     void onVisibilityChanged(bool value);
 

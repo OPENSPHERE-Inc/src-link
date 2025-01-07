@@ -92,6 +92,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #else
 #define API_LOG(...)
 #endif
+#define INFO_LOG(...) obs_log(LOG_INFO, "client: " __VA_ARGS__)
 #define ERROR_LOG(...) obs_log(LOG_ERROR, "client: " __VA_ARGS__)
 #define WARNING_LOG(...) obs_log(LOG_WARNING, "client: " __VA_ARGS__)
 
@@ -173,6 +174,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
     );
     connect(websocket, SIGNAL(ready(bool)), this, SLOT(onWebSocketReady(bool)));
+    connect(websocket, SIGNAL(aborted(const QString &)), this, SLOT(onWebSocketAborted(const QString &)));
     connect(websocket, SIGNAL(disconnected()), this, SLOT(onWebSocketDisconnected()));
     connect(
         websocket, SIGNAL(added(const QString &, const QString &, const QJsonObject &)), this,
@@ -192,10 +194,13 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         }
     });
 
+    tokenRefreshTimer = new QTimer(this);
+    tokenRefreshTimer->setSingleShot(true);
+    connect(tokenRefreshTimer, SIGNAL(timeout()), this, SLOT(refresh()));
+
     if (client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
         // Refresh token now
-        auto invoker = new RequestInvoker(sequencer, this);
-        invoker->refresh();
+        refresh();
     } else {
         connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
             if (error != QNetworkReply::NoError) {
@@ -213,9 +218,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         });
 
         // Schedule next refresh
-        QTimer::singleShot(
-            client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
-        );
+        tokenRefreshTimer->start(client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch());
     }
 
     API_LOG("SRCLinkApiClient created");
@@ -870,7 +873,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
 {
     if (client->linked()) {
         CHECK_CLIENT_TOKEN();
-        API_LOG("The API client has linked up.");
+        INFO_LOG("The API client has linked up.");
 
         if (accountInfo.isEmpty()) {
             // Called only the first time after logging in
@@ -894,7 +897,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
         emit loginSucceeded();
 
     } else {
-        API_LOG("The API client has unlinked.");
+        INFO_LOG("The API client has unlinked.");
 
         websocket->stop();
         clearOnlineResources();
@@ -920,9 +923,7 @@ void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
     CHECK_CLIENT_TOKEN();
 
     // Schedule next refresh
-    QTimer::singleShot(
-        client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch(), client, SLOT(refresh())
-    );
+    tokenRefreshTimer->start(client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch());
 }
 
 void SRCLinkApiClient::onWebSocketReady(bool reconnect)
@@ -948,6 +949,15 @@ void SRCLinkApiClient::onWebSocketReady(bool reconnect)
     }
 
     emit webSocketReady(reconnect);
+}
+
+void SRCLinkApiClient::onWebSocketAborted(const QString &reason)
+{
+    ERROR_LOG("WebSocket is aborted: %s", qUtf8Printable(reason));
+    if (reason == "token-expired" || reason == "not-authorized") {
+        // Try to refresh access token
+        refresh();
+    }
 }
 
 void SRCLinkApiClient::onWebSocketDisconnected()

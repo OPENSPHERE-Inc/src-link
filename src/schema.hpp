@@ -1094,6 +1094,8 @@ public:
 
     inline QString getEvent() const { return value("event").toString(); }
     inline void setEvent(const QString &value) { insert("event", value); }
+    inline QString getReason() const { return value("reason").toString(); }
+    inline void setReason(const QString &value) { insert("reason", value); }
     inline QString getName() const { return value("name").toString(); }
     inline void setName(const QString &value) { insert("name", value); }
     inline QString getId() const { return value("id").toString(); }
@@ -1104,6 +1106,7 @@ public:
     inline bool isValid() const
     {
         auto validEvent = (*this)["event"].isString();
+        auto validReason = maybe((*this)["reason"], (*this)["reason"].isString());
         auto validName = (*this)["name"].isString();
         auto validId = (*this)["id"].isString();
         auto validPayload = maybe((*this)["payload"], (*this)["payload"].isObject());
@@ -1112,8 +1115,8 @@ public:
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: event=%d, name=%d, id=%d, payload=%d", validEvent,
-            validName, validId, validPayload
+            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: event=%d, reason=%d, name=%d, id=%d, payload=%d",
+            validEvent, validReason, validName, validId, validPayload
         );
 #endif
 

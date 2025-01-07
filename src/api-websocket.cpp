@@ -106,6 +106,8 @@ void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
     WebSocketMessage messageObj = QJsonDocument::fromJson(message.toUtf8()).object();
     if (messageObj.getEvent() == "ready") {
         emit ready(reconnectCount > 0);
+    } else if (messageObj.getEvent() == "aborted") {
+        emit aborted(messageObj.getReason());
     } else if (messageObj.getEvent() == "added") {
         emit added(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
     } else if (messageObj.getEvent() == "changed") {
