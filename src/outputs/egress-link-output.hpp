@@ -45,6 +45,13 @@ enum EgressLinkOutputStatus {
     EGRESS_LINK_OUTPUT_STATUS_DISABLED
 };
 
+enum RecordingOutputStatus {
+    RECORDING_OUTPUT_STATUS_INACTIVE,
+    RECORDING_OUTPUT_STATUS_ACTIVE,
+    RECORDING_OUTPUT_STATUS_ERROR,
+    RECORDING_OUTPUT_STATUS_DISABLED
+};
+
 class EgressLinkOutput : public QObject {
     Q_OBJECT
 
@@ -54,21 +61,22 @@ class EgressLinkOutput : public QObject {
     StageConnection connection;
     OBSDataAutoRelease settings;
     OBSServiceAutoRelease service;
-    OBSOutputAutoRelease output;
+    OBSOutputAutoRelease streamingOutput;
+    OBSOutputAutoRelease recordingOutput;
     OBSEncoderAutoRelease videoEncoder;
     OBSEncoderAutoRelease audioEncoder;
     OBSSourceAutoRelease source; // NULL if main output is used.
     OBSView sourceView;
-    video_t *sourceVideo;
     OBSAudio audioSilence;
     OutputAudioSource *audioSource;
     QMutex outputMutex;
 
     EgressLinkOutputStatus status;
+    RecordingOutputStatus recordingStatus;
     QString activeSourceUuid;
     int storedSettingsRev;
     int activeSettingsRev;
-    uint64_t connectionAttemptingAt;
+    uint64_t connectionAttemptingAt; // milliseconds
     QTimer *snapshotTimer;
     QTimer *monitoringTimer;
     int width;
@@ -77,13 +85,26 @@ class EgressLinkOutput : public QObject {
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
+    obs_data_t *createRecordingSettings(obs_data_t *egressSettings);
     void setStatus(EgressLinkOutputStatus value);
-    void releaseResources(bool stopStatus = false);
+    void setRecordingStatus(RecordingOutputStatus value);
+    void restartStreaming();
+    void restartRecording();
+    void retrieveConnection();
+    bool createSource(QString sourceUuid);
+    video_t *createVideo(obs_video_info *vi);
+    audio_t *createAudio(QString audioSourceUuid);
+    bool createStreamingOutput(obs_data_t *egressSettings);
+    bool createRecordingOutput(obs_data_t *egressSettings);
+    bool createVideoEncoder(obs_data_t *egressSettings, video_t *video, int width, int height);
+    bool createAudioEncoder(obs_data_t *egressSettings, QString audioSourceUuid, audio_t *audio);
+    void destroyPipeline();
 
     static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 
 signals:
     void statusChanged(EgressLinkOutputStatus status);
+    void recordingStatusChanged(RecordingOutputStatus status);
 
 private slots:
     void onSnapshotTimerTimeout();
@@ -107,6 +128,7 @@ public:
     inline void setName(const QString &value) { name = value; }
     inline obs_data_t *getSettings() const { return settings; }
     inline const QString getSourceUuid() const { return obs_data_get_string(settings, "source_uuid"); }
-    inline bool getStatus() const { return status; }
+    inline EgressLinkOutputStatus getStatus() const { return status; }
+    inline RecordingOutputStatus getRecordingStatus() const { return recordingStatus; }
     inline bool getVisible() const { return obs_data_get_bool(settings, "visible"); }
 };

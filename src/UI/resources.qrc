@@ -5,5 +5,7 @@
     <file>images/unknownman.png</file>
     <file>images/unknownparty.png</file>
     <file>images/unknownstage.png</file>
+    <file>images/recording.svg</file>
+    <file>images/streaming.svg</file>
   </qresource>
 </RCC>

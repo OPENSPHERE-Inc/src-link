@@ -27,7 +27,9 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
 )
     : QWidget(parent),
       ui(new Ui::EgressLinkConnectionWidget),
-      source(_source)
+      source(_source),
+      recordingIcon(":/src-link/images/recording.svg"),
+      streamingIcon(":/src-link/images/streaming.svg")
 {
     ui->setupUi(this);
 
@@ -41,6 +43,12 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     ui->visibilityCheckBox->setProperty("visibilityCheckBox", true);      // Until OBS 30
     ui->visibilityCheckBox->setProperty("class", "indicator-visibility"); // Since OBS 31
     ui->visibilityCheckBox->setChecked(output->getVisible());
+    ui->statusIconLabel->setPixmap(streamingIcon.scaled(16, 16));
+    ui->statusIconLabel->setVisible(false);
+    ui->statusIconLabel->setToolTip(QTStr("Streaming"));
+    ui->recordingIconLabel->setPixmap(recordingIcon.scaled(16, 16));
+    ui->recordingIconLabel->setVisible(false);
+    ui->recordingIconLabel->setToolTip(QTStr("Recording"));
 
     onOutputStatusChanged(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
     updateSourceList();
@@ -53,6 +61,10 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
 
     connect(
         output, SIGNAL(statusChanged(EgressLinkOutputStatus)), this, SLOT(onOutputStatusChanged(EgressLinkOutputStatus))
+    );
+    connect(
+        output, SIGNAL(recordingStatusChanged(RecordingOutputStatus)), this,
+        SLOT(onRecordingStatusChanged(RecordingOutputStatus))
     );
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
@@ -117,26 +129,42 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     switch (status) {
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
         ui->statusValueLabel->setText(QTStr("Active"));
+        ui->statusIconLabel->setVisible(true);
         setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_STAND_BY:
         ui->statusValueLabel->setText(QTStr("StandBy"));
+        ui->statusIconLabel->setVisible(false);
         setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(QTStr("Error"));
+        ui->statusIconLabel->setVisible(false);
         setThemeID(ui->statusValueLabel, "error", "text-danger");
         // Try to remove error sources from combo
         updateSourceList();
         break;
     case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
         ui->statusValueLabel->setText(QTStr("Inactive"));
+        ui->statusIconLabel->setVisible(false);
         setThemeID(ui->statusValueLabel, "", "");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_DISABLED:
         ui->statusValueLabel->setText(QTStr("Disabled"));
+        ui->statusIconLabel->setVisible(false);
         setThemeID(ui->statusValueLabel, "", "");
         break;
+    }
+}
+
+void EgressLinkConnectionWidget::onRecordingStatusChanged(RecordingOutputStatus status)
+{
+    switch (status) {
+    case RECORDING_OUTPUT_STATUS_ACTIVE:
+        ui->recordingIconLabel->setVisible(true);
+        break;
+    default:
+        ui->recordingIconLabel->setVisible(false);
     }
 }
 

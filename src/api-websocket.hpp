@@ -42,6 +42,7 @@ class SRCLinkWebSocketClient : public QObject {
 
 signals:
     void ready(bool reconect);
+    void aborted(QString reason);
     void connected();
     void disconnected();
     void reconnecting();

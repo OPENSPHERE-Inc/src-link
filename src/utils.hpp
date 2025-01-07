@@ -247,3 +247,6 @@ inline bool isSourceAvailable(obs_source_t *source)
 
     return found;
 }
+
+QString getOutputFilename(const char *path, const char *container, bool noSpace, bool overwrite, const char *format);
+QString getFormatExt(const char *container);
