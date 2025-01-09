@@ -119,6 +119,11 @@ bool obs_module_load(void)
     return true;
 }
 
+void obs_module_post_load()
+{
+    qRegisterMetaType<obs_data_t *>();
+}
+
 void obs_module_unload(void)
 {
     delete apiClient;

@@ -250,3 +250,6 @@ inline bool isSourceAvailable(obs_source_t *source)
 
 QString getOutputFilename(const char *path, const char *container, bool noSpace, bool overwrite, const char *format);
 QString getFormatExt(const char *container);
+
+// The type must be registered for Linux platform
+Q_DECLARE_OPAQUE_POINTER(obs_data_t *)
