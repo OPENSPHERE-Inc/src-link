@@ -55,6 +55,8 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 
 # User manual
 
+[より詳細な手引きをブログに掲載しています](https://blog.opensphere.co.jp/posts/tags/src-link)
+
 ## ホスト向け
 
 1. ウェブブラウザで[SRC-Link Control Panel](https://src-link.live) にサインアップ／ログインし、レシーバーをセットアップします。

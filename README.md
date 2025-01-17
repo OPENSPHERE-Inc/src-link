@@ -56,6 +56,8 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
 # User manual
 
+[More detailed user manual in Wiki section](https://github.com/OPENSPHERE-Inc/src-link/wiki)
+
 ## For Host
 
 1. Sign up/login to the [SRC-Link Control Panel](https://src-link.live) in a web browser then setup the receiver. Normally, a sample is created after sign-up, so edit this.
@@ -82,7 +84,7 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    The number of ports required is equal to the total number of sources.
 
-   In environments where opening ports is difficult, consider [installing a relay server](https://src-link.live/docs/relay-server).
+   In environments where opening ports is difficult, consider [installing a relay server](https://github.com/OPENSPHERE-Inc/src-link/wiki/08.-External-Relay-Server-Installation-Guide).
 
 7. In OBS Studio, add “SRC-Link Downlink” to the source. In the source properties, select the receiver, slot, and source that this input will receive. These must not be the same combination of things in other sources (you will not get an error, but you will receive only one of them due to conflicts).
 
@@ -145,7 +147,7 @@ Please download latest install package from [Release](https://github.com/OPENSPH
 
    The standby state should be a state where there is no problem with the host viewing the video and audio at any time. If there is a problem, mute the source by removing the standby state or clicking the “eye” icon on the uplink.
 
-8. If you have finished your performance and wish to leave the receiver, click the “Leave” button on the receiver in the SRC-Link Control Panel [guest]() menu.
+8. If you have finished your performance and wish to leave the receiver, click the “Leave” button on the receiver in the SRC-Link Control Panel [guest](https://src-link.live/memberships) menu.
 
 # Development
 
