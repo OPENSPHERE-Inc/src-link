@@ -150,7 +150,7 @@ EgressLinkOutput::~EgressLinkOutput()
 
 void EgressLinkOutput::onOBSFrontendEvent(enum obs_frontend_event event, void *param)
 {
-    auto output = (EgressLinkOutput *)param;
+    auto output = static_cast<EgressLinkOutput *>(param);
     // Force stop on shutdown
     switch (event) {
     case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:
