@@ -26,6 +26,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+#include "schema.hpp"
+
 class SRCLinkApiClient;
 
 class SRCLinkWebSocketClient : public QObject {
@@ -42,13 +44,20 @@ class SRCLinkWebSocketClient : public QObject {
 
 signals:
     void ready(bool reconect);
-    void aborted(QString reason);
+    void aborted(const QString &reason);
     void connected();
     void disconnected();
     void reconnecting();
-    void added(const QString &name, const QString &id, const QJsonObject &payload);
-    void changed(const QString &name, const QString &id, const QJsonObject &payload);
-    void removed(const QString &name, const QString &id, const QJsonObject &payload);
+    void added(const WebSocketMessage &message);
+    void changed(const WebSocketMessage &message);
+    void removed(const WebSocketMessage &message);
+    void subscribed(const QString &name, const QJsonObject &payload);
+    void unsubscribed(const QString &name, const QJsonObject &payload);
+    void subscribeFailed(const QString &name, const QJsonObject &payload);
+    void unsubscribeFailed(const QString &name, const QJsonObject &payload);
+    void invoked(const QString &name, const QJsonObject &payload);
+    void invokeFailed(const QString &name, const QJsonObject &payload);
+    void error(const QString &reason);
 
 private slots:
     void onConnected();
@@ -61,7 +70,7 @@ public:
     ~SRCLinkWebSocketClient();
 
     // Do not place slots
-    void invoke(const QString &name, const json &payload = json());
+    void invokeBin(const QString &name, const json &payload = json());
 
 public slots:
     void start();
@@ -69,4 +78,5 @@ public slots:
     void subscribe(const QString &name, const QJsonObject &payload = QJsonObject());
     void unsubscribe(const QString &name, const QJsonObject &payload = QJsonObject());
     bool isStarted() const { return started; }
+    void invokeText(const QString &name, const QJsonObject &payload = QJsonObject());
 };

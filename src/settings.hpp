@@ -38,6 +38,8 @@ public:
     inline const QString getPartyId() { return value("partyId"); }
     inline void setParticipantId(const QString &participantId) { setValue("participantId", participantId); }
     inline const QString getParticipantId() { return value("participantId"); }
+    inline void setWsPortalId(const QString &portalId) { setValue("wsPortalId", portalId); }
+    inline const QString getWsPortalId() { return value("wsPortalId"); }
     inline void setForceConnection(const bool forceConnection)
     {
         setValue("forceConnection", forceConnection ? "true" : "false");

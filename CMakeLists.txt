@@ -98,17 +98,21 @@ target_sources(
           src/UI/egress-link-dock.cpp
           src/UI/egress-link-connection-widget.ui
           src/UI/egress-link-connection-widget.cpp
+          src/UI/ws-portal-dock.ui
+          src/UI/ws-portal-dock.cpp
           src/UI/resources.qrc
           src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp
           src/sources/image-renderer.cpp
           src/outputs/egress-link-output.cpp
-          src/outputs/audio-source.cpp)
+          src/outputs/audio-source.cpp
+          src/controllers/ws-portal.cpp)
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
   PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
-          ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers)
+          ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers
+          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib)
 
 if(NOT buildspec)
   file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)

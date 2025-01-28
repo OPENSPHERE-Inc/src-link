@@ -30,11 +30,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
 #include "UI/egress-link-dock.hpp"
+#include "UI/ws-portal-dock.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 #define SRC_LINK_EGRESS_DOCK_ID "SRCLinkDock"
+#define WS_PORTAL_DOCK_ID "WsPortalDock"
 
 extern obs_source_info createLinkedSourceInfo();
 
@@ -42,6 +44,7 @@ SettingsDialog *settingsDialog = nullptr;
 SRCLinkSettingsStore *settingsStore = nullptr;
 SRCLinkApiClient *apiClient = nullptr;
 EgressLinkDock *egressLinkDock = nullptr;
+WsPortalDock *wsPortalDock = nullptr;
 
 obs_source_info ingressLinkSourceInfo;
 
@@ -62,6 +65,26 @@ void unregisterEgressLinkDock()
         // The instance will be deleted by OBS (Do not call delete manually!)
         obs_frontend_remove_dock(SRC_LINK_EGRESS_DOCK_ID);
         egressLinkDock = nullptr;
+    }
+}
+
+void registerWsPortalDock()
+{
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
+        if (!wsPortalDock) {
+            wsPortalDock = new WsPortalDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id(WS_PORTAL_DOCK_ID, obs_module_text("WsPortalDock"), wsPortalDock);
+        }
+    }
+}
+
+void unregisterWsPortalDock()
+{
+    if (wsPortalDock) {
+        // The instance will be deleted by OBS (Do not call delete manually!)
+        obs_frontend_remove_dock(WS_PORTAL_DOCK_ID);
+        wsPortalDock = nullptr;
     }
 }
 
@@ -105,13 +128,21 @@ bool obs_module_load(void)
 
         // Dock
         registerEgressLinkDock();
+        registerWsPortalDock();
 
         /*
         if (apiClient->isLoggedIn()) {
             registerEgressLinkDock();
+            registerWsPortalDock();
         }
-        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
-        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
+        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() {
+            registerEgressLinkDock();
+            unregisterWsPortalDock();
+        });
+        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() {
+            unregisterEgressLinkDock();
+            unregisterWsPortalDock();
+        });
         */
     }
 

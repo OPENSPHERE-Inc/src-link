@@ -1102,21 +1102,25 @@ public:
     inline void setId(const QString &value) { insert("id", value); }
     inline QJsonObject getPayload() const { return value("payload").toObject(); }
     inline void setPayload(const QJsonObject &value) { insert("payload", value); }
+    inline bool getContinuous() const { return value("continuous").toBool(); }
+    inline void setContinuous(bool value) { insert("continuous", value); }
 
     inline bool isValid() const
     {
         auto validEvent = (*this)["event"].isString();
         auto validReason = maybe((*this)["reason"], (*this)["reason"].isString());
-        auto validName = (*this)["name"].isString();
-        auto validId = (*this)["id"].isString();
+        auto validName = maybe((*this)["name"], (*this)["name"].isString());
+        auto validId = maybe((*this)["id"], (*this)["id"].isString());
         auto validPayload = maybe((*this)["payload"], (*this)["payload"].isObject());
+        auto validContinuous = maybe((*this)["continuous"], (*this)["continuous"].isBool());
 
-        auto valid = validEvent && validReason && validName && validId && validPayload;
+        auto valid = validEvent && validReason && validName && validId && validPayload && validContinuous;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: event=%d, reason=%d, name=%d, id=%d, payload=%d",
-            validEvent, validReason, validName, validId, validPayload
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "WebSocketMessage: event=%d, reason=%d, name=%d, id=%d, payload=%d, continuous=%d", validEvent, validReason,
+            validName, validId, validPayload, validContinuous
         );
 #endif
 
@@ -1189,6 +1193,80 @@ public:
             validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
             validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision,
             validLanServer
+        );
+#endif
+
+        return valid;
+    }
+};
+
+class WsPortal : public QJsonObject {
+public:
+    WsPortal() = default;
+    WsPortal(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
+
+    inline bool isValid() const
+    {
+        auto validId = (*this)["_id"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
+
+        auto valid = validId && validName && validDescription && validPictureId && validOwnerAccountView &&
+                     validOwnerUserId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "Party: _id=%d, name=%d, description=%d, picture_id=%d, owner_account_view=%d, owner_user_id=%d", validId,
+            validName, validDescription, validPictureId, validOwnerAccountView, validOwnerUserId
+        );
+#endif
+
+        return valid;
+    }
+};
+
+typedef TypedJsonArray<WsPortal> WsPortalArray;
+
+class WsPortalMessage : public WebSocketMessage {
+public:
+    WsPortalMessage() = default;
+    WsPortalMessage(const QJsonObject &_json) : WebSocketMessage(_json) {}
+
+    inline QString getConnectionId() const { return value("connection_id").toString(); }
+    inline void setConnectionId(const QString &value) { insert("connection_id", value); }
+    inline QString getWsPortalId() const { return value("ws_portal_id").toString(); }
+    inline void setWsPortalId(const QString &value) { insert("ws_portal_id", value); }
+
+    inline bool isValid() const
+    {
+        auto validMessage = WebSocketMessage::isValid();
+        auto validConnectionId = (*this)["connection_id"].isString();
+        auto validWsPortalId = (*this)["ws_portal_id"].isString();
+
+        auto valid = validMessage && validConnectionId && validWsPortalId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "WsPortalMessage: message=%d, connection_id=%d, ws_portal_id=%d",
+            validMessage, validConnectionId, validWsPortalId
         );
 #endif
 

@@ -109,11 +109,25 @@ void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
     } else if (messageObj.getEvent() == "aborted") {
         emit aborted(messageObj.getReason());
     } else if (messageObj.getEvent() == "added") {
-        emit added(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+        emit added(messageObj);
     } else if (messageObj.getEvent() == "changed") {
-        emit changed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+        emit changed(messageObj);
     } else if (messageObj.getEvent() == "removed") {
-        emit removed(messageObj.getName(), messageObj.getId(), messageObj.getPayload());
+        emit removed(messageObj);
+    } else if (messageObj.getEvent() == "subscribed") {
+        emit subscribed(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "unsubscribed") {
+        emit unsubscribed(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "invoked") {
+        emit invoked(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "subscribe_failed") {
+        emit subscribeFailed(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "unsubscribe_failed") {
+        emit unsubscribeFailed(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "invoke_failed") {
+        emit invokeFailed(messageObj.getName(), messageObj.getPayload());
+    } else if (messageObj.getEvent() == "error") {
+        emit error(messageObj.getReason());
     } else {
         WARNING_LOG("Unknown message: %s", qUtf8Printable(message));
     }
@@ -186,13 +200,13 @@ void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject 
     client->sendTextMessage(QJsonDocument(message).toJson());
 }
 
-void SRCLinkWebSocketClient::invoke(const QString &name, const json &payload)
+void SRCLinkWebSocketClient::invokeBin(const QString &name, const json &payload)
 {
     if (!started || !client->isValid()) {
         return;
     }
 
-    API_LOG("Invoke: %s", qUtf8Printable(name));
+    API_LOG("Invoke(bin): %s", qUtf8Printable(name));
 
     json message;
 
@@ -201,5 +215,25 @@ void SRCLinkWebSocketClient::invoke(const QString &name, const json &payload)
     message["payload"] = payload;
 
     auto bson = json::to_bson(message);
-    client->sendBinaryMessage(QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()));
+    auto sent = client->sendBinaryMessage(QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()));
+
+    API_LOG("Invoke(bin): %lld bytes sent", sent);
+}
+
+void SRCLinkWebSocketClient::invokeText(const QString &name, const QJsonObject &payload)
+{
+    if (!started || !client->isValid()) {
+        return;
+    }
+
+    API_LOG("Invoke(text): %s", qUtf8Printable(name));
+
+    QJsonObject message;
+    message["event"] = "invoke";
+    message["name"] = name;
+    message["payload"] = payload;
+
+    auto sent = client->sendTextMessage(QJsonDocument(message).toJson());
+
+    API_LOG("Invoke(text): %lld bytes sent", sent);
 }

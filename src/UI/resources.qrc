@@ -7,5 +7,6 @@
     <file>images/unknownstage.png</file>
     <file>images/recording.svg</file>
     <file>images/streaming.svg</file>
+    <file>images/unknownportal.png</file>
   </qresource>
 </RCC>
