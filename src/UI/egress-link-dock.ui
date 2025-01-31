@@ -220,7 +220,7 @@
                </font>
               </property>
               <property name="text">
-               <string>Uplink</string>
+               <string>Receiver Uplink</string>
               </property>
              </widget>
             </item>
@@ -275,25 +275,6 @@
             <property name="bottomMargin">
              <number>0</number>
             </property>
-            <item>
-             <widget class="QLabel" name="participantLabel">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Receiver</string>
-              </property>
-             </widget>
-            </item>
             <item>
              <widget class="QComboBox" name="participantComboBox">
               <property name="sizePolicy">
@@ -485,7 +466,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Control Pane</string>
+        <string>Control Panel</string>
        </property>
       </widget>
      </item>

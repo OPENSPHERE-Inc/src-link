@@ -42,6 +42,7 @@ class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
     friend class SRCLinkWebSocketClient;
+    friend class WsPortalClient;
 
     QString uuid;
     SRCLinkSettingsStore *settings;
@@ -72,7 +73,7 @@ signals:
     void loginSucceeded();
     void loginFailed();
     void logoutSucceeded();
-    void webSocketReady(bool reconnect);
+    void ready(bool reconnect);
     void webSocketDisconnected();
     void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
@@ -109,7 +110,6 @@ signals:
     void licenseChanged(const SubscriptionLicense &license);
     void wsPortalsReady(const WsPortalArray &wsPortals);
     void wsPortalsFailed();
-    void wsPortalMessageReceived(const WsPortalMessage &message);
     void webSocketSubscribeSucceeded(const QString &name, const QJsonObject &payload);
     void webSocketSubscribeFailed(const QString &name, const QJsonObject &payload);
     void webSocketUnsubscribeSucceeded(const QString &name, const QJsonObject &payload);
@@ -165,9 +165,6 @@ public slots:
     const RequestInvoker *deleteUplink(const bool parallel = false);
     void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
-    void putWsPortalMessagesSubscription();
-    void postWsPortalMessage(const QString &connectionId, const QJsonObject &message);
-    void postWsPortalEvent(const QJsonObject &event);
     void refreshIngress() { emit ingressRefreshNeeded(); }
     void refreshEgress() { emit egressRefreshNeeded(); }
     void terminate();
@@ -175,9 +172,9 @@ public slots:
     void openControlPanelPage(); // Just open web browser
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
+    void openWsPortalsPage();    // Just open web browser
     void syncUplinkStatus(bool force = false);
     QString retrievePrivateIp();
-
 
     int getFreePort();
     void releasePort(const int port);

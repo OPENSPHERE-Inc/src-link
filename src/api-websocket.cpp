@@ -181,7 +181,7 @@ void SRCLinkWebSocketClient::subscribe(const QString &name, const QJsonObject &p
     message["name"] = name;
     message["payload"] = payload;
 
-    client->sendTextMessage(QJsonDocument(message).toJson());
+    client->sendTextMessage(QJsonDocument(message).toJson(QJsonDocument::Compact));
 }
 
 void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject &payload)
@@ -197,7 +197,7 @@ void SRCLinkWebSocketClient::unsubscribe(const QString &name, const QJsonObject 
     message["name"] = name;
     message["payload"] = payload;
 
-    client->sendTextMessage(QJsonDocument(message).toJson());
+    client->sendTextMessage(QJsonDocument(message).toJson(QJsonDocument::Compact));
 }
 
 void SRCLinkWebSocketClient::invokeBin(const QString &name, const json &payload)
@@ -233,7 +233,7 @@ void SRCLinkWebSocketClient::invokeText(const QString &name, const QJsonObject &
     message["name"] = name;
     message["payload"] = payload;
 
-    auto sent = client->sendTextMessage(QJsonDocument(message).toJson());
+    auto sent = client->sendTextMessage(QJsonDocument(message).toJson(QJsonDocument::Compact));
 
     API_LOG("Invoke(text): %lld bytes sent", sent);
 }

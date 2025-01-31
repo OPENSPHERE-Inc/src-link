@@ -17,6 +17,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <obs-module.h>
+#include <qt-wrappers.hpp>
+
 #include <QMessageBox>
 
 #include "../utils.hpp"
@@ -33,7 +35,7 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
 {
     ui->setupUi(this);
 
-    wsPortalController = new WsPortalController(apiClient, this);
+    wsPortalClient = new WsPortalClient(apiClient, this);
 
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     ui->wsPortalPictureLabel->setPixmap(QPixmap::fromImage(defaultWsPortalPicture));
@@ -51,8 +53,14 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(apiClient, SIGNAL(getPictureFailed(const QString &)), this, SLOT(onPictureFailed(const QString &)));
 
+    connect(wsPortalClient, SIGNAL(connected()), this, SLOT(onConnected()));
+    connect(wsPortalClient, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
+    connect(wsPortalClient, SIGNAL(reconnecting()), this, SLOT(onReconnecting()));
+
     connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClicked()));
     connect(ui->wsPortalComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveWsPortalChanged(int)));
+    connect(ui->wsPortalsButton, SIGNAL(clicked()), this, SLOT(onWsPortalsButtonClicked()));
+    connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
 
     setClientActive(apiClient->isLoggedIn());
     if (!apiClient->getAccountInfo().isEmpty()) {
@@ -61,6 +69,15 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     if (!apiClient->getWsPortals().isEmpty()) {
         onWsPortalsReady(apiClient->getWsPortals());
     }
+
+    // Translations
+    ui->wsPortalLabel->setText(QTStr("OBSWebSocketPortal"));
+    ui->wsPortalComboBox->setPlaceholderText(QTStr("NoPortal"));
+    ui->wsPortalsButton->setText(QTStr("Manage"));
+    ui->signupButton->setText(QTStr("SignupSRCLinkControlPanel"));
+    ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
+    ui->wsPortalStatus->setText(QTStr("Disconnected"));
+    setThemeID(ui->wsPortalStatus, "error", "text-danger");
 
     obs_log(LOG_DEBUG, "WsPortalDock created");
 }
@@ -164,7 +181,8 @@ void WsPortalDock::onActiveWsPortalChanged(int)
 
     if (apiClient->getSettings()->getWsPortalId() != portalId) {
         apiClient->getSettings()->setWsPortalId(portalId);
-        apiClient->putWsPortalMessagesSubscription();
+        // Stop when portalId is empty
+        wsPortalClient->restart();
     }
 }
 
@@ -213,4 +231,32 @@ void WsPortalDock::onWsPortalsReady(const WsPortalArray &portals)
     if (prev != selected) {
         onActiveWsPortalChanged(ui->wsPortalComboBox->currentIndex());
     }
+}
+
+void WsPortalDock::onWsPortalsButtonClicked()
+{
+    apiClient->openWsPortalsPage();
+}
+
+void WsPortalDock::onControlPanelButtonClicked()
+{
+    apiClient->openControlPanelPage();
+}
+
+void WsPortalDock::onConnected()
+{
+    ui->wsPortalStatus->setText(QTStr("Connected"));
+    setThemeID(ui->wsPortalStatus, "good", "text-success");
+}
+
+void WsPortalDock::onDisconnected()
+{
+    ui->wsPortalStatus->setText(QTStr("Disconnected"));
+    setThemeID(ui->wsPortalStatus, "error", "text-danger");
+}
+
+void WsPortalDock::onReconnecting()
+{
+    ui->wsPortalStatus->setText(QTStr("Reconnecting"));
+    setThemeID(ui->wsPortalStatus, "warning", "text-warning");
 }

@@ -106,7 +106,7 @@ target_sources(
           src/sources/image-renderer.cpp
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp
-          src/controllers/ws-portal.cpp)
+          src/ws-portal/ws-portal-client.cpp)
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}

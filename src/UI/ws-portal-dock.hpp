@@ -24,9 +24,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGraphicsScene>
 
 #include "../api-client.hpp"
+#include "../ws-portal/ws-portal-client.hpp"
 #include "ui_ws-portal-dock.h"
-#include "../controllers/ws-portal.hpp"
-
 
 class WsPortalDock : public QFrame {
     Q_OBJECT
@@ -34,7 +33,7 @@ class WsPortalDock : public QFrame {
     Ui::WsPortalDock *ui;
 
     SRCLinkApiClient *apiClient;
-    WsPortalController *wsPortalController;
+    WsPortalClient *wsPortalClient;
     QImage defaultAccountPicture;
     QImage defaultWsPortalPicture;
 
@@ -48,6 +47,11 @@ private slots:
     void onPictureFailed(const QString &pictureId);
     void onActiveWsPortalChanged(int index);
     void onWsPortalsReady(const WsPortalArray &portals);
+    void onWsPortalsButtonClicked();
+    void onControlPanelButtonClicked();
+    void onConnected();
+    void onDisconnected();
+    void onReconnecting();
 
 public:
     explicit WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);

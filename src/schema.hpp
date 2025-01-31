@@ -1217,6 +1217,8 @@ public:
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
     inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
     inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
+    inline int getEventSubscriptions() const { return value("event_subscriptions").toInt(); }
+    inline void setEventSubscriptions(int value) { insert("event_subscriptions", value); }
 
     inline bool isValid() const
     {
@@ -1224,18 +1226,21 @@ public:
         auto validName = (*this)["name"].isString();
         auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
         auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validEventSubscriptions = maybe((*this)["event_subscriptions"], (*this)["event_subscriptions"].isDouble());
 
         auto validOwnerAccountView = getOwnerAccountView().isValid();
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
-        auto valid = validId && validName && validDescription && validPictureId && validOwnerAccountView &&
-                     validOwnerUserId;
+        auto valid = validId && validName && validDescription && validPictureId && validEventSubscriptions &&
+                     validOwnerAccountView && validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "Party: _id=%d, name=%d, description=%d, picture_id=%d, owner_account_view=%d, owner_user_id=%d", validId,
-            validName, validDescription, validPictureId, validOwnerAccountView, validOwnerUserId
+            "Party: _id=%d, name=%d, description=%d, picture_id=%d, event_subscriptions=%d owner_account_view=%d, "
+            "owner_user_id=%d",
+            validId, validName, validDescription, validPictureId, validEventSubscriptions, validOwnerAccountView,
+            validOwnerUserId
         );
 #endif
 

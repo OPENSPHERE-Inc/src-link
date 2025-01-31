@@ -75,6 +75,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/")
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
 #define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
+#define WS_PORTALS_PAGE (FRONTEND_SERVER "/ws-portals")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -622,7 +623,7 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument(params).toJson());
+    invoker->put(req, QJsonDocument(params).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -665,7 +666,7 @@ const RequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceU
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument().toJson());
+    invoker->put(req, QJsonDocument().toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -745,7 +746,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
         emit putUplinkSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson());
+    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -789,7 +790,7 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
         emit putUplinkStatusSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson());
+    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -861,32 +862,6 @@ void SRCLinkApiClient::getPicture(const QString &pictureId)
     });
 }
 
-void SRCLinkApiClient::putWsPortalMessagesSubscription()
-{
-    if (settings->getWsPortalId().isEmpty() || settings->getWsPortalId() == PARTICIPANT_SEELCTION_NONE) {
-        websocket->unsubscribe("ws-portal-messages", {{"uuid", uuid}});
-    } else {
-        websocket->subscribe("ws-portal-messages", {{"uuid", uuid}, {"portal_id", settings->getWsPortalId()}});
-    }
-}
-
-void SRCLinkApiClient::postWsPortalMessage(const QString &connectionId, const QJsonObject &message)
-{
-    OBSString messageId = os_generate_uuid();
-    websocket->invokeText(
-        "ws-portal-messages.post",
-        {{"uuid", uuid}, {"connection_id", connectionId}, {"message_id", QString(messageId)}, {"body", message}}
-    );
-}
-
-void SRCLinkApiClient::postWsPortalEvent(const QJsonObject &event)
-{
-    OBSString messageId = os_generate_uuid();
-    websocket->invokeText(
-        "ws-portal-events.post", {{"uuid", uuid}, {"message_id", QString(messageId)}, {"body", event}}
-    );
-}
-
 void SRCLinkApiClient::openStagesPage()
 {
     QDesktopServices::openUrl(QUrl(STAGES_PAGE_URL));
@@ -905,6 +880,11 @@ void SRCLinkApiClient::openMembershipsPage()
 void SRCLinkApiClient::openSignupPage()
 {
     QDesktopServices::openUrl(QUrl(SIGNUP_PAGE));
+}
+
+void SRCLinkApiClient::openWsPortalsPage()
+{
+    QDesktopServices::openUrl(QUrl(WS_PORTALS_PAGE));
 }
 
 void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
@@ -1004,9 +984,7 @@ void SRCLinkApiClient::onWebSocketReady(bool reconnect)
         syncUplinkStatus(true);
     }
 
-    putWsPortalMessagesSubscription();
-
-    emit webSocketReady(reconnect);
+    emit ready(reconnect);
 }
 
 void SRCLinkApiClient::onWebSocketAborted(const QString &reason)
@@ -1174,15 +1152,6 @@ void SRCLinkApiClient::onWebSocketDataChanged(const WebSocketMessage &message)
             }
             emit wsPortalsReady(wsPortals);
 
-        } else if (name == "ws-portal-messages") {
-            WsPortalMessage portalMessage = message;
-            if (!portalMessage.isValid()) {
-                ERROR_LOG("Malformed portal message data received.");
-                API_LOG("dump=%s", dumpJsonObject(message).c_str());
-                return;
-            }
-
-            emit wsPortalMessageReceived(portalMessage);
         }
     }();
     blockSignals(false);

@@ -82,7 +82,6 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
 
     // Translations
     ui->egressLinkLabel->setText(QTStr("Uplink"));
-    ui->participantLabel->setText(QTStr("Receiver"));
     ui->interlockTypeLabel->setText(QTStr("Interlock"));
     ui->participantComboBox->setPlaceholderText(QTStr("NoReceiver"));
     ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
