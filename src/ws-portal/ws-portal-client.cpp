@@ -24,6 +24,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "ws-portal-client.hpp"
 #include "../api-client.hpp"
+#include "event-handler.hpp"
+
+#define INTERVAL_INTERVAL_MSECS 30000
 
 //#define API_DEBUG
 
@@ -50,6 +53,7 @@ WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
       status(WS_PORTAL_STATUS_INACTIVE),
       reconnectCount(0)
 {
+    intervalTimer = new QTimer(this);
     QUrl url = QUrl(WS_PORTALS_URL);
     client = new QWebSocket("https://" + url.host(), QWebSocketProtocol::Version13, this);
 
@@ -69,16 +73,28 @@ WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
     connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
     connect(apiClient, SIGNAL(loginFailed()), this, SLOT(onLogoutSucceeded()));
 
-    obs_websocket_register_event_callback(onOBSWebSocketEvent, this);
+    // Setup interval timer for pinging
+    connect(intervalTimer, &QTimer::timeout, [this]() {
+        if (status == WS_PORTAL_STATUS_ACTIVE && client->isValid()) {
+            client->ping();
+        }
+    });
+    intervalTimer->setInterval(INTERVAL_INTERVAL_MSECS);
+    intervalTimer->start();
+
+    // obs-websocket doesn't broadcast high-volume events unless having native WebSocket connections
+    // so we create dedicated event handler for WsPortal links.
+    WsPortalEventHandler::getInstance()->registerEventCallback(onOBSWebSocketEvent, this);
 
     API_LOG("WsPortalClient created");
 }
 
 WsPortalClient::~WsPortalClient()
 {
-    disconnect(this);
+    WsPortalEventHandler::getInstance()->unregisterEventCallback(onOBSWebSocketEvent, this);
 
-    obs_websocket_unregister_event_callback(onOBSWebSocketEvent, this);
+    disconnect(this);
+    stop();
 
     API_LOG("WsPortalClient destroyed");
 }
@@ -159,6 +175,11 @@ void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
     case 6: {
         // Request
         auto response = processRequest(data);
+        // response possibly empty (e.g. obs-websocket had been terminated)
+        if (response.empty()) {
+            return;
+        }
+
         sendMessage(connectionId, 7, response);
         break;
     }
@@ -171,15 +192,20 @@ void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
         auto requests = data["requests"];
 
         json responses;
-        for (auto request = requests.begin(); request != requests.end(); ++request) {
-            auto response = processRequest(*request);
-            if (haltOnFailure && response["requestStatus"]["result"] == false) {
+        for (auto &request : requests) {
+            auto response = processRequest(request);
+            if (haltOnFailure && (response.empty() || response["requestStatus"]["result"] == false)) {
                 break;
             }
-            responses.push_back(response);
+            // response possibly empty (e.g. obs-websocket had been terminated)
+            if (!response.empty()) {
+                responses.push_back(response);
+            }
         }
 
-        sendMessage(connectionId, 9, {{"requestId", qUtf8Printable(requestId)}, {"results", responses}});
+        if (!responses.empty()) {
+            sendMessage(connectionId, 9, {{"requestId", qUtf8Printable(requestId)}, {"results", responses}});
+        }
         break;
     }
 
@@ -194,17 +220,20 @@ json WsPortalClient::processRequest(const json &request)
     auto requestId = QString::fromStdString(request["requestId"]);
     auto requestType = QString::fromStdString(request["requestType"]);
     auto requestData = request["requestData"];
+    json responseJson;
 
     OBSDataAutoRelease data = requestData.size() ? obs_data_create_from_json(requestData.dump().c_str())
                                                  : obs_data_create();
     auto response = obs_websocket_call_request(qUtf8Printable(requestType), data);
+    if (!response) {
+        return responseJson;
+    }
 
     json requestStatus = {{"code", (int)response->status_code}, {"result", response->status_code == 100}};
     if (response->comment) {
         requestStatus["comment"] = response->comment;
     }
 
-    json responseJson;
     responseJson["requestType"] = qUtf8Printable(requestType);
     responseJson["requestId"] = qUtf8Printable(requestId);
     responseJson["requestStatus"] = requestStatus;
@@ -317,6 +346,8 @@ void WsPortalClient::start()
     status = WS_PORTAL_STATUS_ACTIVE;
     reconnectCount = 0;
     open(portalId);
+
+    WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
 }
 
 void WsPortalClient::stop()
@@ -328,6 +359,11 @@ void WsPortalClient::stop()
     API_LOG("Disconnecting");
     status = WS_PORTAL_STATUS_INACTIVE;
     client->close();
+
+    if (!wsPortal.isEmpty()) {
+        WsPortalEventHandler::getInstance()->unsubscribe(wsPortal.getEventSubscriptions());
+        wsPortal = WsPortal();
+    }
 }
 
 void WsPortalClient::restart()

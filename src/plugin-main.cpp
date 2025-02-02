@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <util/platform.h>
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -31,6 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "UI/output-dialog.hpp"
 #include "UI/egress-link-dock.hpp"
 #include "UI/ws-portal-dock.hpp"
+#include "ws-portal/event-handler.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -41,12 +43,12 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
-SRCLinkSettingsStore *settingsStore = nullptr;
 SRCLinkApiClient *apiClient = nullptr;
 EgressLinkDock *egressLinkDock = nullptr;
 WsPortalDock *wsPortalDock = nullptr;
 
 obs_source_info ingressLinkSourceInfo;
+os_cpu_usage_info_t *cpuUsageInfo;
 
 void registerEgressLinkDock()
 {
@@ -109,6 +111,9 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
+	// Initialize the cpu stats
+	cpuUsageInfo = os_cpu_usage_info_start();
+
     apiClient = new SRCLinkApiClient();
 
     obs_frontend_add_event_callback(frontendEventCallback, nullptr);
@@ -159,5 +164,23 @@ void obs_module_unload(void)
 {
     delete apiClient;
     apiClient = nullptr;
+
+    WsPortalEventHandler::destroyInstance();
+
+    // Destroy the cpu stats
+	os_cpu_usage_info_destroy(cpuUsageInfo);
+
     obs_log(LOG_INFO, "plugin unloaded");
+}
+
+//--- Implementation for OBS WebSocket lib ---//
+
+bool IsDebugEnabled()
+{
+	return false;
+}
+
+os_cpu_usage_info_t *GetCpuUsageInfo()
+{
+	return cpuUsageInfo;
 }

@@ -317,6 +317,7 @@ void SRCLinkApiClient::clearOnlineResources()
     participants = PartyEventParticipantArray();
     stages = StageArray();
     uplink = UplinkInfo();
+    wsPortals = WsPortalArray();
     downlinks.clear();
     settings->setParticipantId("");
     settings->setPartyId("");

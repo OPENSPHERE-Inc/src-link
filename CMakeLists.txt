@@ -78,6 +78,30 @@ set(o2_SRCS
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
+configure_file(lib/obs-websocket/src/plugin-macros.h.in plugin-macros.generated.h)
+
+set(obs-websocket_SRCS
+    lib/obs-websocket/src/eventhandler/EventHandler_Config.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Filters.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_General.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Inputs.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_MediaInputs.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Outputs.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_SceneItems.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Scenes.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Transitions.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler_Ui.cpp
+    lib/obs-websocket/src/eventhandler/EventHandler.cpp
+    lib/obs-websocket/src/utils/Obs_VolumeMeter.cpp
+    lib/obs-websocket/src/utils/Obs_StringHelper.cpp
+    lib/obs-websocket/src/utils/Obs_ArrayHelper.cpp
+    lib/obs-websocket/src/utils/Obs_ObjectHelper.cpp
+    lib/obs-websocket/src/utils/Json.cpp
+    lib/obs-websocket/src/utils/Obs_NumberHelper.cpp
+    lib/obs-websocket/src/plugin-macros.h.in)
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${obs-websocket_SRCS})
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/json)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
 
@@ -106,13 +130,14 @@ target_sources(
           src/sources/image-renderer.cpp
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp
-          src/ws-portal/ws-portal-client.cpp)
+          src/ws-portal/ws-portal-client.cpp
+          src/ws-portal/event-handler.cpp)
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
   PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
           ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers
-          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib)
+          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
 
 if(NOT buildspec)
   file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)

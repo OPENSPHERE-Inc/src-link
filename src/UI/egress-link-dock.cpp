@@ -236,10 +236,14 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
         ui->seatAllocationStatus->setText(QTStr("Ready"));
         setThemeID(ui->seatAllocationSeatName, "good", "text-success");
         setThemeID(ui->seatAllocationStatus, "good", "text-success");
+    } else if (!uplink.getStage().isEmpty()) {
+        ui->seatAllocationSeatName->setText(QTStr("NoSlot"));
+        ui->seatAllocationStatus->setText(QTStr("Ready"));
+        setThemeID(ui->seatAllocationSeatName, "error", "text-danger");
+        setThemeID(ui->seatAllocationStatus, "good", "text-success");
     } else {
         ui->seatAllocationSeatName->setText("");
-        ui->seatAllocationStatus->setText(QTStr("NoSlot"));
-        setThemeID(ui->seatAllocationSeatName, "error", "text-danger");
+        ui->seatAllocationStatus->setText(QTStr("NotReady"));
         setThemeID(ui->seatAllocationStatus, "error", "text-danger");
     }
 }
@@ -247,7 +251,7 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
 void EgressLinkDock::onUplinkFailed(const QString &)
 {
     ui->seatAllocationSeatName->setText("");
-    ui->seatAllocationStatus->setText(QTStr("NoSlot"));
+    ui->seatAllocationStatus->setText(QTStr("NotReady"));
     setThemeID(ui->seatAllocationStatus, "error", "text-danger");
 
     qDeleteAll(connectionWidgets);

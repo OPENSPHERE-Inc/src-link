@@ -96,6 +96,7 @@ void WsPortalDock::setClientActive(bool active)
         ui->accountNameLabel->setText(QTStr("NotLoggedInYet"));
         ui->wsPortalWidget->setVisible(false);
         ui->signupWidget->setVisible(true);
+        ui->wsPortalComboBox->clear();
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
         ui->wsPortalWidget->setVisible(true);

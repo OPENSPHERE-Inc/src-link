@@ -46,6 +46,7 @@ class WsPortalClient : public QObject {
     WsPortalStatus status;
     int reconnectCount;
     WsPortal wsPortal;
+    QTimer *intervalTimer;
 
     json processRequest(const json &request);
     void sendMessage(const QString &connectionId, int opcode, const json &data);
@@ -53,6 +54,7 @@ class WsPortalClient : public QObject {
 
     static void
     onOBSWebSocketEvent(uint64_t requiredIntent, const char *eventType, const char *eventData, void *privData);
+    
 
     void open(const QString &portalId);
 
