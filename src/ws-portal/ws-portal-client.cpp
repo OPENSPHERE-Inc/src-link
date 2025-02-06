@@ -30,11 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //#define API_DEBUG
 
-// REST Endpoints
-#ifndef WS_PORTAL_SERVER
-#define WS_PORTAL_SERVER "ws://localhost:14455"
-#endif
-#define WS_PORTALS_URL (WS_PORTAL_SERVER "/v1/ws-portals")
+#define WS_PORTALS_PATH "/v1/ws-portals"
 
 //--- Macros ---//
 #ifdef API_DEBUG
@@ -50,21 +46,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
       apiClient(_apiClient),
+      client(nullptr),
       status(WS_PORTAL_STATUS_INACTIVE),
       reconnectCount(0)
 {
     intervalTimer = new QTimer(this);
-    QUrl url = QUrl(WS_PORTALS_URL);
-    client = new QWebSocket("https://" + url.host(), QWebSocketProtocol::Version13, this);
-
-    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
-    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
-    connect(client, SIGNAL(onTextMessageReceived(const QString &)), this, SLOT(onTextMessageReceived(const QString &)));
-    connect(
-        client, SIGNAL(binaryMessageReceived(const QByteArray &)), this,
-        SLOT(onBinaryMessageReceived(const QByteArray &))
-    );
-    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
 
     connect(apiClient, SIGNAL(ready(bool)), this, SLOT(onApiClientReady(bool)));
     connect(
@@ -75,7 +61,7 @@ WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
 
     // Setup interval timer for pinging
     connect(intervalTimer, &QTimer::timeout, [this]() {
-        if (status == WS_PORTAL_STATUS_ACTIVE && client->isValid()) {
+        if (status == WS_PORTAL_STATUS_ACTIVE && client && client->isValid()) {
             client->ping();
         }
     });
@@ -97,6 +83,114 @@ WsPortalClient::~WsPortalClient()
     stop();
 
     API_LOG("WsPortalClient destroyed");
+}
+
+void WsPortalClient::createWsSocket()
+{    
+    if (wsPortal.getFacilityView().isEmpty()) {
+        ERROR_LOG("Facility is empty: %s", qUtf8Printable(wsPortal.getName()));
+        return;
+    }
+
+    // Ensure previous client is destroyed
+    destroyWsSocket();
+
+    client = new QWebSocket("https://" + wsPortal.getFacilityView().getHost(), QWebSocketProtocol::Version13, this);
+
+    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
+    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
+    connect(client, SIGNAL(textMessageReceived(const QString &)), this, SLOT(onTextMessageReceived(const QString &)));
+    connect(
+        client, SIGNAL(binaryMessageReceived(const QByteArray &)), this,
+        SLOT(onBinaryMessageReceived(const QByteArray &))
+    );
+    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
+
+    API_LOG("WebSocket created for the portal: %s", qUtf8Printable(wsPortal.getName()));
+}
+
+void WsPortalClient::destroyWsSocket()
+{
+    if (!client) {
+        return;
+    }
+
+    client->disconnect(this);
+    client->close();
+    client->deleteLater();
+    client = nullptr;
+
+    API_LOG("WebSocket closed: %s", qUtf8Printable(wsPortal.getFacilityView().getHostAndPort()));
+}
+
+void WsPortalClient::open(const QString &portalId)
+{
+    if (client && client->isValid()) {
+        return;
+    }
+
+    QUrlQuery parameters;
+    parameters.addQueryItem("portalId", portalId);
+    parameters.addQueryItem("uuid", apiClient->getUuid());
+
+    createWsSocket();
+
+    QUrl url = QUrl(wsPortal.getFacilityView().getUrl());
+    url.setPath(WS_PORTALS_PATH);
+    url.setQuery(parameters);
+    API_LOG("Opening WebSocket: %s", qUtf8Printable(url.toString()));
+
+    auto req = QNetworkRequest(url);
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
+
+    client->open(req);
+}
+
+void WsPortalClient::start()
+{
+    if (status == WS_PORTAL_STATUS_ACTIVE) {
+        return;
+    }
+
+    auto portalId = apiClient->getSettings()->getWsPortalId();
+    if (portalId.isEmpty() || portalId == "none") {
+        return;
+    }
+
+    wsPortal =
+        apiClient->getWsPortals().find([portalId](const WsPortal &_portal) { return _portal.getId() == portalId; });
+    if (wsPortal.isEmpty()) {
+        return;
+    }
+
+    status = WS_PORTAL_STATUS_ACTIVE;
+    reconnectCount = 0;
+    open(portalId);
+
+    WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
+}
+
+void WsPortalClient::stop()
+{
+    if (status == WS_PORTAL_STATUS_INACTIVE) {
+        return;
+    }
+
+    status = WS_PORTAL_STATUS_INACTIVE;
+    destroyWsSocket();
+
+    if (!wsPortal.isEmpty()) {
+        WsPortalEventHandler::getInstance()->unsubscribe(wsPortal.getEventSubscriptions());
+        wsPortal = WsPortal();
+    }
+
+    emit disconnected();
+}
+
+void WsPortalClient::restart()
+{
+    stop();
+    start();
 }
 
 void WsPortalClient::onLogoutSucceeded()
@@ -137,9 +231,6 @@ void WsPortalClient::onDisconnected()
         reconnectCount++;
         open(portalId);
         emit reconnecting();
-    } else {
-        API_LOG("Disconnected");
-        emit disconnected();
     }
 }
 
@@ -246,6 +337,10 @@ json WsPortalClient::processRequest(const json &request)
 
 void WsPortalClient::send(const QByteArray &message)
 {
+    if (!client) {
+        ERROR_LOG("WebSocket client is empty");
+        return;
+    }
     client->sendBinaryMessage(message);
 }
 
@@ -304,70 +399,4 @@ void WsPortalClient::onOBSWebSocketEvent(
 {
     auto controller = static_cast<WsPortalClient *>(privData);
     controller->sendEvent(requiredIntent, eventType, eventData);
-}
-
-void WsPortalClient::open(const QString &portalId)
-{
-    if (client->isValid()) {
-        return;
-    }
-
-    QUrlQuery parameters;
-    parameters.addQueryItem("portalId", portalId);
-    parameters.addQueryItem("uuid", apiClient->getUuid());
-
-    QUrl url = QUrl(WS_PORTALS_URL);
-    url.setQuery(parameters);
-
-    auto req = QNetworkRequest(url);
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
-
-    client->open(req);
-}
-
-void WsPortalClient::start()
-{
-    if (status == WS_PORTAL_STATUS_ACTIVE) {
-        return;
-    }
-
-    auto portalId = apiClient->getSettings()->getWsPortalId();
-    if (portalId.isEmpty() || portalId == "none") {
-        return;
-    }
-
-    wsPortal =
-        apiClient->getWsPortals().find([portalId](const WsPortal &_portal) { return _portal.getId() == portalId; });
-    if (wsPortal.isEmpty()) {
-        return;
-    }
-
-    API_LOG("Connecting: %s", WS_PORTALS_URL);
-    status = WS_PORTAL_STATUS_ACTIVE;
-    reconnectCount = 0;
-    open(portalId);
-
-    WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
-}
-
-void WsPortalClient::stop()
-{
-    if (status == WS_PORTAL_STATUS_INACTIVE) {
-        return;
-    }
-
-    API_LOG("Disconnecting");
-    status = WS_PORTAL_STATUS_INACTIVE;
-    client->close();
-
-    if (!wsPortal.isEmpty()) {
-        WsPortalEventHandler::getInstance()->unsubscribe(wsPortal.getEventSubscriptions());
-        wsPortal = WsPortal();
-    }
-}
-
-void WsPortalClient::restart()
-{
-    stop();
-    start();
 }

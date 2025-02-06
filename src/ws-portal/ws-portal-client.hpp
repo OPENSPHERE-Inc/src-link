@@ -55,7 +55,8 @@ class WsPortalClient : public QObject {
     static void
     onOBSWebSocketEvent(uint64_t requiredIntent, const char *eventType, const char *eventData, void *privData);
     
-
+    void createWsSocket();
+    void destroyWsSocket();
     void open(const QString &portalId);
 
 signals:

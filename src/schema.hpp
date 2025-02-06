@@ -1200,6 +1200,50 @@ public:
     }
 };
 
+class WsPortalFacilityView : public QJsonObject {
+public:
+    WsPortalFacilityView() = default;
+    WsPortalFacilityView(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getAddress() const { return value("address").toString(); }
+    inline void setAddress(const QString &value) { insert("address", value); }
+    inline int getPort() const { return value("port").toInt(); }
+    inline void setPort(int value) { insert("port", value); }
+    inline int getTlsPort() const { return value("tls_port").toInt(); }
+    inline void setTlsPort(int value) { insert("tls_port", value); }
+
+    inline QString getHost() const
+    {
+        // The host always has "api" subdomain added to the address
+        return QString("api.%1").arg(getAddress());
+    }
+
+    inline QString getHostAndPort() const
+    {
+        return QString("%1:%2").arg(getHost()).arg(getTlsPort() ? getTlsPort() : getPort());
+    }
+
+    inline QString getUrl() const { return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getHostAndPort()); }
+
+    inline bool isValid() const
+    {
+        auto validAddress = (*this)["address"].isString();
+        auto validPort = (*this)["port"].isDouble();
+        auto validTlsPort = maybe((*this)["tls_port"], (*this)["tls_port"].isDouble());
+
+        auto valid = validAddress && validPort && validTlsPort;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "WsPortalFacilityView: address=%d, port=%d, tls_port=%d", validAddress,
+            validPort, validTlsPort
+        );
+#endif
+
+        return valid;
+    }
+};
+
 class WsPortal : public QJsonObject {
 public:
     WsPortal() = default;
@@ -1219,6 +1263,10 @@ public:
     inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
     inline int getEventSubscriptions() const { return value("event_subscriptions").toInt(); }
     inline void setEventSubscriptions(int value) { insert("event_subscriptions", value); }
+    inline QString getFacilityId() const { return value("facility_id").toString(); }
+    inline void setFacilityId(const QString &value) { insert("facility_id", value); }
+    inline WsPortalFacilityView getFacilityView() const { return value("facility_view").toObject(); }
+    inline void setFacilityView(const WsPortalFacilityView &value) { insert("facility_view", value); }
 
     inline bool isValid() const
     {
@@ -1230,17 +1278,19 @@ public:
 
         auto validOwnerAccountView = getOwnerAccountView().isValid();
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
+        auto validFacilityId = (*this)["facility_id"].isString();
+        auto validFacilityView = maybe((*this)["facility_view"], getFacilityView().isValid());
 
         auto valid = validId && validName && validDescription && validPictureId && validEventSubscriptions &&
-                     validOwnerAccountView && validOwnerUserId;
+                     validOwnerAccountView && validOwnerUserId && validFacilityId && validFacilityView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "Party: _id=%d, name=%d, description=%d, picture_id=%d, event_subscriptions=%d owner_account_view=%d, "
-            "owner_user_id=%d",
+            "owner_user_id=%d, facility_id=%d, facility_view=%d",
             validId, validName, validDescription, validPictureId, validEventSubscriptions, validOwnerAccountView,
-            validOwnerUserId
+            validOwnerUserId, validFacilityId, validFacilityView
         );
 #endif
 
