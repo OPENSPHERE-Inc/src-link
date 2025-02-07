@@ -217,6 +217,7 @@ void SRCLinkWebSocketClient::invokeBin(const QString &name, const json &payload)
     auto bson = json::to_bson(message);
     auto sent = client->sendBinaryMessage(QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()));
 
+    UNUSED_PARAMETER(sent);
     API_LOG("Invoke(bin): %lld bytes sent", sent);
 }
 
@@ -235,5 +236,6 @@ void SRCLinkWebSocketClient::invokeText(const QString &name, const QJsonObject &
 
     auto sent = client->sendTextMessage(QJsonDocument(message).toJson(QJsonDocument::Compact));
 
+    UNUSED_PARAMETER(sent);
     API_LOG("Invoke(text): %lld bytes sent", sent);
 }

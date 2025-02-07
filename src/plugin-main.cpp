@@ -111,8 +111,8 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
-	// Initialize the cpu stats
-	cpuUsageInfo = os_cpu_usage_info_start();
+    // Initialize the cpu stats
+    cpuUsageInfo = os_cpu_usage_info_start();
 
     apiClient = new SRCLinkApiClient();
 
@@ -168,7 +168,7 @@ void obs_module_unload(void)
     WsPortalEventHandler::destroyInstance();
 
     // Destroy the cpu stats
-	os_cpu_usage_info_destroy(cpuUsageInfo);
+    os_cpu_usage_info_destroy(cpuUsageInfo);
 
     obs_log(LOG_INFO, "plugin unloaded");
 }
@@ -177,10 +177,10 @@ void obs_module_unload(void)
 
 bool IsDebugEnabled()
 {
-	return false;
+    return false;
 }
 
 os_cpu_usage_info_t *GetCpuUsageInfo()
 {
-	return cpuUsageInfo;
+    return cpuUsageInfo;
 }

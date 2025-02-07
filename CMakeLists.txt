@@ -101,6 +101,8 @@ set(obs-websocket_SRCS
     lib/obs-websocket/src/plugin-macros.h.in)
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${obs-websocket_SRCS})
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,GNU,AppleClang,Clang>:-Wno-error=shadow
+                                                     -Wno-error=conversion>)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/json)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)

@@ -50,7 +50,7 @@ protected:
 public:
     static WsPortalEventHandler *getInstance();
     static void destroyInstance();
-    
+
     void registerEventCallback(obs_websocket_event_callback_function eventCallback, void *privData);
     void unregisterEventCallback(obs_websocket_event_callback_function eventCallback, void *privData);
     void subscribe(uint64_t eventSubscriptions);

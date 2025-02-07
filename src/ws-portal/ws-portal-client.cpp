@@ -86,7 +86,7 @@ WsPortalClient::~WsPortalClient()
 }
 
 void WsPortalClient::createWsSocket()
-{    
+{
     if (wsPortal.getFacilityView().isEmpty()) {
         ERROR_LOG("Facility is empty: %s", qUtf8Printable(wsPortal.getName()));
         return;
@@ -278,7 +278,7 @@ void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
     case 8: {
         // Request batch
         bool haltOnFailure = data["haltOnFailure"];
-        int executionType = data["executionType"];
+        //int executionType = data["executionType"];
         auto requestId = QString::fromStdString(data["requestId"]);
         auto requests = data["requests"];
 

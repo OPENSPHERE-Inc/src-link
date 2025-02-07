@@ -18,14 +18,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "event-handler.hpp"
 
-
 //--- WsPortalEventHandler class ---//
 
-WsPortalEventHandler* WsPortalEventHandler::instance = nullptr;
+WsPortalEventHandler *WsPortalEventHandler::instance = nullptr;
 
-WsPortalEventHandler::WsPortalEventHandler(QObject *parent)
-    : QObject(parent),
-      ready(false)
+WsPortalEventHandler::WsPortalEventHandler(QObject *parent) : QObject(parent), ready(false)
 {
     eventHandler = std::make_shared<EventHandler>();
     eventHandler->SetEventCallback(onOBSEvent);
@@ -39,7 +36,7 @@ WsPortalEventHandler::~WsPortalEventHandler()
     eventHandler = nullptr;
 }
 
-WsPortalEventHandler* WsPortalEventHandler::getInstance()
+WsPortalEventHandler *WsPortalEventHandler::getInstance()
 {
     if (!instance) {
         instance = new WsPortalEventHandler();
@@ -67,7 +64,9 @@ void WsPortalEventHandler::onOBSReady(bool ready)
     instance->ready = ready;
 }
 
-void WsPortalEventHandler::broadcastEvent(uint64_t requiredIntent, const std::string &eventType, const json &eventData, uint8_t rpcVersion)
+void WsPortalEventHandler::broadcastEvent(
+    uint64_t requiredIntent, const std::string &eventType, const json &eventData, uint8_t
+)
 {
     if (!ready) {
         return;
@@ -86,9 +85,9 @@ void WsPortalEventHandler::registerEventCallback(obs_websocket_event_callback_fu
 {
     QMutexLocker locker(&outputMutex);
     {
-        obs_websocket_event_callback cb = { eventCallback, privData };
+        obs_websocket_event_callback cb = {eventCallback, privData};
         if (!eventCallbacks.contains(cb)) {
-            eventCallbacks.append(cb);        
+            eventCallbacks.append(cb);
         }
     }
     locker.unlock();
@@ -98,7 +97,7 @@ void WsPortalEventHandler::unregisterEventCallback(obs_websocket_event_callback_
 {
     QMutexLocker locker(&outputMutex);
     {
-        obs_websocket_event_callback cb = { eventCallback, privData };
+        obs_websocket_event_callback cb = {eventCallback, privData};
         eventCallbacks.removeAll(cb);
     }
     locker.unlock();

@@ -205,10 +205,9 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         websocket, &SRCLinkWebSocketClient::unsubscribeFailed, this,
         [this](const QString &name, const QJsonObject &payload) { emit webSocketUnsubscribeFailed(name, payload); }
     );
-    connect(
-        websocket, &SRCLinkWebSocketClient::invoked, this,
-        [this](const QString &name, const QJsonObject &payload) { emit webSocketInvokeSucceeded(name, payload); }
-    );
+    connect(websocket, &SRCLinkWebSocketClient::invoked, this, [this](const QString &name, const QJsonObject &payload) {
+        emit webSocketInvokeSucceeded(name, payload);
+    });
     connect(
         websocket, &SRCLinkWebSocketClient::invokeFailed, this,
         [this](const QString &name, const QJsonObject &payload) { emit webSocketInvokeFailed(name, payload); }
@@ -1152,7 +1151,6 @@ void SRCLinkApiClient::onWebSocketDataChanged(const WebSocketMessage &message)
                 wsPortals.append(newPortal);
             }
             emit wsPortalsReady(wsPortals);
-
         }
     }();
     blockSignals(false);
