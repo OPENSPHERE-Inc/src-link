@@ -250,14 +250,15 @@ void WsPortalClient::onTextMessageReceived(const QString &message)
 void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
 {
     std::vector<uint8_t> messageBytes(message.begin(), message.end());
-    auto messageObj = json::from_bson(messageBytes, true, false);
+    auto messageObj = json::from_msgpack(messageBytes, true, false);
     if (messageObj.type() == json::value_t::discarded || messageObj.empty()) {
         API_LOG("Invalid message");
         return;
     }
 
     auto connectionId = QString::fromStdString(messageObj["connectionId"]);
-    auto body = json::parse(messageObj["body"].template get<std::string>()); // The body is stored in plain text
+    // The body is stored in msgpack encoded binary
+    auto body = json::from_msgpack(messageObj["body"].get_binary(), true, false);
 
     int op = body["op"];
     auto data = body["d"];
@@ -353,15 +354,15 @@ void WsPortalClient::sendMessage(const QString &connectionId, int opcode, const 
     json body = {{"op", opcode}, {"d", data}};
     json message = {
         {"connectionId", qUtf8Printable(connectionId)},
-        // The body is stored in plain text
-        {"body", body.dump()}
+        // The body is stored in msgpack encoded binary
+        {"body", json::to_msgpack(body)}
     };
 
+    auto raw = json::to_msgpack(message);
     // Called in proper thread
-    auto bson = json::to_bson(message);
     QMetaObject::invokeMethod(
         this, "send", Qt::QueuedConnection,
-        Q_ARG(QByteArray, QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()))
+        Q_ARG(QByteArray, QByteArray(reinterpret_cast<const char *>(raw.data()), raw.size()))
     );
 }
 
@@ -382,14 +383,14 @@ void WsPortalClient::sendEvent(uint64_t requiredIntent, const char *eventType, c
 
     json data = {{"eventType", eventType}, {"eventIntent", (int)requiredIntent}, {"eventData", json::parse(eventData)}};
     json body = {{"op", 5}, {"d", data}};
-    // The body is stored in plain text
-    json message = {{"body", body.dump()}};
+    // The body is stored in msgpack encoded binary
+    json message = {{"body", json::to_msgpack(body)}};
 
+    auto raw = json::to_msgpack(message);
     // Called in proper thread
-    auto bson = json::to_bson(message);
     QMetaObject::invokeMethod(
         this, "send", Qt::QueuedConnection,
-        Q_ARG(QByteArray, QByteArray(reinterpret_cast<const char *>(bson.data()), bson.size()))
+        Q_ARG(QByteArray, QByteArray(reinterpret_cast<const char *>(raw.data()), raw.size()))
     );
 }
 
