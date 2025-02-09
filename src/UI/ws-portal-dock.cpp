@@ -76,7 +76,7 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->wsPortalsButton->setText(QTStr("Manage"));
     ui->signupButton->setText(QTStr("SignupSRCLinkControlPanel"));
     ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
-    ui->wsPortalStatus->setText(QTStr("Disconnected"));
+    ui->wsPortalStatus->setText(QTStr("Unlinked"));
     setThemeID(ui->wsPortalStatus, "error", "text-danger");
 
     obs_log(LOG_DEBUG, "WsPortalDock created");
@@ -246,18 +246,18 @@ void WsPortalDock::onControlPanelButtonClicked()
 
 void WsPortalDock::onConnected()
 {
-    ui->wsPortalStatus->setText(QTStr("Connected"));
+    ui->wsPortalStatus->setText(QTStr("Linked"));
     setThemeID(ui->wsPortalStatus, "good", "text-success");
 }
 
 void WsPortalDock::onDisconnected()
 {
-    ui->wsPortalStatus->setText(QTStr("Disconnected"));
+    ui->wsPortalStatus->setText(QTStr("Unlinked"));
     setThemeID(ui->wsPortalStatus, "error", "text-danger");
 }
 
 void WsPortalDock::onReconnecting()
 {
-    ui->wsPortalStatus->setText(QTStr("Reconnecting"));
+    ui->wsPortalStatus->setText(QTStr("Retrying"));
     setThemeID(ui->wsPortalStatus, "warning", "text-warning");
 }
