@@ -36,11 +36,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define UPLINK_STATUS_STANDBY "standby"
 
 #define PARTICIPANT_SEELCTION_NONE "none"
+#define WS_PORTAL_SELECTION_NONE "none"
 
 class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
     friend class SRCLinkWebSocketClient;
+    friend class WsPortalClient;
 
     QString uuid;
     SRCLinkSettingsStore *settings;
@@ -63,6 +65,7 @@ class SRCLinkApiClient : public QObject {
     StageArray stages;
     UplinkInfo uplink;
     QMap<QString, DownlinkInfo> downlinks;
+    WsPortalArray wsPortals;
 
     inline QString getAccessToken() { return client->token(); }
 
@@ -70,7 +73,7 @@ signals:
     void loginSucceeded();
     void loginFailed();
     void logoutSucceeded();
-    void webSocketReady(bool reconnect);
+    void ready(bool reconnect);
     void webSocketDisconnected();
     void accountInfoReady(const AccountInfo &accountInfo);
     void accountInfoFailed();
@@ -105,6 +108,14 @@ signals:
     void ingressRefreshNeeded();
     void egressRefreshNeeded();
     void licenseChanged(const SubscriptionLicense &license);
+    void wsPortalsReady(const WsPortalArray &wsPortals);
+    void wsPortalsFailed();
+    void webSocketSubscribeSucceeded(const QString &name, const QJsonObject &payload);
+    void webSocketSubscribeFailed(const QString &name, const QJsonObject &payload);
+    void webSocketUnsubscribeSucceeded(const QString &name, const QJsonObject &payload);
+    void webSocketUnsubscribeFailed(const QString &name, const QJsonObject &payload);
+    void webSocketInvokeSucceeded(const QString &name, const QJsonObject &payload);
+    void webSocketInvokeFailed(const QString &name, const QJsonObject &payload);
 
 private slots:
     void onO2LinkedChanged();
@@ -115,8 +126,8 @@ private slots:
     void onWebSocketReady(bool reconnect);
     void onWebSocketAborted(const QString &reason);
     void onWebSocketDisconnected();
-    void onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload);
-    void onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &payload);
+    void onWebSocketDataChanged(const WebSocketMessage &message);
+    void onWebSocketDataRemoved(const WebSocketMessage &message);
 
 public:
     explicit SRCLinkApiClient(QObject *parent = nullptr);
@@ -130,6 +141,7 @@ public:
     inline const StageArray &getStages() const { return stages; }
     inline const UplinkInfo getUplink() const { return uplink; }
     inline SRCLinkSettingsStore *getSettings() const { return settings; }
+    inline const WsPortalArray &getWsPortals() const { return wsPortals; }
 
 public slots:
     void login();
@@ -160,6 +172,7 @@ public slots:
     void openControlPanelPage(); // Just open web browser
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
+    void openWsPortalsPage();    // Just open web browser
     void syncUplinkStatus(bool force = false);
     QString retrievePrivateIp();
 

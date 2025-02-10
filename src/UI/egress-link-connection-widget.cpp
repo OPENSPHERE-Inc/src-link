@@ -98,14 +98,14 @@ EgressLinkConnectionWidget::~EgressLinkConnectionWidget()
 
 void EgressLinkConnectionWidget::onOBSSourcesChanged(void *data, calldata_t *)
 {
-    auto widget = (EgressLinkConnectionWidget *)data;
+    auto widget = static_cast<EgressLinkConnectionWidget *>(data);
     // Prevent crash
     QMetaObject::invokeMethod(widget, "updateSourceList", Qt::QueuedConnection);
 }
 
 void EgressLinkConnectionWidget::onOBSFrontendEvent(enum obs_frontend_event event, void *param)
 {
-    auto widget = (EgressLinkConnectionWidget *)param;
+    auto widget = static_cast<EgressLinkConnectionWidget *>(param);
     // Prevent to reset output config
     if (event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN) {
         widget->sourceCreateSignal.Disconnect();
@@ -180,7 +180,7 @@ void EgressLinkConnectionWidget::updateSourceList()
 
         obs_enum_sources(
             [](void *param, obs_source_t *_source) {
-                auto widget = (EgressLinkConnectionWidget *)param;
+                auto widget = static_cast<EgressLinkConnectionWidget *>(param);
                 auto type = obs_source_get_type(_source);
                 auto flags = obs_source_get_output_flags(_source);
 
@@ -193,7 +193,7 @@ void EgressLinkConnectionWidget::updateSourceList()
         );
         obs_enum_scenes(
             [](void *param, obs_source_t *_source) {
-                auto widget = (EgressLinkConnectionWidget *)param;
+                auto widget = static_cast<EgressLinkConnectionWidget *>(param);
                 auto type = obs_source_get_type(_source);
 
                 if (type == OBS_SOURCE_TYPE_SCENE && isSourceAvailable(_source)) {

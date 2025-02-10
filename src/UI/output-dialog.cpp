@@ -84,7 +84,7 @@ void OutputDialog::showEvent(QShowEvent *event)
 
 void OutputDialog::onOBSSourcesChanged(void *_data, calldata_t *)
 {
-    auto dialog = (OutputDialog *)_data;
+    auto dialog = static_cast<OutputDialog *>(_data);
     // Prevent crash
     QMetaObject::invokeMethod(dialog, "reloadProperties", Qt::QueuedConnection);
 }

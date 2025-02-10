@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>EgressLinkDock</class>
- <widget class="QFrame" name="EgressLinkDock">
+ <class>WsPortalDock</class>
+ <widget class="QFrame" name="WsPortalDock">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -9,12 +9,6 @@
     <width>380</width>
     <height>449</height>
    </rect>
-  </property>
-  <property name="sizePolicy">
-   <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-    <horstretch>0</horstretch>
-    <verstretch>0</verstretch>
-   </sizepolicy>
   </property>
   <property name="minimumSize">
    <size>
@@ -70,25 +64,7 @@
         <height>395</height>
        </rect>
       </property>
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>0</height>
-       </size>
-      </property>
-      <layout class="QVBoxLayout" name="scrollAreaLayout">
-       <property name="leftMargin">
-        <number>9</number>
-       </property>
-       <property name="topMargin">
-        <number>9</number>
-       </property>
-       <property name="rightMargin">
-        <number>9</number>
-       </property>
-       <property name="bottomMargin">
-        <number>9</number>
-       </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <layout class="QHBoxLayout" name="accountLayout">
          <property name="spacing">
@@ -188,8 +164,8 @@
         </widget>
        </item>
        <item>
-        <widget class="QWidget" name="uplinkWidget" native="true">
-         <layout class="QVBoxLayout" name="verticalLayout_2">
+        <widget class="QWidget" name="wsPortalWidget" native="true">
+         <layout class="QVBoxLayout" name="verticalLayout_4">
           <property name="leftMargin">
            <number>0</number>
           </property>
@@ -200,18 +176,15 @@
            <number>0</number>
           </property>
           <property name="bottomMargin">
-           <number>0</number>
+           <number>9</number>
           </property>
           <item>
-           <layout class="QHBoxLayout" name="egressLinkLayout">
-            <property name="spacing">
-             <number>12</number>
-            </property>
+           <layout class="QHBoxLayout" name="horizontalLayout">
             <property name="bottomMargin">
              <number>0</number>
             </property>
             <item>
-             <widget class="QLabel" name="egressLinkLabel">
+             <widget class="QLabel" name="wsPortalLabel">
               <property name="font">
                <font>
                 <pointsize>12</pointsize>
@@ -220,12 +193,12 @@
                </font>
               </property>
               <property name="text">
-               <string>Receiver Uplink</string>
+               <string>OBS-WebSocket Portal</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="seatAllocationSeatName">
+             <widget class="QLabel" name="wsPortalName">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>1</horstretch>
@@ -249,8 +222,8 @@
               </property>
              </widget>
             </item>
-            <item alignment="Qt::AlignmentFlag::AlignRight">
-             <widget class="QLabel" name="seatAllocationStatus">
+            <item>
+             <widget class="QLabel" name="wsPortalStatus">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>0</horstretch>
@@ -264,19 +237,19 @@
                </size>
               </property>
               <property name="text">
-               <string>No link</string>
+               <string>Inactive</string>
               </property>
              </widget>
             </item>
            </layout>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="participantLayout">
+           <layout class="QHBoxLayout" name="wsPortalLayout">
             <property name="bottomMargin">
              <number>0</number>
             </property>
             <item>
-             <widget class="QComboBox" name="participantComboBox">
+             <widget class="QComboBox" name="wsPortalComboBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>1</horstretch>
@@ -290,12 +263,12 @@
                </size>
               </property>
               <property name="placeholderText">
-               <string>No receivers</string>
+               <string>No portals</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="membershipsButton">
+             <widget class="QPushButton" name="wsPortalsButton">
               <property name="minimumSize">
                <size>
                 <width>0</width>
@@ -310,7 +283,7 @@
            </layout>
           </item>
           <item>
-           <widget class="QLabel" name="participantPictureLabel">
+           <widget class="QLabel" name="wsPortalPictureLabel">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -342,7 +315,7 @@
              <string/>
             </property>
             <property name="pixmap">
-             <pixmap resource="resources.qrc">:/src-link/images/unknownstage.png</pixmap>
+             <pixmap resource="resources.qrc">:/src-link/images/unknownportal.png</pixmap>
             </property>
             <property name="scaledContents">
              <bool>false</bool>
@@ -352,37 +325,12 @@
             </property>
            </widget>
           </item>
-          <item>
-           <widget class="Line" name="horizontalLine2">
-            <property name="orientation">
-             <enum>Qt::Orientation::Horizontal</enum>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QWidget" name="connectionsWidget" native="true">
-         <layout class="QVBoxLayout" name="connectionsLayout">
-          <property name="leftMargin">
-           <number>0</number>
-          </property>
-          <property name="topMargin">
-           <number>0</number>
-          </property>
-          <property name="rightMargin">
-           <number>0</number>
-          </property>
-          <property name="bottomMargin">
-           <number>0</number>
-          </property>
          </layout>
         </widget>
        </item>
        <item>
         <widget class="QWidget" name="signupWidget" native="true">
-         <layout class="QHBoxLayout" name="horizontalLayout">
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
           <property name="leftMargin">
            <number>20</number>
           </property>
@@ -441,7 +389,7 @@
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="bottomLayout" stretch="0,0,0,0">
+    <layout class="QHBoxLayout" name="bottomLayou" stretch="0,0">
      <property name="spacing">
       <number>6</number>
      </property>
@@ -471,7 +419,7 @@
       </widget>
      </item>
      <item>
-      <spacer name="horizontalSpacer1">
+      <spacer name="horizontalSpacer">
        <property name="orientation">
         <enum>Qt::Orientation::Horizontal</enum>
        </property>
@@ -485,35 +433,6 @@
         </size>
        </property>
       </spacer>
-     </item>
-     <item>
-      <widget class="QLabel" name="interlockTypeLabel">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="text">
-        <string>Interlock</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QComboBox" name="interlockTypeComboBox">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="minimumSize">
-        <size>
-         <width>0</width>
-         <height>30</height>
-        </size>
-       </property>
-      </widget>
      </item>
     </layout>
    </item>

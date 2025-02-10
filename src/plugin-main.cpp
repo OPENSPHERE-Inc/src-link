@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <util/platform.h>
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -30,20 +31,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
 #include "UI/egress-link-dock.hpp"
+#include "UI/ws-portal-dock.hpp"
+#include "ws-portal/event-handler.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 
 #define SRC_LINK_EGRESS_DOCK_ID "SRCLinkDock"
+#define WS_PORTAL_DOCK_ID "WsPortalDock"
 
 extern obs_source_info createLinkedSourceInfo();
 
 SettingsDialog *settingsDialog = nullptr;
-SRCLinkSettingsStore *settingsStore = nullptr;
 SRCLinkApiClient *apiClient = nullptr;
 EgressLinkDock *egressLinkDock = nullptr;
+WsPortalDock *wsPortalDock = nullptr;
 
 obs_source_info ingressLinkSourceInfo;
+os_cpu_usage_info_t *cpuUsageInfo;
 
 void registerEgressLinkDock()
 {
@@ -62,6 +67,26 @@ void unregisterEgressLinkDock()
         // The instance will be deleted by OBS (Do not call delete manually!)
         obs_frontend_remove_dock(SRC_LINK_EGRESS_DOCK_ID);
         egressLinkDock = nullptr;
+    }
+}
+
+void registerWsPortalDock()
+{
+    auto mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+    if (mainWindow) {
+        if (!wsPortalDock) {
+            wsPortalDock = new WsPortalDock(apiClient, mainWindow);
+            obs_frontend_add_dock_by_id(WS_PORTAL_DOCK_ID, obs_module_text("WsPortalDock"), wsPortalDock);
+        }
+    }
+}
+
+void unregisterWsPortalDock()
+{
+    if (wsPortalDock) {
+        // The instance will be deleted by OBS (Do not call delete manually!)
+        obs_frontend_remove_dock(WS_PORTAL_DOCK_ID);
+        wsPortalDock = nullptr;
     }
 }
 
@@ -86,6 +111,9 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
+    // Initialize the cpu stats
+    cpuUsageInfo = os_cpu_usage_info_start();
+
     apiClient = new SRCLinkApiClient();
 
     obs_frontend_add_event_callback(frontendEventCallback, nullptr);
@@ -105,13 +133,21 @@ bool obs_module_load(void)
 
         // Dock
         registerEgressLinkDock();
+        registerWsPortalDock();
 
         /*
         if (apiClient->isLoggedIn()) {
             registerEgressLinkDock();
+            registerWsPortalDock();
         }
-        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() { registerEgressLinkDock(); });
-        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() { unregisterEgressLinkDock(); });
+        QObject::connect(apiClient, &SRCLinkApiClient::loginSucceeded, []() {
+            registerEgressLinkDock();
+            unregisterWsPortalDock();
+        });
+        QObject::connect(apiClient, &SRCLinkApiClient::logoutSucceeded, []() {
+            unregisterEgressLinkDock();
+            unregisterWsPortalDock();
+        });
         */
     }
 
@@ -128,5 +164,23 @@ void obs_module_unload(void)
 {
     delete apiClient;
     apiClient = nullptr;
+
+    WsPortalEventHandler::destroyInstance();
+
+    // Destroy the cpu stats
+    os_cpu_usage_info_destroy(cpuUsageInfo);
+
     obs_log(LOG_INFO, "plugin unloaded");
+}
+
+//--- Implementation for OBS WebSocket lib ---//
+
+bool IsDebugEnabled()
+{
+    return false;
+}
+
+os_cpu_usage_info_t *GetCpuUsageInfo()
+{
+    return cpuUsageInfo;
 }

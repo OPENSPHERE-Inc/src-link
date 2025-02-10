@@ -418,13 +418,13 @@ obs_properties_t *IngressLinkSource::getProperties()
     // Connection group -=> Reload button
     obs_properties_add_button2(
         connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
-        [](obs_properties_t *_props, obs_property_t *, void *param) {
+        [](obs_properties_t *, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
                 QObject::connect(
                     invoker, &RequestInvoker::finished,
-                    [ingressLinkSource, _props](QNetworkReply::NetworkError, QByteArray) {
+                    [ingressLinkSource](QNetworkReply::NetworkError, QByteArray) {
                         // Reload source properties
                         OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
                         obs_frontend_open_source_properties(source);

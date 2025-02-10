@@ -75,6 +75,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/")
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
 #define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
+#define WS_PORTALS_PAGE (FRONTEND_SERVER "/ws-portals")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -173,21 +174,45 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         client, SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
         SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
     );
+
     connect(websocket, SIGNAL(ready(bool)), this, SLOT(onWebSocketReady(bool)));
     connect(websocket, SIGNAL(aborted(const QString &)), this, SLOT(onWebSocketAborted(const QString &)));
     connect(websocket, SIGNAL(disconnected()), this, SLOT(onWebSocketDisconnected()));
     connect(
-        websocket, SIGNAL(added(const QString &, const QString &, const QJsonObject &)), this,
-        SLOT(onWebSocketDataChanged(const QString &, const QString &, const QJsonObject &))
+        websocket, SIGNAL(added(const WebSocketMessage &)), this, SLOT(onWebSocketDataChanged(const WebSocketMessage &))
     );
     connect(
-        websocket, SIGNAL(changed(const QString &, const QString &, const QJsonObject &)), this,
-        SLOT(onWebSocketDataChanged(const QString &, const QString &, const QJsonObject &))
+        websocket, SIGNAL(changed(const WebSocketMessage &)), this,
+        SLOT(onWebSocketDataChanged(const WebSocketMessage &))
     );
     connect(
-        websocket, SIGNAL(removed(const QString &, const QString &, const QJsonObject &)), this,
-        SLOT(onWebSocketDataRemoved(const QString &, const QString &, const QJsonObject &))
+        websocket, SIGNAL(removed(const WebSocketMessage &)), this,
+        SLOT(onWebSocketDataRemoved(const WebSocketMessage &))
     );
+    connect(
+        websocket, &SRCLinkWebSocketClient::subscribed, this,
+        [this](const QString &name, const QJsonObject &payload) { emit webSocketSubscribeSucceeded(name, payload); }
+    );
+    connect(
+        websocket, &SRCLinkWebSocketClient::unsubscribed, this,
+        [this](const QString &name, const QJsonObject &payload) { emit webSocketUnsubscribeSucceeded(name, payload); }
+    );
+    connect(
+        websocket, &SRCLinkWebSocketClient::subscribeFailed, this,
+        [this](const QString &name, const QJsonObject &payload) { emit webSocketSubscribeFailed(name, payload); }
+    );
+    connect(
+        websocket, &SRCLinkWebSocketClient::unsubscribeFailed, this,
+        [this](const QString &name, const QJsonObject &payload) { emit webSocketUnsubscribeFailed(name, payload); }
+    );
+    connect(websocket, &SRCLinkWebSocketClient::invoked, this, [this](const QString &name, const QJsonObject &payload) {
+        emit webSocketInvokeSucceeded(name, payload);
+    });
+    connect(
+        websocket, &SRCLinkWebSocketClient::invokeFailed, this,
+        [this](const QString &name, const QJsonObject &payload) { emit webSocketInvokeFailed(name, payload); }
+    );
+
     connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
             putUplink(settings->getForceConnection());
@@ -207,7 +232,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
                 return;
             }
 
-            syncOnlineResources();
+            //syncOnlineResources(); // Now received by WebSocket
             connect(
                 putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
                 [this](QNetworkReply::NetworkError) {
@@ -291,6 +316,7 @@ void SRCLinkApiClient::clearOnlineResources()
     participants = PartyEventParticipantArray();
     stages = StageArray();
     uplink = UplinkInfo();
+    wsPortals = WsPortalArray();
     downlinks.clear();
     settings->setParticipantId("");
     settings->setPartyId("");
@@ -597,7 +623,7 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument(params).toJson());
+    invoker->put(req, QJsonDocument(params).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -640,7 +666,7 @@ const RequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceU
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument().toJson());
+    invoker->put(req, QJsonDocument().toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -720,7 +746,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
         emit putUplinkSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson());
+    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -764,7 +790,7 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
         emit putUplinkStatusSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson());
+    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -815,7 +841,7 @@ void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &im
     auto bufferPtr = imageBuffer.data().constData();
     payload["body"] = json::binary_t(std::vector<uint8_t>(bufferPtr, bufferPtr + imageBuffer.data().size()));
 
-    websocket->invoke("screenshots.put", payload);
+    websocket->invokeBin("screenshots.put", payload);
 }
 
 void SRCLinkApiClient::getPicture(const QString &pictureId)
@@ -856,6 +882,11 @@ void SRCLinkApiClient::openSignupPage()
     QDesktopServices::openUrl(QUrl(SIGNUP_PAGE));
 }
 
+void SRCLinkApiClient::openWsPortalsPage()
+{
+    QDesktopServices::openUrl(QUrl(WS_PORTALS_PAGE));
+}
+
 void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
@@ -882,7 +913,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
                     return;
                 }
 
-                syncOnlineResources();
+                //syncOnlineResources(); // Now received by WebSocket
                 connect(
                     putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
                     [this](QNetworkReply::NetworkError) {
@@ -929,12 +960,17 @@ void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
 void SRCLinkApiClient::onWebSocketReady(bool reconnect)
 {
     API_LOG("WebSocket is ready.");
-    websocket->subscribe("uplink", {{"uuid", uuid}});
-    websocket->subscribe("stages");
-    websocket->subscribe("participants");
-    websocket->subscribe("accounts");
+    // The account info will be received by requestAccountInfo() except on reconnecting
+    websocket->subscribe("accounts", {{"initial_data", reconnect}});
+    // The uplink will be received by WebSocket except on reconnecting
+    websocket->subscribe("uplink", {{"uuid", uuid}, {"initial_data", !reconnect}});
+
+    websocket->subscribe("stages", {{"initial_data", true}});
+    websocket->subscribe("participants", {{"initial_data", true}});
+    websocket->subscribe("ws-portals", {{"initial_data", true}});
 
     foreach (auto sourceUuid, downlinks.keys()) {
+        // The downlink wil be received by putDownlinkStatus()
         websocket->subscribe("downlink", {{"uuid", sourceUuid}});
 
         if (reconnect) {
@@ -943,12 +979,12 @@ void SRCLinkApiClient::onWebSocketReady(bool reconnect)
     }
 
     if (reconnect) {
-        requestAccountInfo();
-        syncOnlineResources();
+        //requestAccountInfo(); // Now received by WebSocket
+        //syncOnlineResources(); // Now received by WebSocket
         syncUplinkStatus(true);
     }
 
-    emit webSocketReady(reconnect);
+    emit ready(reconnect);
 }
 
 void SRCLinkApiClient::onWebSocketAborted(const QString &reason)
@@ -965,191 +1001,227 @@ void SRCLinkApiClient::onWebSocketDisconnected()
     emit webSocketDisconnected();
 }
 
-void SRCLinkApiClient::onWebSocketDataChanged(const QString &name, const QString &id, const QJsonObject &payload)
+void SRCLinkApiClient::onWebSocketDataChanged(const WebSocketMessage &message)
 {
-    API_LOG("WebSocket data changed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
+    auto name = message.getName();
+    auto id = message.getId();
+    auto payload = message.getPayload();
+    API_LOG("WebSocket data changed: %s,%s,%d", qUtf8Printable(name), qUtf8Printable(id), message.getContinuous());
 
-    if (name == "uplink.allocations") {
-        StageSeatAllocation newAllocation = payload;
-        if (!newAllocation.isValid()) {
-            ERROR_LOG("Malformed allocation data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
+    blockSignals(message.getContinuous());
+    [&]() {
+        if (name == "uplink.allocations") {
+            StageSeatAllocation newAllocation = payload;
+            if (!newAllocation.isValid()) {
+                ERROR_LOG("Malformed allocation data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
 
-        uplink.setAllocation(newAllocation);
-        emit uplinkReady(uplink);
-
-    } else if (name == "uplink.stages") {
-        Stage newStage = payload;
-        if (!newStage.isValid()) {
-            ERROR_LOG("Malformed stage data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        uplink.setStage(newStage);
-        emit uplinkReady(uplink);
-
-    } else if (name == "uplink.connections") {
-        StageConnection newConnection = payload;
-        if (!newConnection.isValid()) {
-            ERROR_LOG("Malformed connection data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        auto connections = uplink.getConnections();
-        auto index =
-            connections.findIndex([id](const StageConnection &connection) { return connection.getId() == id; });
-        if (index >= 0) {
-            connections.replace(index, newConnection);
-        } else {
-            connections.append(newConnection);
-        }
-        uplink["connections"] = connections;
-        emit uplinkReady(uplink);
-
-    } else if (name == "downlink.connections") {
-        StageConnection newConnection = payload;
-        if (!newConnection.isValid()) {
-            ERROR_LOG("Malformed connection data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        downlinks[id]["connection"] = newConnection;
-        emit downlinkReady(downlinks[id]);
-
-    } else if (name == "stages") {
-        Stage newStage = payload;
-        if (!newStage.isValid()) {
-            ERROR_LOG("Malformed stage data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        auto index = stages.findIndex([id](const Stage &stage) { return stage.getId() == id; });
-        if (index >= 0) {
-            stages.replace(index, newStage);
-        } else {
-            stages.append(newStage);
-        }
-        emit stagesReady(stages);
-
-    } else if (name == "participants") {
-        PartyEventParticipant newParticipant = payload;
-        if (!newParticipant.isValid()) {
-            ERROR_LOG("Malformed participant data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
-            return participant.getId() == id;
-        });
-        if (index >= 0) {
-            participants.replace(index, newParticipant);
-        } else {
-            participants.append(newParticipant);
-        }
-        emit participantsReady(participants);
-
-    } else if (name == "accounts") {
-        Account newAccount = payload;
-        if (!newAccount.isValid()) {
-            ERROR_LOG("Malformed account data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        accountInfo.setAccount(newAccount);
-        emit accountInfoReady(accountInfo);
-
-    } else if (name == "accounts.licenses") {
-        SubscriptionLicense newLicense = payload;
-        if (!newLicense.isValid()) {
-            ERROR_LOG("Malformed license data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        auto emitLicenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().getLicenseValid() !=
-                                                                newLicense.getLicenseValid();
-
-        accountInfo.setSubscriptionLicense(newLicense);
-        emit accountInfoReady(accountInfo);
-
-        if (emitLicenseChanged) {
-            emit licenseChanged(newLicense);
-        }
-
-    } else if (name == "accounts.resourceUsage") {
-        AccountResourceUsage newResourceUsage = payload;
-        if (!newResourceUsage.isValid()) {
-            ERROR_LOG("Malformed resource usage data received.");
-            API_LOG("dump=%s", dumpJsonObject(payload).c_str());
-            return;
-        }
-
-        accountInfo.setResourceUsage(newResourceUsage);
-        emit accountInfoReady(accountInfo);
-    }
-}
-
-void SRCLinkApiClient::onWebSocketDataRemoved(const QString &name, const QString &id, const QJsonObject &)
-{
-    API_LOG("WebSocket data removed: %s,%s", qUtf8Printable(name), qUtf8Printable(id));
-
-    if (name == "uplink.allocations") {
-        if (uplink.getAllocation().getId() == id) {
-            uplink.remove("allocation");
+            uplink.setAllocation(newAllocation);
             emit uplinkReady(uplink);
-        }
 
-    } else if (name == "uplink.stages") {
-        if (uplink.getStage().getId() == id) {
-            uplink.remove("stage");
+        } else if (name == "uplink.stages") {
+            Stage newStage = payload;
+            if (!newStage.isValid()) {
+                ERROR_LOG("Malformed stage data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            uplink.setStage(newStage);
             emit uplinkReady(uplink);
-        }
 
-    } else if (name == "uplink.connections") {
-        auto connections = uplink.getConnections();
-        auto index =
-            connections.findIndex([id](const StageConnection &connection) { return connection.getId() == id; });
-        if (index >= 0) {
-            connections.removeAt(index);
+        } else if (name == "uplink.connections") {
+            StageConnection newConnection = payload;
+            if (!newConnection.isValid()) {
+                ERROR_LOG("Malformed connection data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            auto connections = uplink.getConnections();
+            auto index =
+                connections.findIndex([id](const StageConnection &connection) { return connection.getId() == id; });
+            if (index >= 0) {
+                connections.replace(index, newConnection);
+            } else {
+                connections.append(newConnection);
+            }
             uplink["connections"] = connections;
             emit uplinkReady(uplink);
-        }
 
-    } else if (name == "downlink.connections") {
-        if (downlinks.contains(id)) {
-            downlinks.remove(id);
-            emit deleteDownlinkSucceeded(id);
-        }
+        } else if (name == "downlink.connections") {
+            StageConnection newConnection = payload;
+            if (!newConnection.isValid()) {
+                ERROR_LOG("Malformed connection data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
 
-    } else if (name == "stages") {
-        auto index = stages.findIndex([id](const Stage &stage) { return stage.getId() == id; });
-        if (index >= 0) {
-            stages.removeAt(index);
+            downlinks[id]["connection"] = newConnection;
+            emit downlinkReady(downlinks[id]);
+
+        } else if (name == "stages") {
+            Stage newStage = payload;
+            if (!newStage.isValid()) {
+                ERROR_LOG("Malformed stage data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            auto index = stages.findIndex([id](const Stage &stage) { return stage.getId() == id; });
+            if (index >= 0) {
+                stages.replace(index, newStage);
+            } else {
+                stages.append(newStage);
+            }
             emit stagesReady(stages);
-        }
 
-    } else if (name == "participants") {
-        auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
-            return participant.getId() == id;
-        });
-        if (index >= 0) {
-            participants.removeAt(index);
+        } else if (name == "participants") {
+            PartyEventParticipant newParticipant = payload;
+            if (!newParticipant.isValid()) {
+                ERROR_LOG("Malformed participant data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
+                return participant.getId() == id;
+            });
+            if (index >= 0) {
+                participants.replace(index, newParticipant);
+            } else {
+                participants.append(newParticipant);
+            }
             emit participantsReady(participants);
+
+        } else if (name == "accounts") {
+            Account newAccount = payload;
+            if (!newAccount.isValid()) {
+                ERROR_LOG("Malformed account data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            accountInfo.setAccount(newAccount);
+            emit accountInfoReady(accountInfo);
+
+        } else if (name == "accounts.licenses") {
+            SubscriptionLicense newLicense = payload;
+            if (!newLicense.isValid()) {
+                ERROR_LOG("Malformed license data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            auto emitLicenseChanged = !accountInfo.isEmpty() && accountInfo.getSubscriptionLicense().getLicenseValid(
+                                                                ) != newLicense.getLicenseValid();
+
+            accountInfo.setSubscriptionLicense(newLicense);
+            emit accountInfoReady(accountInfo);
+
+            if (emitLicenseChanged) {
+                emit licenseChanged(newLicense);
+            }
+
+        } else if (name == "accounts.resourceUsage") {
+            AccountResourceUsage newResourceUsage = payload;
+            if (!newResourceUsage.isValid()) {
+                ERROR_LOG("Malformed resource usage data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            accountInfo.setResourceUsage(newResourceUsage);
+            emit accountInfoReady(accountInfo);
+
+        } else if (name == "ws-portals") {
+            WsPortal newPortal = payload;
+            if (!newPortal.isValid()) {
+                ERROR_LOG("Malformed portal data received.");
+                API_LOG("dump=%s", dumpJsonObject(payload).c_str());
+                return;
+            }
+
+            auto index = wsPortals.findIndex([id](const WsPortal &portal) { return portal.getId() == id; });
+            if (index >= 0) {
+                wsPortals.replace(index, newPortal);
+            } else {
+                wsPortals.append(newPortal);
+            }
+            emit wsPortalsReady(wsPortals);
         }
+    }();
+    blockSignals(false);
+}
 
-    } else if (name == "accounts.licenses" || name == "accounts.resourceUsage") {
-        // Do nothing
+void SRCLinkApiClient::onWebSocketDataRemoved(const WebSocketMessage &message)
+{
+    auto name = message.getName();
+    auto id = message.getId();
+    API_LOG("WebSocket data removed: %s,%s,%d", qUtf8Printable(name), qUtf8Printable(id), message.getContinuous());
 
-    } else if (name == "accounts") {
-        // Account removed -> logout immediately
-        logout();
-    }
+    blockSignals(message.getContinuous());
+    [&]() {
+        if (name == "uplink.allocations") {
+            if (uplink.getAllocation().getId() == id) {
+                uplink.remove("allocation");
+                emit uplinkReady(uplink);
+            }
+
+        } else if (name == "uplink.stages") {
+            if (uplink.getStage().getId() == id) {
+                uplink.remove("stage");
+                emit uplinkReady(uplink);
+            }
+
+        } else if (name == "uplink.connections") {
+            auto connections = uplink.getConnections();
+            auto index =
+                connections.findIndex([id](const StageConnection &connection) { return connection.getId() == id; });
+            if (index >= 0) {
+                connections.removeAt(index);
+                uplink["connections"] = connections;
+                emit uplinkReady(uplink);
+            }
+
+        } else if (name == "downlink.connections") {
+            if (downlinks.contains(id)) {
+                downlinks.remove(id);
+                emit downlinkReady(downlinks[id]);
+            }
+
+        } else if (name == "stages") {
+            auto index = stages.findIndex([id](const Stage &stage) { return stage.getId() == id; });
+            if (index >= 0) {
+                stages.removeAt(index);
+                emit stagesReady(stages);
+            }
+
+        } else if (name == "participants") {
+            auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
+                return participant.getId() == id;
+            });
+            if (index >= 0) {
+                participants.removeAt(index);
+                emit participantsReady(participants);
+            }
+
+        } else if (name == "accounts.licenses" || name == "accounts.resourceUsage") {
+            // Do nothing
+
+        } else if (name == "accounts") {
+            // Account removed -> logout immediately
+            logout();
+
+        } else if (name == "ws-portals") {
+            auto index = wsPortals.findIndex([id](const WsPortal &portal) { return portal.getId() == id; });
+            if (index >= 0) {
+                wsPortals.removeAt(index);
+                emit wsPortalsReady(wsPortals);
+            }
+        }
+    }();
+    blockSignals(false);
 }

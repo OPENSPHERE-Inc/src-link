@@ -1102,21 +1102,25 @@ public:
     inline void setId(const QString &value) { insert("id", value); }
     inline QJsonObject getPayload() const { return value("payload").toObject(); }
     inline void setPayload(const QJsonObject &value) { insert("payload", value); }
+    inline bool getContinuous() const { return value("continuous").toBool(); }
+    inline void setContinuous(bool value) { insert("continuous", value); }
 
     inline bool isValid() const
     {
         auto validEvent = (*this)["event"].isString();
         auto validReason = maybe((*this)["reason"], (*this)["reason"].isString());
-        auto validName = (*this)["name"].isString();
-        auto validId = (*this)["id"].isString();
+        auto validName = maybe((*this)["name"], (*this)["name"].isString());
+        auto validId = maybe((*this)["id"], (*this)["id"].isString());
         auto validPayload = maybe((*this)["payload"], (*this)["payload"].isObject());
+        auto validContinuous = maybe((*this)["continuous"], (*this)["continuous"].isBool());
 
-        auto valid = validEvent && validReason && validName && validId && validPayload;
+        auto valid = validEvent && validReason && validName && validId && validPayload && validContinuous;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "WebSocketMessage: event=%d, reason=%d, name=%d, id=%d, payload=%d",
-            validEvent, validReason, validName, validId, validPayload
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "WebSocketMessage: event=%d, reason=%d, name=%d, id=%d, payload=%d, continuous=%d", validEvent, validReason,
+            validName, validId, validPayload, validContinuous
         );
 #endif
 
@@ -1189,6 +1193,135 @@ public:
             validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
             validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision,
             validLanServer
+        );
+#endif
+
+        return valid;
+    }
+};
+
+class WsPortalFacilityView : public QJsonObject {
+public:
+    WsPortalFacilityView() = default;
+    WsPortalFacilityView(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getAddress() const { return value("address").toString(); }
+    inline void setAddress(const QString &value) { insert("address", value); }
+    inline int getPort() const { return value("port").toInt(); }
+    inline void setPort(int value) { insert("port", value); }
+    inline int getTlsPort() const { return value("tls_port").toInt(); }
+    inline void setTlsPort(int value) { insert("tls_port", value); }
+
+    inline QString getHost() const
+    {
+        // The host always has "api" subdomain added to the address
+        return QString("api.%1").arg(getAddress());
+    }
+
+    inline QString getHostAndPort() const
+    {
+        return QString("%1:%2").arg(getHost()).arg(getTlsPort() ? getTlsPort() : getPort());
+    }
+
+    inline QString getUrl() const { return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getHostAndPort()); }
+
+    inline bool isValid() const
+    {
+        auto validAddress = (*this)["address"].isString();
+        auto validPort = (*this)["port"].isDouble();
+        auto validTlsPort = maybe((*this)["tls_port"], (*this)["tls_port"].isDouble());
+
+        auto valid = validAddress && validPort && validTlsPort;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "WsPortalFacilityView: address=%d, port=%d, tls_port=%d", validAddress,
+            validPort, validTlsPort
+        );
+#endif
+
+        return valid;
+    }
+};
+
+class WsPortal : public QJsonObject {
+public:
+    WsPortal() = default;
+    WsPortal(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getName() const { return value("name").toString(); }
+    inline void setName(const QString &value) { insert("name", value); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QString getPictureId() const { return value("picture_id").toString(); }
+    inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
+    inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
+    inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
+    inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
+    inline int getEventSubscriptions() const { return value("event_subscriptions").toInt(); }
+    inline void setEventSubscriptions(int value) { insert("event_subscriptions", value); }
+    inline QString getFacilityId() const { return value("facility_id").toString(); }
+    inline void setFacilityId(const QString &value) { insert("facility_id", value); }
+    inline WsPortalFacilityView getFacilityView() const { return value("facility_view").toObject(); }
+    inline void setFacilityView(const WsPortalFacilityView &value) { insert("facility_view", value); }
+
+    inline bool isValid() const
+    {
+        auto validId = (*this)["_id"].isString();
+        auto validName = (*this)["name"].isString();
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validEventSubscriptions = maybe((*this)["event_subscriptions"], (*this)["event_subscriptions"].isDouble());
+
+        auto validOwnerAccountView = getOwnerAccountView().isValid();
+        auto validOwnerUserId = (*this)["owner_user_id"].isString();
+        auto validFacilityId = (*this)["facility_id"].isString();
+        auto validFacilityView = maybe((*this)["facility_view"], getFacilityView().isValid());
+
+        auto valid = validId && validName && validDescription && validPictureId && validEventSubscriptions &&
+                     validOwnerAccountView && validOwnerUserId && validFacilityId && validFacilityView;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "Party: _id=%d, name=%d, description=%d, picture_id=%d, event_subscriptions=%d owner_account_view=%d, "
+            "owner_user_id=%d, facility_id=%d, facility_view=%d",
+            validId, validName, validDescription, validPictureId, validEventSubscriptions, validOwnerAccountView,
+            validOwnerUserId, validFacilityId, validFacilityView
+        );
+#endif
+
+        return valid;
+    }
+};
+
+typedef TypedJsonArray<WsPortal> WsPortalArray;
+
+class WsPortalMessage : public WebSocketMessage {
+public:
+    WsPortalMessage() = default;
+    WsPortalMessage(const QJsonObject &_json) : WebSocketMessage(_json) {}
+
+    inline QString getConnectionId() const { return value("connection_id").toString(); }
+    inline void setConnectionId(const QString &value) { insert("connection_id", value); }
+    inline QString getWsPortalId() const { return value("ws_portal_id").toString(); }
+    inline void setWsPortalId(const QString &value) { insert("ws_portal_id", value); }
+
+    inline bool isValid() const
+    {
+        auto validMessage = WebSocketMessage::isValid();
+        auto validConnectionId = (*this)["connection_id"].isString();
+        auto validWsPortalId = (*this)["ws_portal_id"].isString();
+
+        auto valid = validMessage && validConnectionId && validWsPortalId;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "WsPortalMessage: message=%d, connection_id=%d, ws_portal_id=%d",
+            validMessage, validConnectionId, validWsPortalId
         );
 #endif
 

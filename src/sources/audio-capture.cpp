@@ -115,6 +115,6 @@ void SourceAudioCapture::onSourceAudio(void *param, obs_source_t *source, const 
         return;
     }
 
-    auto sourceCapture = (SourceAudioCapture *)param;
+    auto sourceCapture = static_cast<SourceAudioCapture *>(param);
     sourceCapture->pushAudio(audioData, source);
 }
