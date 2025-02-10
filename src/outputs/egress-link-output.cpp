@@ -33,6 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_JSON_NAME "output.json"
 #define OUTPUT_MONITORING_INTERVAL_MSECS 1000
 #define OUTPUT_RETRY_TIMEOUT_MSECS 3500
+#define OUTPUT_START_DELAY_MSECS 1000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
 
 inline audio_t *createSilenceAudio()
@@ -763,14 +764,17 @@ audio_t *EgressLinkOutput::createAudio(QString audioSourceUuid)
 bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
 {
     // Service : always use rtmp_custom
-    service = obs_service_create("rtmp_custom", qUtf8Printable(name), egressSettings, nullptr);
+    service =
+        obs_service_create("rtmp_custom", qUtf8Printable(QString("%1.Service").arg(name)), egressSettings, nullptr);
     if (!service) {
         obs_log(LOG_ERROR, "%s: Failed to create service", qUtf8Printable(name));
         return false;
     }
 
     // Output : always use ffmpeg_mpegts_muxer
-    streamingOutput = obs_output_create("ffmpeg_mpegts_muxer", qUtf8Printable(name), egressSettings, nullptr);
+    streamingOutput = obs_output_create(
+        "ffmpeg_mpegts_muxer", qUtf8Printable(QString("%1.Streaming").arg(name)), egressSettings, nullptr
+    );
     if (!streamingOutput) {
         obs_log(LOG_ERROR, "%s: Failed to create streaming output", qUtf8Printable(name));
         return false;
@@ -794,7 +798,8 @@ bool EgressLinkOutput::createRecordingOutput(obs_data_t *egressSettings)
 
     // No abort happen even if failed to create output
     OBSDataAutoRelease recordingSettings = createRecordingSettings(egressSettings);
-    recordingOutput = obs_output_create(outputId, qUtf8Printable(name), recordingSettings, nullptr);
+    recordingOutput =
+        obs_output_create(outputId, qUtf8Printable(QString("%1.Recording").arg(name)), recordingSettings, nullptr);
     if (!recordingOutput) {
         obs_log(LOG_ERROR, "%s: Failed to create recording output", qUtf8Printable(name));
         return false;
@@ -812,7 +817,9 @@ bool EgressLinkOutput::createVideoEncoder(obs_data_t *egressSettings, video_t *v
         return false;
     }
     obs_log(LOG_DEBUG, "%s: Video encoder: %s", qUtf8Printable(name), videoEncoderId);
-    videoEncoder = obs_video_encoder_create(videoEncoderId, qUtf8Printable(name), egressSettings, nullptr);
+    videoEncoder = obs_video_encoder_create(
+        videoEncoderId, qUtf8Printable(QString("%1.VideoEncoder").arg(name)), egressSettings, nullptr
+    );
     if (!videoEncoder) {
         obs_log(LOG_ERROR, "%s: Failed to create video encoder: %s", qUtf8Printable(name), videoEncoderId);
         return false;
@@ -851,8 +858,9 @@ bool EgressLinkOutput::createAudioEncoder(obs_data_t *egressSettings, QString au
         obs_log(LOG_DEBUG, "%s: Audio source: Master track %d", qUtf8Printable(name), value);
     }
 
-    audioEncoder =
-        obs_audio_encoder_create(audioEncoderId, qUtf8Printable(name), audioEncoderSettings, audioTrack, nullptr);
+    audioEncoder = obs_audio_encoder_create(
+        audioEncoderId, qUtf8Printable(QString("%1.AudioEncoder").arg(name)), audioEncoderSettings, audioTrack, nullptr
+    );
     if (!audioEncoder) {
         obs_log(LOG_ERROR, "%s: Failed to create audio encoder: %s", qUtf8Printable(name), audioEncoderId);
         return false;
@@ -1008,23 +1016,44 @@ void EgressLinkOutput::start()
 
         //--- Start recording output ---//
         if (reconstructPipeline && recordingOutput) {
-            obs_output_set_video_encoder(recordingOutput, videoEncoder);
-            obs_output_set_audio_encoder(recordingOutput, audioEncoder, 0); // Don't support multiple audio outputs
-
-            if (!obs_output_start(recordingOutput)) {
-                obs_log(LOG_ERROR, "%s: Failed to start recording output", qUtf8Printable(name));
-                setRecordingStatus(RECORDING_OUTPUT_STATUS_ERROR);
-            } else {
-                if (source) {
-                    obs_source_inc_showing(source);
-                }
-                obs_log(LOG_INFO, "%s: Activated recording output", qUtf8Printable(name));
-                setRecordingStatus(RECORDING_OUTPUT_STATUS_ACTIVE);
-            }
+            // Starts recording output later
+            setRecordingStatus(RECORDING_OUTPUT_STATUS_ACTIVATING);
         }
 
         //--- Start streaming output ---//
         if (reconstructPipeline && streamingOutput) {
+            // Save current timestamp to reduce reconnection with timeout
+            connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
+            // Starts streaming output later
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVATING);
+
+            /*
+            obs_output_set_video_encoder(streamingOutput, videoEncoder);
+            obs_output_set_audio_encoder(streamingOutput, audioEncoder, 0); // Don't support multiple audio outputs
+
+            if (!obs_output_start(streamingOutput)) {
+                obs_log(LOG_ERROR, "%s: Failed to start streaming output", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+            } else {
+                if (source) {
+                    obs_source_inc_showing(source);
+                }
+                obs_log(LOG_INFO, "%s: Activated streaming output", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
+                apiClient->incrementActiveOutputs();
+            }
+            */
+        }
+    }();
+    apiClient->syncUplinkStatus();
+    locker.unlock();
+}
+
+void EgressLinkOutput::startStreaming()
+{
+    QMutexLocker locker(&outputMutex);
+    [&]() {
+        if (streamingOutput) {
             // Save current timestamp to reduce reconnection with timeout
             connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
@@ -1045,6 +1074,29 @@ void EgressLinkOutput::start()
         }
     }();
     apiClient->syncUplinkStatus();
+    locker.unlock();
+}
+
+void EgressLinkOutput::startRecording()
+{
+    QMutexLocker locker(&outputMutex);
+    [&]() {
+        if (recordingOutput) {
+            obs_output_set_video_encoder(recordingOutput, videoEncoder);
+            obs_output_set_audio_encoder(recordingOutput, audioEncoder, 0); // Don't support multiple audio outputs
+
+            if (!obs_output_start(recordingOutput)) {
+                obs_log(LOG_ERROR, "%s: Failed to start recording output", qUtf8Printable(name));
+                setRecordingStatus(RECORDING_OUTPUT_STATUS_ERROR);
+            } else {
+                if (source) {
+                    obs_source_inc_showing(source);
+                }
+                obs_log(LOG_INFO, "%s: Activated recording output", qUtf8Printable(name));
+                setRecordingStatus(RECORDING_OUTPUT_STATUS_ACTIVE);
+            }
+        }
+    }();
     locker.unlock();
 }
 
@@ -1176,7 +1228,24 @@ void EgressLinkOutput::onSnapshotTimerTimeout()
 void EgressLinkOutput::onMonitoringTimerTimeout()
 {
     auto interlockType = apiClient->getSettings()->value("interlock_type", DEFAULT_INTERLOCK_TYPE);
-    if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+
+    auto activateStreaming = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING;
+    auto activateRecording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVATING;
+
+    if (activateStreaming || activateRecording) {
+        // Prioritize activating output
+
+        if (QDateTime().currentMSecsSinceEpoch() - connectionAttemptingAt > OUTPUT_START_DELAY_MSECS) {
+            // Delaying at least OUTPUT_START_DELAY_MSECS after attempting activate
+            if (activateStreaming) {
+                startStreaming();
+            }
+            if (activateRecording) {
+                startRecording();
+            }
+        }
+
+    } else if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
         if (interlockType == "always_on") {
             start();
         } else if (interlockType == "streaming") {
@@ -1196,10 +1265,9 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
                 start();
             }
         }
-        return;
-    }
 
-    if (QDateTime().currentMSecsSinceEpoch() - connectionAttemptingAt > OUTPUT_RETRY_TIMEOUT_MSECS) {
+    } else if (QDateTime().currentMSecsSinceEpoch() - connectionAttemptingAt > OUTPUT_RETRY_TIMEOUT_MSECS) {
+        // Delaying at least OUTPUT_RETRY_TIMEOUT_MSECS after attempting start
         if (interlockType.isEmpty()) {
             // Always off
             stop();

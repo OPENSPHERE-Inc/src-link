@@ -127,6 +127,11 @@ void EgressLinkConnectionWidget::onVideoSourceChanged(int)
 void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus status)
 {
     switch (status) {
+    case EGRESS_LINK_OUTPUT_STATUS_ACTIVATING:
+        ui->statusValueLabel->setText(QTStr("Activating"));
+        ui->statusIconLabel->setVisible(true);
+        setThemeID(ui->statusValueLabel, "good", "text-success");
+        break;
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
         ui->statusValueLabel->setText(QTStr("Active"));
         ui->statusIconLabel->setVisible(true);
