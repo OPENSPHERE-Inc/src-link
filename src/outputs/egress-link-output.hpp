@@ -40,13 +40,15 @@ class OutputAudioSource;
 enum EgressLinkOutputStatus {
     EGRESS_LINK_OUTPUT_STATUS_INACTIVE,
     EGRESS_LINK_OUTPUT_STATUS_STAND_BY,
+    EGRESS_LINK_OUTPUT_STATUS_ACTIVATING,
     EGRESS_LINK_OUTPUT_STATUS_ACTIVE,
     EGRESS_LINK_OUTPUT_STATUS_ERROR,
-    EGRESS_LINK_OUTPUT_STATUS_DISABLED
+    EGRESS_LINK_OUTPUT_STATUS_DISABLED,
 };
 
 enum RecordingOutputStatus {
     RECORDING_OUTPUT_STATUS_INACTIVE,
+    RECORDING_OUTPUT_STATUS_ACTIVATING,
     RECORDING_OUTPUT_STATUS_ACTIVE,
     RECORDING_OUTPUT_STATUS_ERROR,
     RECORDING_OUTPUT_STATUS_DISABLED
@@ -88,7 +90,9 @@ class EgressLinkOutput : public QObject {
     obs_data_t *createRecordingSettings(obs_data_t *egressSettings);
     void setStatus(EgressLinkOutputStatus value);
     void setRecordingStatus(RecordingOutputStatus value);
+    void startStreaming();
     void restartStreaming();
+    void startRecording();
     void restartRecording();
     void retrieveConnection();
     bool createSource(QString sourceUuid);
