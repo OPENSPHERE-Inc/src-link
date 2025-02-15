@@ -1189,7 +1189,7 @@ void SRCLinkApiClient::onWebSocketDataRemoved(const WebSocketMessage &message)
         } else if (name == "downlink.connections") {
             if (downlinks.contains(id)) {
                 downlinks.remove(id);
-                emit downlinkReady(downlinks[id]);
+                emit downlinkRemoved(id);
             }
 
         } else if (name == "stages") {

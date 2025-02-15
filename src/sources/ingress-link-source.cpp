@@ -91,6 +91,7 @@ IngressLinkSource::IngressLinkSource(
     audioThread->start();
 
     connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
+    connect(apiClient, SIGNAL(downlinkRemoved(const QString &)), this, SLOT(onDeleteDownlinkSucceeded(const QString &)));
     connect(apiClient, SIGNAL(putDownlinkFailed(const QString &)), this, SLOT(onPutDownlinkFailed(const QString &)));
     connect(
         apiClient, SIGNAL(putDownlinkStatusFailed(const QString &)), this, SLOT(onPutDownlinkFailed(const QString &))
