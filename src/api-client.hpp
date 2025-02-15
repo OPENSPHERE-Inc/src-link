@@ -88,6 +88,7 @@ signals:
     void uplinkReady(const UplinkInfo &uplink);
     void uplinkFailed(const QString &uuid);
     void downlinkReady(const DownlinkInfo &downlink);
+    void downlinkRemoved(const QString &uuid);
     void downlinkFailed(const QString &uuid);
     void putDownlinkSucceeded(const DownlinkInfo &downlink);
     void putDownlinkFailed(const QString &uuid);
