@@ -4,11 +4,18 @@
 
 [<img src="./src-link_usage_image.jpg" />](./src-link_usage_image.jpg)
 
-## Features
+## Concept
 
-SRC-Link (Secure Reliable Controllable Link) introduces remote, multiperson, secure, reliable and efficient **orchestration method** to your [OBS Studio](https://obsproject.com/).
+The basic concept of the [OBS Studio](https://obsproject.com/) plug-in SRT-Link (Secure Reliable Controllable Link) is to turn OBS into a powerful video 
+transmitter and receiver.
 
-SRC-Link works with [SRC-Link Control Panel](https://src-link.live/introduction) Web service.
+OBS Studio offers a wide variety of inputs. There is an excellent game capture feature (unfortunately there is a little compatibility issue in OBS 31,
+but I expect it will be fixed in time).
+There are effects, overlays, and compositing capabilities. They can be enhanced with plug-ins. And since it is open source, OBS itself can be improved.
+
+What it doesn't have is the ability to send out multiple streams in a reliable manner and manage connections, which SRC-Link provides.
+
+SRC-Link is used with the web service [SRC-Link Control Panel](https://src-link.live/introduction).
 
 **Key features**
 

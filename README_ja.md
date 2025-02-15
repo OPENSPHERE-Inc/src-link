@@ -2,9 +2,15 @@
 
 [<img src="./src-link_usage_image.jpg" />](./src-link_usage_image.jpg)
 
-## Features
+## Concept
 
-SRC-Link (Secure Reliable Controllable Link) は、[OBS Studio](https://obsproject.com/) にリモートかつ多人数間で、安全で信頼性が高く効率的なオーケストレーション機能を追加します。
+[OBS Studio](https://obsproject.com/) プラグイン SRT-Link (Secure Reliable Controllable Link) の基本的なコンセプトは、
+OBS を強力な映像トランスミッター及びレシーバーに変えることです。
+
+OBS Studio には、多種多様なインプットがあります。秀逸なゲームキャプチャ―機能（残念ながら OBS 31 で少し互換性問題がありますが、いずれ修正されると思います）があります。
+エフェクトもオーバーレイもコンポジット機能もあります。プラグインでそれらを強化することもできます。更にオープンソースなので OBS 自体を改良することもできます。
+
+ただ、そこに無いのは、複数のストリームを安定して送出する機能と接続を管理する機能です。SRC-Link がそれらを提供します。
 
 SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.live/introduction) とともに使用します。
 
