@@ -159,6 +159,11 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
         ui->statusIconLabel->setVisible(false);
         setThemeID(ui->statusValueLabel, "", "");
         break;
+    case EGRESS_LINK_OUTPUT_STATUS_RECONNECTING:
+        ui->statusValueLabel->setText(QTStr("Reconnecting"));
+        ui->statusIconLabel->setVisible(false);
+        setThemeID(ui->statusValueLabel, "error", "text-danger");
+        break;
     }
 }
 

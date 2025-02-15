@@ -1026,23 +1026,6 @@ void EgressLinkOutput::start()
             connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
             // Starts streaming output later
             setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVATING);
-
-            /*
-            obs_output_set_video_encoder(streamingOutput, videoEncoder);
-            obs_output_set_audio_encoder(streamingOutput, audioEncoder, 0); // Don't support multiple audio outputs
-
-            if (!obs_output_start(streamingOutput)) {
-                obs_log(LOG_ERROR, "%s: Failed to start streaming output", qUtf8Printable(name));
-                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
-            } else {
-                if (source) {
-                    obs_source_inc_showing(source);
-                }
-                obs_log(LOG_INFO, "%s: Activated streaming output", qUtf8Printable(name));
-                setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
-                apiClient->incrementActiveOutputs();
-            }
-            */
         }
     }();
     apiClient->syncUplinkStatus();
@@ -1116,7 +1099,7 @@ void EgressLinkOutput::destroyPipeline()
     recordingOutput = nullptr;
 
     if (streamingOutput) {
-        if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+        if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
             if (source) {
                 obs_source_dec_showing(source);
             }
@@ -1149,7 +1132,7 @@ void EgressLinkOutput::destroyPipeline()
 
     if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
         apiClient->decrementStandByOutputs();
-    } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+    } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
         apiClient->decrementActiveOutputs();
     }
 
@@ -1177,14 +1160,14 @@ void EgressLinkOutput::restartStreaming()
 {
     QMutexLocker locker(&outputMutex);
     {
-        if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
-            connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
+        connectionAttemptingAt = QDateTime().currentMSecsSinceEpoch();
 
-            obs_output_force_stop(streamingOutput);
+        obs_output_force_stop(streamingOutput);
 
-            if (!obs_output_start(streamingOutput)) {
-                obs_log(LOG_ERROR, "%s: Failed to restart streaming output", qUtf8Printable(name));
-            }
+        if (!obs_output_start(streamingOutput)) {
+            obs_log(LOG_ERROR, "%s: Failed to restart streaming output", qUtf8Printable(name));
+        } else {
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_RECONNECTING);
         }
     }
     locker.unlock();
@@ -1194,12 +1177,10 @@ void EgressLinkOutput::restartRecording()
 {
     QMutexLocker locker(&outputMutex);
     {
-        if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE) {
-            obs_output_force_stop(recordingOutput);
+        obs_output_force_stop(recordingOutput);
 
-            if (!obs_output_start(recordingOutput)) {
-                obs_log(LOG_ERROR, "%s: Failed to restart recording output", qUtf8Printable(name));
-            }
+        if (!obs_output_start(recordingOutput)) {
+            obs_log(LOG_ERROR, "%s: Failed to restart recording output", qUtf8Printable(name));
         }
     }
     locker.unlock();
@@ -1231,6 +1212,9 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
 
     auto activateStreaming = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING;
     auto activateRecording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVATING;
+    auto streamingInactiveStatus = status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE &&
+                                   status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY &&
+                                   status != EGRESS_LINK_OUTPUT_STATUS_RECONNECTING;
 
     if (activateStreaming || activateRecording) {
         // Prioritize activating output
@@ -1245,7 +1229,7 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
             }
         }
 
-    } else if (status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE && status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+    } else if (streamingInactiveStatus) {
         if (interlockType == "always_on") {
             start();
         } else if (interlockType == "streaming") {
@@ -1311,14 +1295,20 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
         if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE && !recordingAlive) {
             obs_log(LOG_DEBUG, "%s: Attempting restart recording", qUtf8Printable(name));
             restartRecording();
-            return;
+            // Do not end turn here
         }
 
-        if (!streamingAlive && status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+        if (!streamingAlive &&
+            (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING)) {
             // Reconnect
             obs_log(LOG_DEBUG, "%s: Attempting restart output", qUtf8Printable(name));
             restartStreaming();
             return;
+        }
+
+        if (streamingAlive && status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
+            // Reconnected
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
         }
 
         if (source && (!isSourceAvailable(source) || !isSourceAvailable(source))) {
