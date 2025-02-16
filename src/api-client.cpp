@@ -72,7 +72,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 // Control Panel Pages
 #define AUTHORIZE_URL (FRONTEND_SERVER "/oauth2/authorize")
 #define STAGES_PAGE_URL (FRONTEND_SERVER "/receivers")
-#define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/")
+#define CONTROL_PANEL_PAGE_URL (FRONTEND_SERVER "/dashboard")
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
 #define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
 #define WS_PORTALS_PAGE (FRONTEND_SERVER "/ws-portals")

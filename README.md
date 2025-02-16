@@ -19,6 +19,13 @@ SRC-Link is used with the web service [SRC-Link Control Panel](https://src-link.
 
 **Key features**
 
+- Video Transmitter/Receiver (Based on the SRT protocol)
+- Connection management
+- WebSocket Portal for OBS (obs-websocket compatible server)
+- Operation Team (Share SRC-Link resources with your team)
+
+**Functionalities**
+
 - A host can receive multiple clean-feed (video/audio streams) from guests in parallel. The guest to receive can be selected from among the members.
 - Guests can connect to receiver and enter standby state. The standby state allows transmission to begin at any time, and the host's commands initiate video and audio transmission.
 - There is no need to send connection information (address, stream ID, password, etc.) to guests.
