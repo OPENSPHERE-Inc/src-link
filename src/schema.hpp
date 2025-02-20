@@ -1340,8 +1340,8 @@ public:
     inline void setTotalFrames(int value) { insert("total_frames", value); }
     inline int getDroppedFrames() const { return value("dropped_frames").toInt(); }
     inline void setDroppedFrames(int value) { insert("dropped_frames", value); }
-    inline int getTotalSize() const { return value("total_size").toInt(); }
-    inline void setTotalSize(int value) { insert("total_size", value); }
+    inline qint64 getTotalSize() const { return value("total_size").toInteger(); }
+    inline void setTotalSize(qint64 value) { insert("total_size", value); }
 
     inline bool isValid() const
     {

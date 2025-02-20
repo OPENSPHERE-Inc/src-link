@@ -1420,7 +1420,7 @@ void EgressLinkOutput::updateStatistics()
     metric.setBitrate(bitrate);
     metric.setTotalFrames(totalFrames);
     metric.setDroppedFrames(droppedFrames);
-    metric.setTotalSize(totalBytes);
+    metric.setTotalSize((qint64)totalBytes);
 
     lastPutStatisticsAt = QDateTime().currentMSecsSinceEpoch();
 
