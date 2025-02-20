@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_RETRY_TIMEOUT_MSECS 3500
 #define OUTPUT_START_DELAY_MSECS 1000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
+#define OUTPUT_STATISTICS_INTERVAL_MSECS 5000
 
 inline audio_t *createSilenceAudio()
 {
@@ -112,7 +113,12 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiC
       storedSettingsRev(0),
       activeSettingsRev(0),
       status(EGRESS_LINK_OUTPUT_STATUS_INACTIVE),
-      recordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE)
+      recordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE),
+      lastBytesSent(0),
+      lastBytesSentTime(0),
+      initialTotalFrames(0),
+      initialDroppedFrames(0),
+      lastPutStatisticsAt(0)
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qUtf8Printable(name));
 
@@ -880,9 +886,7 @@ void EgressLinkOutput::start()
         bool visible = obs_data_get_bool(settings, "visible");
         if (sourceUuid.isEmpty() || !visible) {
             // Ensure resources are released
-            destroyPipeline();
-
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
+            destroyPipeline(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
             return;
         }
 
@@ -1086,7 +1090,7 @@ void EgressLinkOutput::startRecording()
 // Modifies state of members:
 //   source, activeSourceUuid, streamingOutput, recordingOutput, service, videoEncoder, audioEncoder, sourceView,
 //   audioSource, audioSilence
-void EgressLinkOutput::destroyPipeline()
+void EgressLinkOutput::destroyPipeline(EgressLinkOutputStatus nextStatus, RecordingOutputStatus nextRecordingStatus)
 {
     if (recordingOutput) {
         if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE) {
@@ -1136,8 +1140,8 @@ void EgressLinkOutput::destroyPipeline()
         apiClient->decrementActiveOutputs();
     }
 
-    setStatus(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
-    setRecordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE);
+    setStatus(nextStatus);
+    setRecordingStatus(nextRecordingStatus);
 }
 
 void EgressLinkOutput::stop()
@@ -1215,6 +1219,11 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
     auto streamingInactiveStatus = status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE &&
                                    status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY &&
                                    status != EGRESS_LINK_OUTPUT_STATUS_RECONNECTING;
+
+    if ((status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) &&
+        QDateTime().currentMSecsSinceEpoch() - lastPutStatisticsAt > OUTPUT_STATISTICS_INTERVAL_MSECS) {
+        updateStatistics();
+    }
 
     if (activateStreaming || activateRecording) {
         // Prioritize activating output
@@ -1323,6 +1332,7 @@ void EgressLinkOutput::setStatus(EgressLinkOutputStatus value)
 {
     if (status != value) {
         status = value;
+        updateStatistics();
         emit statusChanged(status);
     }
 }
@@ -1331,6 +1341,7 @@ void EgressLinkOutput::setRecordingStatus(RecordingOutputStatus value)
 {
     if (recordingStatus != value) {
         recordingStatus = value;
+        updateStatistics();
         emit recordingStatusChanged(recordingStatus);
     }
 }
@@ -1360,4 +1371,58 @@ void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
         // Increment revision to restart output
         storedSettingsRev++;
     }
+}
+
+void EgressLinkOutput::updateStatistics()
+{
+    uint64_t totalBytes = streamingOutput ? obs_output_get_total_bytes(streamingOutput) : 0;
+    uint64_t curTime = os_gettime_ns();
+    uint64_t bytesSent = totalBytes;
+
+    if (bytesSent < lastBytesSent) {
+        bytesSent = 0;
+    }
+    if (bytesSent == 0) {
+        lastBytesSent = 0;
+    }
+
+    uint64_t bitsBetween = (bytesSent - lastBytesSent) * 8;
+    long double timePassed = (long double)(curTime - lastBytesSentTime) / 1000000000.0l;
+    auto bitrate = (long double)bitsBetween / timePassed / 1000.0l;
+
+    if (timePassed < 0.01l) {
+        bitrate = 0.0l;
+    }
+
+    // Calculate statistics
+    int totalFrames = streamingOutput ? obs_output_get_total_frames(streamingOutput) : 0;
+    int droppedFrames = streamingOutput ? obs_output_get_frames_dropped(streamingOutput) : 0;
+
+    if (totalFrames < initialTotalFrames || droppedFrames < initialDroppedFrames) {
+        initialTotalFrames = 0;
+        initialDroppedFrames = 0;
+    }
+
+    totalFrames -= initialTotalFrames;
+    droppedFrames -= initialDroppedFrames;
+
+    lastBytesSent = bytesSent;
+    lastBytesSentTime = curTime;
+
+    auto outputStatus = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE         ? OUTPUT_STATUS_ACTIVE
+                        : status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING    ? OUTPUT_STATUS_STAND_BY
+                        : status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING ? OUTPUT_STATUS_RECONNECTING
+                        : status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY     ? OUTPUT_STATUS_STAND_BY
+                                                                           : OUTPUT_STATUS_INACTIVE;
+    auto recording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE;
+
+    OutputMetric metric;
+    metric.setBitrate(bitrate);
+    metric.setTotalFrames(totalFrames);
+    metric.setDroppedFrames(droppedFrames);
+    metric.setTotalSize(totalBytes);
+
+    lastPutStatisticsAt = QDateTime().currentMSecsSinceEpoch();
+
+    apiClient->putStatistics(name, outputStatus, recording, metric);
 }

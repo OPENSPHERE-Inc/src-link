@@ -1328,3 +1328,37 @@ public:
         return valid;
     }
 };
+
+class OutputMetric : public QJsonObject {
+public:
+    OutputMetric() = default;
+    OutputMetric(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline double getBitrate() const { return value("bitrate").toDouble(); }
+    inline void setBitrate(double value) { insert("bitrate", value); }
+    inline int getTotalFrames() const { return value("total_frames").toInt(); }
+    inline void setTotalFrames(int value) { insert("total_frames", value); }
+    inline int getDroppedFrames() const { return value("dropped_frames").toInt(); }
+    inline void setDroppedFrames(int value) { insert("dropped_frames", value); }
+    inline int getTotalSize() const { return value("total_size").toInt(); }
+    inline void setTotalSize(int value) { insert("total_size", value); }
+
+    inline bool isValid() const
+    {
+        auto validBitrate = (*this)["bitrate"].isDouble();
+        auto validTotalFrames = (*this)["total_frames"].isDouble();
+        auto validDroppedFrames = (*this)["dropped_frames"].isDouble();
+        auto validTotalSize = (*this)["total_size"].isDouble();
+
+        auto valid = validBitrate && validTotalFrames && validDroppedFrames && validTotalSize;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "OutputMetric: bitrate=%d, total_frames=%d, dropped_frames=%d, total_size=%d",
+            validBitrate, validTotalFrames, validDroppedFrames, validTotalSize
+        );
+#endif
+
+        return valid;
+    }
+};

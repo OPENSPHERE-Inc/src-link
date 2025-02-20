@@ -84,6 +84,11 @@ class EgressLinkOutput : public QObject {
     QTimer *monitoringTimer;
     int width;
     int height;
+    uint64_t lastBytesSent;
+    uint64_t lastBytesSentTime;
+    int initialTotalFrames;
+    int initialDroppedFrames;
+    uint64_t lastPutStatisticsAt; // milliseconds
 
     void loadSettings();
     void saveSettings();
@@ -103,7 +108,11 @@ class EgressLinkOutput : public QObject {
     bool createRecordingOutput(obs_data_t *egressSettings);
     bool createVideoEncoder(obs_data_t *egressSettings, video_t *video, int width, int height);
     bool createAudioEncoder(obs_data_t *egressSettings, QString audioSourceUuid, audio_t *audio);
-    void destroyPipeline();
+    void destroyPipeline(
+        EgressLinkOutputStatus nextStatus = EGRESS_LINK_OUTPUT_STATUS_INACTIVE,
+        RecordingOutputStatus nextRecordingStatus = RECORDING_OUTPUT_STATUS_INACTIVE
+    );
+    void updateStatistics();
 
     static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 

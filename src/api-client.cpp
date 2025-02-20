@@ -822,6 +822,27 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
     return invoker;
 }
 
+// Upload statistics via wewbsocket
+void SRCLinkApiClient::putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric)
+{
+    CHECK_CLIENT_TOKEN();
+
+    json payload;
+
+    payload["uuid"] = qUtf8Printable(uuid);
+    payload["source_name"] = qUtf8Printable(sourceName);
+    payload["status"] = qUtf8Printable(status);
+    payload["recording"] = recording;
+    payload["metric"] = {
+        {"bitrate", metric.getBitrate()},
+        {"total_frames", metric.getTotalFrames()},
+        {"dropped_frames", metric.getDroppedFrames()},
+        {"total_size", metric.getTotalSize()}
+    };
+
+    websocket->invokeBin("statistics.put", payload);
+}
+
 // Upload screenshot via websocket
 void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &image)
 {

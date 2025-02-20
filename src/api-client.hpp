@@ -38,6 +38,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define PARTICIPANT_SEELCTION_NONE "none"
 #define WS_PORTAL_SELECTION_NONE "none"
 
+#define OUTPUT_STATUS_INACTIVE "inactive"
+#define OUTPUT_STATUS_ACTIVE "active"
+#define OUTPUT_STATUS_RECONNECTING "reconnecting"
+#define OUTPUT_STATUS_STAND_BY "standby"
+
 class SRCLinkApiClient : public QObject {
     Q_OBJECT
 
@@ -164,6 +169,7 @@ public slots:
     const RequestInvoker *putUplink(const bool force = false);
     const RequestInvoker *putUplinkStatus();
     const RequestInvoker *deleteUplink(const bool parallel = false);
+    void putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric);
     void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
     void refreshIngress() { emit ingressRefreshNeeded(); }
