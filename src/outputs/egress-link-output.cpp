@@ -1410,7 +1410,7 @@ void EgressLinkOutput::updateStatistics()
     lastBytesSentTime = curTime;
 
     auto outputStatus = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE         ? OUTPUT_STATUS_ACTIVE
-                        : status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING    ? OUTPUT_STATUS_STAND_BY
+                        : status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING   ? OUTPUT_STATUS_STAND_BY
                         : status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING ? OUTPUT_STATUS_RECONNECTING
                         : status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY     ? OUTPUT_STATUS_STAND_BY
                                                                            : OUTPUT_STATUS_INACTIVE;

@@ -1354,8 +1354,9 @@ public:
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "OutputMetric: bitrate=%d, total_frames=%d, dropped_frames=%d, total_size=%d",
-            validBitrate, validTotalFrames, validDroppedFrames, validTotalSize
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "OutputMetric: bitrate=%d, total_frames=%d, dropped_frames=%d, total_size=%d", validBitrate,
+            validTotalFrames, validDroppedFrames, validTotalSize
         );
 #endif
 

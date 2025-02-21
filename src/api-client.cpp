@@ -823,7 +823,9 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 }
 
 // Upload statistics via wewbsocket
-void SRCLinkApiClient::putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric)
+void SRCLinkApiClient::putStatistics(
+    const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric
+)
 {
     CHECK_CLIENT_TOKEN();
 
