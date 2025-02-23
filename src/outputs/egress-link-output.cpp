@@ -1453,7 +1453,7 @@ void EgressLinkOutput::updateStatistics()
     auto recording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE;
 
     OutputMetric metric;
-    metric.setBitrate(bitrate);
+    metric.setBitrate((double)bitrate);
     metric.setTotalFrames(totalFrames);
     metric.setDroppedFrames(droppedFrames);
     metric.setTotalSize((qint64)totalBytes);
