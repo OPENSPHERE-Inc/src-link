@@ -598,6 +598,28 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
 
         obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server.toString()));
         obs_data_set_string(egressSettings, "server", qUtf8Printable(server.toString()));
+
+    } else if (_connection.getProtocol() == "rtmp") {
+        QUrl server(_connection.getServer());
+
+        auto uplink = apiClient->getUplink();
+        if (server.host() == uplink.getPublicAddress() || uplink.getAllocation().getLan()) {
+            // Seems guest lives in the same network -> switch to lan server.
+            server.setUrl(_connection.getLanServer());
+        }
+
+        obs_log(LOG_DEBUG, "%s: RTMP server is %s", qUtf8Printable(name), qUtf8Printable(server.toString()));
+        obs_data_set_string(egressSettings, "server", qUtf8Printable(server.toString()));
+        obs_data_set_string(egressSettings, "key", qUtf8Printable(_connection.getStreamId()));
+
+        if (!_connection.getAuthUsername().isEmpty() && !_connection.getPassphrase().isEmpty()) {
+            obs_data_set_bool(egressSettings, "use_auth", true);
+            obs_data_set_string(egressSettings, "username", qUtf8Printable(_connection.getAuthUsername()));
+            obs_data_set_string(egressSettings, "password", qUtf8Printable(_connection.getPassphrase()));
+        } else {
+            obs_data_set_bool(egressSettings, "use_auth", false);
+        }
+
     } else {
         return nullptr;
     }
@@ -766,6 +788,9 @@ audio_t *EgressLinkOutput::createAudio(QString audioSourceUuid)
     return audio;
 }
 
+#define FTL_PROTOCOL "ftl"
+#define RTMP_PROTOCOL "rtmp"
+
 // Modify state of members: service, streamingOutput
 bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
 {
@@ -777,10 +802,21 @@ bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
         return false;
     }
 
+    // Determine output type
+    auto type = obs_service_get_preferred_output_type(service);
+    if (!type) {
+        type = "rtmp_output";
+        auto url = obs_service_get_connect_info(service, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
+        if (url != nullptr && !strncmp(url, FTL_PROTOCOL, strlen(FTL_PROTOCOL))) {
+            type = "ftl_output";
+        } else if (url != nullptr && strncmp(url, RTMP_PROTOCOL, strlen(RTMP_PROTOCOL))) {
+            type = "ffmpeg_mpegts_muxer";
+        }
+    }
+
     // Output : always use ffmpeg_mpegts_muxer
-    streamingOutput = obs_output_create(
-        "ffmpeg_mpegts_muxer", qUtf8Printable(QString("%1.Streaming").arg(name)), egressSettings, nullptr
-    );
+    streamingOutput =
+        obs_output_create(type, qUtf8Printable(QString("%1.Streaming").arg(name)), egressSettings, nullptr);
     if (!streamingOutput) {
         obs_log(LOG_ERROR, "%s: Failed to create streaming output", qUtf8Printable(name));
         return false;

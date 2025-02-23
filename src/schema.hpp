@@ -915,6 +915,8 @@ public:
     inline void setLatency(int value) { insert("latency", value); }
     inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
     inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
+    inline QString getAuthUsername() const { return value("auth_username").toString(); }
+    inline void setAuthUsername(const QString &value) { insert("auth_username", value); }
 
     inline bool isValid() const
     {
@@ -940,12 +942,13 @@ public:
         auto validLanServer = maybe((*this)["lan_server"], (*this)["lan_server"].isString());
         auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
+        auto validAuthUsername = maybe((*this)["auth_username"], (*this)["auth_username"].isString());
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
                      validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer && validLatency &&
-                     validOwnerUserId;
+                     validOwnerUserId && validAuthUsername;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -953,11 +956,11 @@ public:
             "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
             "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
             "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
-            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d, owner_user_id=%d",
+            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d, owner_user_id=%d, auth_username=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
             validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer, validLatency,
-            validOwnerUserId
+            validOwnerUserId, validAuthUsername
         );
 #endif
 
