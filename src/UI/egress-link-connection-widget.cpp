@@ -261,9 +261,7 @@ void EgressLinkConnectionWidget::onVisibilityChanged(bool value)
     output->setVisible(value);
 }
 
-void EgressLinkConnectionWidget::onStatisticsUpdated(
-    double bitrate, int totalFrames, int droppedFrames, uint64_t bytesSent
-)
+void EgressLinkConnectionWidget::onStatisticsUpdated(double bitrate, int totalFrames, int droppedFrames, uint64_t)
 {
     ui->statsValueLabel->setText(
         QTStr("%1.kbps[drops.%2(%3%)]")
