@@ -66,6 +66,10 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
         output, SIGNAL(recordingStatusChanged(RecordingOutputStatus)), this,
         SLOT(onRecordingStatusChanged(RecordingOutputStatus))
     );
+    connect(
+        output, SIGNAL(statisticsUpdated(double, int, int, uint64_t)), this,
+        SLOT(onStatisticsUpdated(double, int, int, uint64_t))
+    );
     connect(ui->settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsButtonClick()));
     connect(ui->visibilityCheckBox, SIGNAL(clicked(bool)), this, SLOT(onVisibilityChanged(bool)));
     connect(ui->videoSourceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onVideoSourceChanged(int)));
@@ -78,6 +82,8 @@ EgressLinkConnectionWidget::EgressLinkConnectionWidget(
     // Translations
     ui->videoSourceLabel->setText(QTStr("LocalSource"));
     ui->statusLabel->setText(QTStr("Status"));
+    ui->statsLabel->setText(QTStr("Statistics"));
+    ui->statsValueLabel->setText("");
 
     obs_log(LOG_DEBUG, "EgressLinkConnectionWidget created");
 }
@@ -130,21 +136,25 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVATING:
         ui->statusValueLabel->setText(QTStr("Activating"));
         ui->statusIconLabel->setVisible(true);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_ACTIVE:
         ui->statusValueLabel->setText(QTStr("Active"));
         ui->statusIconLabel->setVisible(true);
+        ui->statsWidget->setVisible(true);
         setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_STAND_BY:
         ui->statusValueLabel->setText(QTStr("StandBy"));
         ui->statusIconLabel->setVisible(false);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "good", "text-success");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_ERROR:
         ui->statusValueLabel->setText(QTStr("Error"));
         ui->statusIconLabel->setVisible(false);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "error", "text-danger");
         // Try to remove error sources from combo
         updateSourceList();
@@ -152,16 +162,19 @@ void EgressLinkConnectionWidget::onOutputStatusChanged(EgressLinkOutputStatus st
     case EGRESS_LINK_OUTPUT_STATUS_INACTIVE:
         ui->statusValueLabel->setText(QTStr("Inactive"));
         ui->statusIconLabel->setVisible(false);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "", "");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_DISABLED:
         ui->statusValueLabel->setText(QTStr("Disabled"));
         ui->statusIconLabel->setVisible(false);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "", "");
         break;
     case EGRESS_LINK_OUTPUT_STATUS_RECONNECTING:
         ui->statusValueLabel->setText(QTStr("Reconnecting"));
         ui->statusIconLabel->setVisible(false);
+        ui->statsWidget->setVisible(false);
         setThemeID(ui->statusValueLabel, "error", "text-danger");
         break;
     }
@@ -246,4 +259,16 @@ void EgressLinkConnectionWidget::setSource(const StageSource &_source)
 void EgressLinkConnectionWidget::onVisibilityChanged(bool value)
 {
     output->setVisible(value);
+}
+
+void EgressLinkConnectionWidget::onStatisticsUpdated(
+    double bitrate, int totalFrames, int droppedFrames, uint64_t bytesSent
+)
+{
+    ui->statsValueLabel->setText(
+        QTStr("%1.kbps[drops.%2(%3%)]")
+            .arg(bitrate, 0, 'f', 0)
+            .arg(droppedFrames)
+            .arg(totalFrames ? 100.0 * (double)droppedFrames / (double)totalFrames : 0.0, 0, 'f', 1)
+    );
 }

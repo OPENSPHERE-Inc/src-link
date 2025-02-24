@@ -53,6 +53,7 @@ private slots:
     void onRecordingStatusChanged(RecordingOutputStatus status);
     void updateSourceList();
     void onVisibilityChanged(bool value);
+    void onStatisticsUpdated(double bitrate, int totalFrames, int droppedFrames, uint64_t bytesSent);
 
 public:
     explicit EgressLinkConnectionWidget(

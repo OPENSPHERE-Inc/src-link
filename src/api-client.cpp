@@ -711,6 +711,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     body["participant_id"] = participantId != PARTICIPANT_SEELCTION_NONE ? participantId : "";
     body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
+    body["protocols"] = QJsonArray({"srt", "rtmp"});
 
     API_LOG(
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),

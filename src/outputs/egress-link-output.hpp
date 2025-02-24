@@ -119,6 +119,7 @@ class EgressLinkOutput : public QObject {
 signals:
     void statusChanged(EgressLinkOutputStatus status);
     void recordingStatusChanged(RecordingOutputStatus status);
+    void statisticsUpdated(double bitrate, int totalFrames, int droppedFrames, uint64_t bytesSent);
 
 private slots:
     void onSnapshotTimerTimeout();

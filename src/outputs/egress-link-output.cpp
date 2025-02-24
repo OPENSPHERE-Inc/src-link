@@ -621,6 +621,7 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
         }
 
     } else {
+        obs_data_release(egressSettings);
         return nullptr;
     }
 
@@ -986,6 +987,11 @@ void EgressLinkOutput::start()
             encoderHeight = connection.getHeight();
 
             egressSettings = createEgressSettings(connection);
+            if (!egressSettings) {
+                obs_log(LOG_ERROR, "%s: Failed to create egress settings", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
         } else {
             // No uplink connections
             // Use output resolution
@@ -1461,4 +1467,6 @@ void EgressLinkOutput::updateStatistics()
     lastPutStatisticsAt = QDateTime().currentMSecsSinceEpoch();
 
     apiClient->putStatistics(name, outputStatus, recording, metric);
+
+    emit statisticsUpdated((double)bitrate, totalFrames, droppedFrames, totalBytes);
 }
