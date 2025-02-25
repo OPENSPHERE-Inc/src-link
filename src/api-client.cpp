@@ -711,6 +711,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     body["participant_id"] = participantId != PARTICIPANT_SEELCTION_NONE ? participantId : "";
     body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
+    body["protocols"] = QJsonArray({"srt", "rtmp"});
 
     API_LOG(
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),
@@ -820,6 +821,29 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
     invoker->deleteResource(req);
 
     return invoker;
+}
+
+// Upload statistics via wewbsocket
+void SRCLinkApiClient::putStatistics(
+    const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric
+)
+{
+    CHECK_CLIENT_TOKEN();
+
+    json payload;
+
+    payload["uuid"] = qUtf8Printable(uuid);
+    payload["source_name"] = qUtf8Printable(sourceName);
+    payload["status"] = qUtf8Printable(status);
+    payload["recording"] = recording;
+    payload["metric"] = {
+        {"bitrate", metric.getBitrate()},
+        {"total_frames", metric.getTotalFrames()},
+        {"dropped_frames", metric.getDroppedFrames()},
+        {"total_size", metric.getTotalSize()}
+    };
+
+    websocket->invokeBin("statistics.put", payload);
 }
 
 // Upload screenshot via websocket

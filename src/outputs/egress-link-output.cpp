@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_RETRY_TIMEOUT_MSECS 3500
 #define OUTPUT_START_DELAY_MSECS 1000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
+#define OUTPUT_STATISTICS_INTERVAL_MSECS 5000
 
 inline audio_t *createSilenceAudio()
 {
@@ -112,7 +113,12 @@ EgressLinkOutput::EgressLinkOutput(const QString &_name, SRCLinkApiClient *_apiC
       storedSettingsRev(0),
       activeSettingsRev(0),
       status(EGRESS_LINK_OUTPUT_STATUS_INACTIVE),
-      recordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE)
+      recordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE),
+      lastBytesSent(0),
+      lastBytesSentTime(0),
+      initialTotalFrames(0),
+      initialDroppedFrames(0),
+      lastPutStatisticsAt(0)
 {
     obs_log(LOG_DEBUG, "%s: Output creating", qUtf8Printable(name));
 
@@ -592,7 +598,30 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
 
         obs_log(LOG_DEBUG, "%s: SRT server is %s", qUtf8Printable(name), qUtf8Printable(server.toString()));
         obs_data_set_string(egressSettings, "server", qUtf8Printable(server.toString()));
+
+    } else if (_connection.getProtocol() == "rtmp") {
+        QUrl server(_connection.getServer());
+
+        auto uplink = apiClient->getUplink();
+        if (server.host() == uplink.getPublicAddress() || uplink.getAllocation().getLan()) {
+            // Seems guest lives in the same network -> switch to lan server.
+            server.setUrl(_connection.getLanServer());
+        }
+
+        obs_log(LOG_DEBUG, "%s: RTMP server is %s", qUtf8Printable(name), qUtf8Printable(server.toString()));
+        obs_data_set_string(egressSettings, "server", qUtf8Printable(server.toString()));
+        obs_data_set_string(egressSettings, "key", qUtf8Printable(_connection.getStreamId()));
+
+        if (!_connection.getAuthUsername().isEmpty() && !_connection.getPassphrase().isEmpty()) {
+            obs_data_set_bool(egressSettings, "use_auth", true);
+            obs_data_set_string(egressSettings, "username", qUtf8Printable(_connection.getAuthUsername()));
+            obs_data_set_string(egressSettings, "password", qUtf8Printable(_connection.getPassphrase()));
+        } else {
+            obs_data_set_bool(egressSettings, "use_auth", false);
+        }
+
     } else {
+        obs_data_release(egressSettings);
         return nullptr;
     }
 
@@ -760,6 +789,9 @@ audio_t *EgressLinkOutput::createAudio(QString audioSourceUuid)
     return audio;
 }
 
+#define FTL_PROTOCOL "ftl"
+#define RTMP_PROTOCOL "rtmp"
+
 // Modify state of members: service, streamingOutput
 bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
 {
@@ -771,10 +803,21 @@ bool EgressLinkOutput::createStreamingOutput(obs_data_t *egressSettings)
         return false;
     }
 
+    // Determine output type
+    auto type = obs_service_get_preferred_output_type(service);
+    if (!type) {
+        type = "rtmp_output";
+        auto url = obs_service_get_connect_info(service, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
+        if (url != nullptr && !strncmp(url, FTL_PROTOCOL, strlen(FTL_PROTOCOL))) {
+            type = "ftl_output";
+        } else if (url != nullptr && strncmp(url, RTMP_PROTOCOL, strlen(RTMP_PROTOCOL))) {
+            type = "ffmpeg_mpegts_muxer";
+        }
+    }
+
     // Output : always use ffmpeg_mpegts_muxer
-    streamingOutput = obs_output_create(
-        "ffmpeg_mpegts_muxer", qUtf8Printable(QString("%1.Streaming").arg(name)), egressSettings, nullptr
-    );
+    streamingOutput =
+        obs_output_create(type, qUtf8Printable(QString("%1.Streaming").arg(name)), egressSettings, nullptr);
     if (!streamingOutput) {
         obs_log(LOG_ERROR, "%s: Failed to create streaming output", qUtf8Printable(name));
         return false;
@@ -880,9 +923,7 @@ void EgressLinkOutput::start()
         bool visible = obs_data_get_bool(settings, "visible");
         if (sourceUuid.isEmpty() || !visible) {
             // Ensure resources are released
-            destroyPipeline();
-
-            setStatus(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
+            destroyPipeline(EGRESS_LINK_OUTPUT_STATUS_DISABLED);
             return;
         }
 
@@ -946,6 +987,11 @@ void EgressLinkOutput::start()
             encoderHeight = connection.getHeight();
 
             egressSettings = createEgressSettings(connection);
+            if (!egressSettings) {
+                obs_log(LOG_ERROR, "%s: Failed to create egress settings", qUtf8Printable(name));
+                setStatus(EGRESS_LINK_OUTPUT_STATUS_ERROR);
+                return;
+            }
         } else {
             // No uplink connections
             // Use output resolution
@@ -1086,7 +1132,7 @@ void EgressLinkOutput::startRecording()
 // Modifies state of members:
 //   source, activeSourceUuid, streamingOutput, recordingOutput, service, videoEncoder, audioEncoder, sourceView,
 //   audioSource, audioSilence
-void EgressLinkOutput::destroyPipeline()
+void EgressLinkOutput::destroyPipeline(EgressLinkOutputStatus nextStatus, RecordingOutputStatus nextRecordingStatus)
 {
     if (recordingOutput) {
         if (recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE) {
@@ -1136,8 +1182,8 @@ void EgressLinkOutput::destroyPipeline()
         apiClient->decrementActiveOutputs();
     }
 
-    setStatus(EGRESS_LINK_OUTPUT_STATUS_INACTIVE);
-    setRecordingStatus(RECORDING_OUTPUT_STATUS_INACTIVE);
+    setStatus(nextStatus);
+    setRecordingStatus(nextRecordingStatus);
 }
 
 void EgressLinkOutput::stop()
@@ -1215,6 +1261,11 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
     auto streamingInactiveStatus = status != EGRESS_LINK_OUTPUT_STATUS_ACTIVE &&
                                    status != EGRESS_LINK_OUTPUT_STATUS_STAND_BY &&
                                    status != EGRESS_LINK_OUTPUT_STATUS_RECONNECTING;
+
+    if ((status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) &&
+        QDateTime().currentMSecsSinceEpoch() - lastPutStatisticsAt > OUTPUT_STATISTICS_INTERVAL_MSECS) {
+        updateStatistics();
+    }
 
     if (activateStreaming || activateRecording) {
         // Prioritize activating output
@@ -1323,6 +1374,7 @@ void EgressLinkOutput::setStatus(EgressLinkOutputStatus value)
 {
     if (status != value) {
         status = value;
+        updateStatistics();
         emit statusChanged(status);
     }
 }
@@ -1331,6 +1383,7 @@ void EgressLinkOutput::setRecordingStatus(RecordingOutputStatus value)
 {
     if (recordingStatus != value) {
         recordingStatus = value;
+        updateStatistics();
         emit recordingStatusChanged(recordingStatus);
     }
 }
@@ -1360,4 +1413,60 @@ void EgressLinkOutput::onUplinkReady(const UplinkInfo &uplink)
         // Increment revision to restart output
         storedSettingsRev++;
     }
+}
+
+void EgressLinkOutput::updateStatistics()
+{
+    uint64_t totalBytes = streamingOutput ? obs_output_get_total_bytes(streamingOutput) : 0;
+    uint64_t curTime = os_gettime_ns();
+    uint64_t bytesSent = totalBytes;
+
+    if (bytesSent < lastBytesSent) {
+        bytesSent = 0;
+    }
+    if (bytesSent == 0) {
+        lastBytesSent = 0;
+    }
+
+    uint64_t bitsBetween = (bytesSent - lastBytesSent) * 8;
+    long double timePassed = (long double)(curTime - lastBytesSentTime) / 1000000000.0l;
+    auto bitrate = (long double)bitsBetween / timePassed / 1000.0l;
+
+    if (timePassed < 0.01l) {
+        bitrate = 0.0l;
+    }
+
+    // Calculate statistics
+    int totalFrames = streamingOutput ? obs_output_get_total_frames(streamingOutput) : 0;
+    int droppedFrames = streamingOutput ? obs_output_get_frames_dropped(streamingOutput) : 0;
+
+    if (totalFrames < initialTotalFrames || droppedFrames < initialDroppedFrames) {
+        initialTotalFrames = 0;
+        initialDroppedFrames = 0;
+    }
+
+    totalFrames -= initialTotalFrames;
+    droppedFrames -= initialDroppedFrames;
+
+    lastBytesSent = bytesSent;
+    lastBytesSentTime = curTime;
+
+    auto outputStatus = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE         ? OUTPUT_STATUS_ACTIVE
+                        : status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING   ? OUTPUT_STATUS_STAND_BY
+                        : status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING ? OUTPUT_STATUS_RECONNECTING
+                        : status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY     ? OUTPUT_STATUS_STAND_BY
+                                                                           : OUTPUT_STATUS_INACTIVE;
+    auto recording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE;
+
+    OutputMetric metric;
+    metric.setBitrate((double)bitrate);
+    metric.setTotalFrames(totalFrames);
+    metric.setDroppedFrames(droppedFrames);
+    metric.setTotalSize((qint64)totalBytes);
+
+    lastPutStatisticsAt = QDateTime().currentMSecsSinceEpoch();
+
+    apiClient->putStatistics(name, outputStatus, recording, metric);
+
+    emit statisticsUpdated((double)bitrate, totalFrames, droppedFrames, totalBytes);
 }
