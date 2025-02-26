@@ -1267,7 +1267,11 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
         updateStatistics();
     }
 
-    if (activateStreaming || activateRecording) {
+    if (status == EGRESS_LINK_OUTPUT_STATUS_CHANGING) {
+        // Changing output settings
+        start();
+
+    } else if (activateStreaming || activateRecording) {
         // Prioritize activating output
 
         if (QDateTime().currentMSecsSinceEpoch() - connectionAttemptingAt > OUTPUT_START_DELAY_MSECS) {
@@ -1338,7 +1342,8 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
 
         if (activeSettingsRev < storedSettingsRev && !obs_output_reconnecting(streamingOutput)) {
             obs_log(LOG_DEBUG, "%s: Attempting change settings", qUtf8Printable(name));
-            start();
+            // Do it next turn to avoid crashing
+            setStatus(EGRESS_LINK_OUTPUT_STATUS_CHANGING);
             return;
         }
 
@@ -1454,6 +1459,7 @@ void EgressLinkOutput::updateStatistics()
     auto outputStatus = status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE         ? OUTPUT_STATUS_ACTIVE
                         : status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING   ? OUTPUT_STATUS_STAND_BY
                         : status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING ? OUTPUT_STATUS_RECONNECTING
+                        : status == EGRESS_LINK_OUTPUT_STATUS_CHANGING     ? OUTPUT_STATUS_STAND_BY
                         : status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY     ? OUTPUT_STATUS_STAND_BY
                                                                            : OUTPUT_STATUS_INACTIVE;
     auto recording = recordingStatus == RECORDING_OUTPUT_STATUS_ACTIVE;
