@@ -39,6 +39,7 @@ SRC-Link is used with the web service [SRC-Link Control Panel](https://src-link.
 - **(Since 0.6.0)** External Connections allows SRC-Link connects to external SRT servers such as vMix, SRT MiniServer, Nimble Streamer etc..
 - **(Since 0.7.0)** WebSocket Portal for OBS provides an obs-websocket compatible server and allows remote control of 
   OBS Studio over the Internet using obs-websocket clients. No open ports, tunneling or VPN is required.
+- **(Since 0.7.2)** RTMP External Connection allows to broadcast external RTMP server each sources.
   
 **Glossary**
 
