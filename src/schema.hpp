@@ -402,32 +402,37 @@ public:
 
 typedef TypedJsonArray<StageSeat> StageSeatArray;
 
-class SrtrelayServer : public QJsonObject {
+class RelayServer : public QJsonObject {
 public:
-    SrtrelayServer() = default;
-    SrtrelayServer(const QJsonObject &_json) : QJsonObject(_json) {}
+    RelayServer() = default;
+    RelayServer(const QJsonObject &_json) : QJsonObject(_json) {}
 
     inline QString getAddress() const { return value("address").toString(); }
     inline void setAddress(const QString &value) { insert("address", value); }
     inline int getPort() const { return value("port").toInt(); }
     inline void setPort(int value) { insert("port", value); }
+    inline QString getApp() const { return value("app").toString(); }
+    inline void setApp(const QString &value) { insert("app", value); }
 
     inline bool isValid() const
     {
         auto validAddress = (*this)["address"].isString();
         auto validPort = (*this)["port"].isDouble();
+        auto validApp = (*this)["app"].isString();
 
-        auto valid = validAddress && validPort;
+        auto valid = validAddress && validPort && validApp;
 
 #ifdef SCHEMA_DEBUG
-        obs_log(valid ? LOG_DEBUG : LOG_ERROR, "SrtrelayServer: address=%d, port=%d", validAddress, validPort);
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "RelayServer: address=%d, port=%d, app=%d", validAddress, validPort, validApp
+        );
 #endif
 
         return valid;
     }
 };
 
-typedef TypedJsonArray<SrtrelayServer> SrtrelayServerArray;
+typedef TypedJsonArray<RelayServer> RelayServerArray;
 
 class StageSeatView : public QJsonObject {
 public:
@@ -496,8 +501,8 @@ public:
     inline void setSources(const StageSourceArray &value) { insert("sources", value); }
     inline StageSeatArray getSeats() const { return value("seats").toArray(); }
     inline void setSeats(const StageSeatArray &value) { insert("seats", value); }
-    inline SrtrelayServerArray getSrtrelayServers() const { return value("srtrelay_servers").toArray(); }
-    inline void setSrtrelayServers(const SrtrelayServerArray &value) { insert("srtrelay_servers", value); }
+    inline RelayServerArray getRelayServers() const { return value("relay_servers").toArray(); }
+    inline void setRelayServers(const RelayServerArray &value) { insert("relay_servers", value); }
     inline AccountView getOwnerAccountView() const { return value("owner_account_view").toObject(); }
     inline void setOwnerAccountView(const AccountView &value) { insert("owner_account_view", value); }
     inline QString getOwnerUserId() const { return value("owner_user_id").toString(); }
@@ -517,23 +522,23 @@ public:
             maybe((*this)["seats"], (*this)["seats"].isArray() && getSeats().every([](const StageSeat &value) {
                 return value.isValid();
             }));
-        auto validSrtrelayServers = maybe(
-            (*this)["srtrelay_servers"],
-            (*this)["srtrelay_servers"].isArray() &&
-                getSrtrelayServers().every([](const SrtrelayServer &value) { return value.isValid(); })
+        auto validRelayServers = maybe(
+            (*this)["relay_servers"],
+            (*this)["relay_servers"].isArray() &&
+                getRelayServers().every([](const RelayServer &value) { return value.isValid(); })
         );
         auto validOwnerAccountView = getOwnerAccountView().isValid();
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
 
         auto valid = validId && validName && validDescription && validPictureId && validSources && validSeats &&
-                     validSrtrelayServers && validOwnerAccountView && validOwnerUserId;
+                     validRelayServers && validOwnerAccountView && validOwnerUserId;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
-            "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, srtrelay_servers=%d, "
+            "Stage: _id=%d, name=%d, description=%d, picture_id=%d, sources=%d, seats=%d, relay_servers=%d, "
             "owner_account_view=%d, owner_user_id=%d",
-            validId, validName, validDescription, validPictureId, validSources, validSeats, validSrtrelayServers,
+            validId, validName, validDescription, validPictureId, validSources, validSeats, validRelayServers,
             validOwnerAccountView, validOwnerUserId
         );
 #endif
@@ -866,6 +871,9 @@ public:
     }
 };
 
+#define RELAY_APP_SRTRELAY "srtrelay"
+#define RELAY_APP_MEDIAMTX "media-mtx"
+
 class StageConnection : public QJsonObject {
 public:
     StageConnection() = default;
@@ -917,6 +925,8 @@ public:
     inline void setOwnerUserId(const QString &value) { insert("owner_user_id", value); }
     inline QString getAuthUsername() const { return value("auth_username").toString(); }
     inline void setAuthUsername(const QString &value) { insert("auth_username", value); }
+    inline QString getRelayApp() const { return value("relay_app").toString(); }
+    inline void setRelayApp(const QString &value) { insert("relay_app", value); }
 
     inline bool isValid() const
     {
@@ -943,12 +953,13 @@ public:
         auto validLatency = maybe((*this)["latency"], (*this)["latency"].isDouble());
         auto validOwnerUserId = (*this)["owner_user_id"].isString();
         auto validAuthUsername = maybe((*this)["auth_username"], (*this)["auth_username"].isString());
+        auto validRelayApp = maybe((*this)["relay_app"], (*this)["relay_app"].isString());
 
         auto valid = validId && validStageId && validSeatName && validSourceName && validProtocol && validServer &&
                      validPort && validStreamId && validPassphrase && validParameters && validRelay &&
                      validMaxBitrate && validMinBitrate && validWidth && validHeight && validRevision &&
                      validDisabled && validAllocationId && vlaidConnectionAdvices && validLanServer && validLatency &&
-                     validOwnerUserId && validAuthUsername;
+                     validOwnerUserId && validAuthUsername && validRelayApp;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
@@ -956,11 +967,12 @@ public:
             "StageConnection: id=%d, stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, "
             "server=%d, port=%d, stream_id=%d, passphrase=%d, parameters=%d, relay=%d, "
             "max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d, disabled=%d, "
-            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d, owner_user_id=%d, auth_username=%d",
+            "allocation_id=%d, connection_advices=%d, lan_server=%d, latency=%d, owner_user_id=%d, auth_username=%d"
+            "relay_app=%d",
             validId, validStageId, validSeatName, validSourceName, validProtocol, validServer, validPort, validStreamId,
             validPassphrase, validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight,
             validRevision, validDisabled, validAllocationId, vlaidConnectionAdvices, validLanServer, validLatency,
-            validOwnerUserId, validAuthUsername
+            validOwnerUserId, validAuthUsername, validRelayApp
         );
 #endif
 
@@ -1164,6 +1176,8 @@ public:
     inline void setRevision(int value) { insert("revision", value); }
     inline QString getLanServer() const { return value("lan_server").toString(); }
     inline void setLanServer(const QString &value) { insert("lan_server", value); }
+    inline TypedJsonArray<QJsonValue> getRelayApps() const { return value("relay_apps").toArray(); }
+    inline void setRelayApps(const TypedJsonArray<QJsonValue> &value) { insert("relay_apps", value); }
 
     inline bool isValid() const
     {
@@ -1182,20 +1196,22 @@ public:
         auto validHeight = (*this)["height"].isDouble();
         auto validRevision = (*this)["revision"].isDouble();
         auto validLanServer = (*this)["lan_server"].isString();
+        auto validRelayApps = (*this)["relay_apps"].isArray() &&
+                              getRelayApps().every([](const QJsonValue &value) { return value.isString(); });
 
         auto valid = validStageId && validSeatName && validSourceName && validProtocol && validPort && validStreamId &&
                      validPassphrase && validParameters && validRelay && validMaxBitrate && validMinBitrate &&
-                     validWidth && validHeight && validRevision && validLanServer;
+                     validWidth && validHeight && validRevision && validLanServer && validRelayApps;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
             valid ? LOG_DEBUG : LOG_ERROR,
             "DownlinkRequestBody: stage_id=%d, seat_name=%d, source_name=%d, protocol=%d, port=%d, stream_id=%d, "
             "passphrase=%d, parameters=%d, relay=%d, max_bitrate=%d, min_bitrate=%d, width=%d, height=%d, revision=%d"
-            "lan_server=%d",
+            "lan_server=%d, relay_apps=%d",
             validStageId, validSeatName, validSourceName, validProtocol, validPort, validStreamId, validPassphrase,
             validParameters, validRelay, validMaxBitrate, validMinBitrate, validWidth, validHeight, validRevision,
-            validLanServer
+            validLanServer, validRelayApps
         );
 #endif
 

@@ -581,9 +581,18 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
         if (_connection.getRelay()) {
             // FIXME: Currently encryption not supported !
             parameters.addQueryItem("mode", "caller");
-            parameters.addQueryItem(
-                "streamid", QString("publish/%1/%2").arg(_connection.getStreamId()).arg(_connection.getPassphrase())
-            );
+            if (_connection.getRelayApp() == RELAY_APP_MEDIAMTX) {
+                parameters.addQueryItem(
+                    "streamid", QString("publish:%1:%2:%3")
+                                    .arg(_connection.getStreamId())
+                                    .arg(_connection.getId())
+                                    .arg(_connection.getPassphrase())
+                );
+            } else {
+                parameters.addQueryItem(
+                    "streamid", QString("publish/%1/%2").arg(_connection.getStreamId()).arg(_connection.getPassphrase())
+                );
+            }
         } else {
             parameters.addQueryItem("mode", "caller");
             if (!_connection.getStreamId().isEmpty()) {

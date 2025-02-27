@@ -47,6 +47,7 @@ IngressLinkSource::IngressLinkSource(
     name = obs_source_get_name(_source);
     obs_log(LOG_DEBUG, "%s: Source creating", qUtf8Printable(name));
     connRequest.setPort(0);
+    connRequest.setRelayApps(QJsonArray({RELAY_APP_SRTRELAY, RELAY_APP_MEDIAMTX}));
 
     if (!strcmp(obs_data_get_json(settings), "{}")) {
         // Initial creation -> Load recently settings from file
@@ -265,9 +266,18 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
         if (connection.getRelay()) {
             // FIXME: Currently encryption not supported !
             parameters.addQueryItem("mode", "caller");
-            parameters.addQueryItem(
-                "streamid", QString("play/%1/%2").arg(connection.getStreamId()).arg(connection.getPassphrase())
-            );
+            if (connection.getRelayApp() == RELAY_APP_MEDIAMTX) {
+                parameters.addQueryItem(
+                    "streamid", QString("read:%1:%2:%3")
+                                    .arg(connection.getStreamId())
+                                    .arg(connection.getId())
+                                    .arg(connection.getPassphrase())
+                );
+            } else {
+                parameters.addQueryItem(
+                    "streamid", QString("play/%1/%2").arg(connection.getStreamId()).arg(connection.getPassphrase())
+                );
+            }
             input.setHost(connection.getServer());
         } else {
             parameters.addQueryItem("mode", "listener");
@@ -407,7 +417,7 @@ obs_properties_t *IngressLinkSource::getProperties()
             }
 
             auto relay = obs_properties_get(_connectionGroup, "relay");
-            auto relayServerAvailable = _stage.getSrtrelayServers().size() > 0;
+            auto relayServerAvailable = _stage.getRelayServers().size() > 0;
             obs_property_set_enabled(relay, relayServerAvailable);
             obs_data_set_bool(settings, "relay", obs_data_get_bool(settings, "relay") && relayServerAvailable);
 
