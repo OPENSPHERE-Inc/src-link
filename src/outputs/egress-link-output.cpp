@@ -1398,7 +1398,7 @@ void EgressLinkOutput::setStatus(EgressLinkOutputStatus value)
         } else if (value == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
             apiClient->incrementActiveOutputs();
         }
-        
+
         status = value;
         updateStatistics();
         emit statusChanged(status);
