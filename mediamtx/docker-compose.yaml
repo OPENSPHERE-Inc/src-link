@@ -1,0 +1,19 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: always
+    container_name: mediamtx
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    ports:
+      - "8890:8890/udp"
+    networks:
+      - mediamtx_net
+
+networks:
+  mediamtx_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.100.0.0/24
