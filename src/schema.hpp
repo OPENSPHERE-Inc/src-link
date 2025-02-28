@@ -872,7 +872,7 @@ public:
 };
 
 #define RELAY_APP_SRTRELAY "srtrelay"
-#define RELAY_APP_MEDIAMTX "media-mtx"
+#define RELAY_APP_MEDIAMTX "mediamtx"
 
 class StageConnection : public QJsonObject {
 public:
