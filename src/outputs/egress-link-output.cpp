@@ -581,9 +581,18 @@ obs_data_t *EgressLinkOutput::createEgressSettings(const StageConnection &_conne
         if (_connection.getRelay()) {
             // FIXME: Currently encryption not supported !
             parameters.addQueryItem("mode", "caller");
-            parameters.addQueryItem(
-                "streamid", QString("publish/%1/%2").arg(_connection.getStreamId()).arg(_connection.getPassphrase())
-            );
+            if (_connection.getRelayApp() == RELAY_APP_MEDIAMTX) {
+                parameters.addQueryItem(
+                    "streamid", QString("publish:%1:%2:%3")
+                                    .arg(_connection.getStreamId())
+                                    .arg(_connection.getId())
+                                    .arg(_connection.getPassphrase())
+                );
+            } else {
+                parameters.addQueryItem(
+                    "streamid", QString("publish/%1/%2").arg(_connection.getStreamId()).arg(_connection.getPassphrase())
+                );
+            }
         } else {
             parameters.addQueryItem("mode", "caller");
             if (!_connection.getStreamId().isEmpty()) {
@@ -960,7 +969,6 @@ void EgressLinkOutput::start()
 
         if (!streaming && reconstructPipeline) {
             setStatus(EGRESS_LINK_OUTPUT_STATUS_STAND_BY);
-            apiClient->incrementStandByOutputs();
         }
 
         if (!streaming && !recording) {
@@ -1098,7 +1106,6 @@ void EgressLinkOutput::startStreaming()
                 }
                 obs_log(LOG_INFO, "%s: Activated streaming output", qUtf8Printable(name));
                 setStatus(EGRESS_LINK_OUTPUT_STATUS_ACTIVE);
-                apiClient->incrementActiveOutputs();
             }
         }
     }();
@@ -1175,12 +1182,6 @@ void EgressLinkOutput::destroyPipeline(EgressLinkOutputStatus nextStatus, Record
         audioSource = nullptr;
     }
     audioSilence = nullptr;
-
-    if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
-        apiClient->decrementStandByOutputs();
-    } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE || status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
-        apiClient->decrementActiveOutputs();
-    }
 
     setStatus(nextStatus);
     setRecordingStatus(nextRecordingStatus);
@@ -1378,6 +1379,26 @@ void EgressLinkOutput::onMonitoringTimerTimeout()
 void EgressLinkOutput::setStatus(EgressLinkOutputStatus value)
 {
     if (status != value) {
+        if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING) {
+            apiClient->decrementActiveOutputs();
+        } else if (status == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+            apiClient->decrementActiveOutputs();
+        } else if (status == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+            apiClient->decrementStandByOutputs();
+        } else if (status == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
+            apiClient->decrementActiveOutputs();
+        }
+
+        if (value == EGRESS_LINK_OUTPUT_STATUS_ACTIVATING) {
+            apiClient->incrementActiveOutputs();
+        } else if (value == EGRESS_LINK_OUTPUT_STATUS_ACTIVE) {
+            apiClient->incrementActiveOutputs();
+        } else if (value == EGRESS_LINK_OUTPUT_STATUS_STAND_BY) {
+            apiClient->incrementStandByOutputs();
+        } else if (value == EGRESS_LINK_OUTPUT_STATUS_RECONNECTING) {
+            apiClient->incrementActiveOutputs();
+        }
+
         status = value;
         updateStatistics();
         emit statusChanged(status);

@@ -712,6 +712,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
     body["protocols"] = QJsonArray({"srt", "rtmp"});
+    body["relay_apps"] = QJsonArray({RELAY_APP_SRTRELAY, RELAY_APP_MEDIAMTX});
 
     API_LOG(
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),

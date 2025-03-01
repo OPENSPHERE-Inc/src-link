@@ -7,7 +7,7 @@
 #addresses = [":1337"]
 # listen on localhost
 #addresses = ["localhost:1337"]
-addresses = ["172.100.0.4:1337"]
+addresses = ["0.0.0.0:1337"]
 
 # Set public address for use in API responses
 # by default local FQDN + listen address port is used
@@ -46,7 +46,7 @@ syncClients = true
 #enabled = true
 
 # API listening address
-#address = "172.100.0.4:1338"
+#address = "0.0.0.0:1338"
 
 [auth]
 # Choose between available auth types (static and http)

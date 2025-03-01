@@ -8,8 +8,7 @@ services:
     ports:
       - "1337:1337/udp"
     networks:
-      srtrelay_net:
-        ipv4_address: 172.100.0.4
+      - srtrelay_net
 
 networks:
   srtrelay_net:
