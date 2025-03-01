@@ -255,15 +255,8 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 
         QUrlQuery parameters(connection.getParameters());
 
-        if (connection.getLatency()) {
-            // Override latency with participant's settings
-            parameters.removeQueryItem("latency");
-            parameters.addQueryItem(
-                "latency", QString::number(connection.getLatency() * 1000)
-            ); // Convert to microseconds
-        }
-
         if (connection.getRelay()) {
+            // No latency override on relay mode
             // FIXME: Currently encryption not supported !
             parameters.addQueryItem("mode", "caller");
             if (connection.getRelayApp() == RELAY_APP_MEDIAMTX) {
@@ -280,6 +273,14 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
             }
             input.setHost(connection.getServer());
         } else {
+            if (connection.getLatency()) {
+                // Override latency with participant's settings
+                parameters.removeQueryItem("latency");
+                parameters.addQueryItem(
+                    "latency", QString::number(connection.getLatency() * 1000)
+                ); // Convert to microseconds
+            }
+
             parameters.addQueryItem("mode", "listener");
             parameters.addQueryItem("streamid", connection.getStreamId());
             parameters.addQueryItem("passphrase", connection.getPassphrase());
