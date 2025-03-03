@@ -72,7 +72,6 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     onAccountInfoReady(apiClient->getAccountInfo());
 
     // Translations
-    ui->forceConnectionCheckBox->setText(QTStr("ForceDisconnectOtherClients"));
     ui->ingressLinkSettingsLabel->setText(QTStr("DownlinkSettings"));
     ui->advancedSettingsCheckBox->setText(QTStr("AdvancedSettings"));
     ui->portRangeLabel->setText(QTStr("UDPListenPortRange"));
@@ -178,7 +177,6 @@ void SettingsDialog::saveSettings()
     auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
 
     auto settings = apiClient->getSettings();
-    settings->setForceConnection(ui->forceConnectionCheckBox->isChecked());
     settings->setIngressPortMin(ingressPortMin);
     settings->setIngressPortMax(ingressPortMax);
     settings->setIngressReconnectDelayTime(ingressReconnectDelayTime);
@@ -203,7 +201,6 @@ void SettingsDialog::saveSettings()
 void SettingsDialog::loadSettings()
 {
     auto settings = apiClient->getSettings();
-    ui->forceConnectionCheckBox->setChecked(settings->getForceConnection());
     ui->portMinSpinBox->setValue(settings->getIngressPortMin());
     ui->portMaxSpinBox->setValue(settings->getIngressPortMax());
     ui->reconnectDelayTimeSpinBox->setValue(settings->getIngressReconnectDelayTime());

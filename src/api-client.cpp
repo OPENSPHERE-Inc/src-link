@@ -215,7 +215,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 
     connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
-            putUplink(settings->getForceConnection());
+            putUplink();
         }
     });
 
@@ -234,7 +234,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 
             //syncOnlineResources(); // Now received by WebSocket
             connect(
-                putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
+                putUplink(), &RequestInvoker::finished, this,
                 [this](QNetworkReply::NetworkError) {
                     // WebSocket will be started even if uplink upload failed.
                     websocket->start();
@@ -475,7 +475,7 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
         if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
             settings->setParticipantId(participants[0].getId());
             // Put uplink again
-            putUplink(settings->getForceConnection());
+            putUplink();
         }
 
         emit participantsReady(participants);
@@ -699,7 +699,7 @@ const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
+const RequestInvoker *SRCLinkApiClient::putUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -709,7 +709,6 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     QJsonObject body;
     auto participantId = settings->getParticipantId();
     body["participant_id"] = participantId != PARTICIPANT_SEELCTION_NONE ? participantId : "";
-    body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
     body["protocols"] = QJsonArray({"srt", "rtmp"});
     body["relay_apps"] = QJsonArray({RELAY_APP_SRTRELAY, RELAY_APP_MEDIAMTX});
@@ -940,7 +939,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
 
                 //syncOnlineResources(); // Now received by WebSocket
                 connect(
-                    putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
+                    putUplink(), &RequestInvoker::finished, this,
                     [this](QNetworkReply::NetworkError) {
                         // WebSocket will be started even if uplink upload failed.
                         websocket->start();

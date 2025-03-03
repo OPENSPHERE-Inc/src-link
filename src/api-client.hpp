@@ -166,7 +166,7 @@ public slots:
     const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
     const RequestInvoker *putDownlinkStatus(const QString &sourceUuid);
     const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
-    const RequestInvoker *putUplink(const bool force = false);
+    const RequestInvoker *putUplink();
     const RequestInvoker *putUplinkStatus();
     const RequestInvoker *deleteUplink(const bool parallel = false);
     void putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric);
