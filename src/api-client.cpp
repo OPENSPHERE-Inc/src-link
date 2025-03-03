@@ -233,13 +233,10 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
             }
 
             //syncOnlineResources(); // Now received by WebSocket
-            connect(
-                putUplink(), &RequestInvoker::finished, this,
-                [this](QNetworkReply::NetworkError) {
-                    // WebSocket will be started even if uplink upload failed.
-                    websocket->start();
-                }
-            );
+            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+                // WebSocket will be started even if uplink upload failed.
+                websocket->start();
+            });
         });
 
         // Schedule next refresh
@@ -712,6 +709,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
     body["uplink_status"] = uplinkStatus;
     body["protocols"] = QJsonArray({"srt", "rtmp"});
     body["relay_apps"] = QJsonArray({RELAY_APP_SRTRELAY, RELAY_APP_MEDIAMTX});
+    body["force"] = "true";
 
     API_LOG(
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),
@@ -938,13 +936,10 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
                 }
 
                 //syncOnlineResources(); // Now received by WebSocket
-                connect(
-                    putUplink(), &RequestInvoker::finished, this,
-                    [this](QNetworkReply::NetworkError) {
-                        // WebSocket will be started even if uplink upload failed.
-                        websocket->start();
-                    }
-                );
+                connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+                    // WebSocket will be started even if uplink upload failed.
+                    websocket->start();
+                });
             });
         }
 
