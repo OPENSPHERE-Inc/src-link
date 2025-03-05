@@ -4,7 +4,7 @@
 
 ## Concept
 
-[OBS Studio](https://obsproject.com/) プラグイン SRT-Link (Secure Reliable Controllable Link) の基本的なコンセプトは、
+[OBS Studio](https://obsproject.com/) プラグイン SRC-Link (Secure Reliable Controllable Link) の基本的なコンセプトは、
 OBS を強力な映像トランスミッター及びレシーバーに変えることです。
 
 OBS Studio には、多種多様なインプットがあります。秀逸なゲームキャプチャ―機能（残念ながら OBS 31 で少し互換性問題がありますが、いずれ修正されると思います）があります。
