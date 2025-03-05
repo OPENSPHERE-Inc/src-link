@@ -6,7 +6,7 @@
 
 ## Concept
 
-The basic concept of the [OBS Studio](https://obsproject.com/) plug-in SRT-Link (Secure Reliable Controllable Link) is to turn OBS into a powerful video 
+The basic concept of the [OBS Studio](https://obsproject.com/) plug-in SRC-Link (Secure Reliable Controllable Link) is to turn OBS into a powerful video 
 transmitter and receiver.
 
 OBS Studio offers a wide variety of inputs. There is an excellent game capture feature (unfortunately there is a little compatibility issue in OBS 31,
