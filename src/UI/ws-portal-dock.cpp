@@ -151,7 +151,7 @@ void WsPortalDock::updateGuidance()
             ui->guidanceLabel->setText(QTStr("Guidance.SelectPortal"));
         } else {
             ui->guidanceLabel->setText(QTStr("Guidance.ConnectPortal"));
-        }    
+        }
     } else {
         ui->guidanceLabel->setText(QTStr("Guidance.CreatePortal"));
     }
@@ -167,7 +167,8 @@ void WsPortalDock::updateConnectionInfo()
 {
     auto portal = getActiveWsPortal();
 
-    if (portal.isEmpty() || portal.getFacilityView().isEmpty()) {
+    auto facility = portal.getFacilityView();
+    if (portal.isEmpty() || facility.isEmpty()) {
         ui->connectionInfoWidget->setVisible(false);
         ui->showConnectionInfoCheckBox->setChecked(false);
         return;
@@ -175,14 +176,14 @@ void WsPortalDock::updateConnectionInfo()
     } else {
         if (portal.getFacilityView().getTlsPort()) {
             ui->connectionInfoTabs->setTabVisible(0, true);
-            ui->tlsAddressValueLabel->setText(portal.getFacilityView().getAddress());
-            ui->tlsPortValueLabel->setText(QString::number(portal.getFacilityView().getTlsPort()));
-            ui->tlsUrlValueLabel->setText(portal.getFacilityView().getTlsUrl());
+            ui->tlsAddressValueLabel->setText(facility.getHost(fancyId(portal.getId())));
+            ui->tlsPortValueLabel->setText(QString::number(facility.getTlsPort()));
+            ui->tlsUrlValueLabel->setText(facility.getTlsUrl(fancyId(portal.getId())));
         }
         ui->connectionInfoTabs->setTabVisible(1, true);
-        ui->nonTlsAddressValueLabel->setText(portal.getFacilityView().getAddress());
-        ui->nonTlsPortValueLabel->setText(QString::number(portal.getFacilityView().getPort()));
-        ui->nonTlsUrlValueLabel->setText(portal.getFacilityView().getNonTlsUrl());
+        ui->nonTlsAddressValueLabel->setText(facility.getHost(fancyId(portal.getId())));
+        ui->nonTlsPortValueLabel->setText(QString::number(facility.getPort()));
+        ui->nonTlsUrlValueLabel->setText(facility.getNonTlsUrl(fancyId(portal.getId())));
         ui->connectionInfoTabs->setVisible(ui->showConnectionInfoCheckBox->isChecked());
         ui->connectionInfoWidget->setVisible(true);
     }

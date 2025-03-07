@@ -1247,12 +1247,17 @@ public:
         return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getApiHostAndPort());
     }
 
-    inline QString getTlsUrl() const
+    inline QString getHost(const QString &id) const { return QString("%1.%2").arg(id).arg(getAddress()); }
+
+    inline QString getTlsUrl(const QString &id) const
     {
-        return getTlsPort() ? QString("wss://%1:%2").arg(getAddress()).arg(getTlsPort()) : "";
+        return getTlsPort() ? QString("wss://%1:%2").arg(getHost(id)).arg(getTlsPort()) : "";
     }
 
-    inline QString getNonTlsUrl() const { return QString("ws://%1:%2").arg(getAddress()).arg(getPort()); }
+    inline QString getNonTlsUrl(const QString &id) const
+    {
+        return QString("ws://%1:%2").arg(getHost(id)).arg(getPort());
+    }
 
     inline bool isValid() const
     {
