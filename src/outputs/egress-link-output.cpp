@@ -423,7 +423,6 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     bool advanced_out = !strcmp(mode, "Advanced") || !strcmp(mode, "advanced");
 
     const char *videoEncoderId;
-    uint64_t videoBitrate;
     const char *audioEncoderId;
     uint64_t audioBitrate;
     const char *recFormat;
@@ -435,7 +434,6 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
 
     if (advanced_out) {
         videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
-        videoBitrate = config_get_uint(config, "AdvOut", "FFVBitrate");
         audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
         audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
         recFormat = config_get_string(config, "AdvOut", "RecFormat2");
@@ -446,17 +444,38 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
         const char *recType = config_get_string(config, "AdvOut", "RecType");
         bool ffmpegRecording = !astrcmpi(recType, "ffmpeg") && config_get_bool(config, "AdvOut", "FFOutputToFile");
         path = config_get_string(config, "AdvOut", ffmpegRecording ? "FFFilePath" : "RecFilePath");
+
+        // Apply encoder's defaults
+        OBSString profilePath = obs_frontend_get_current_profile_path();
+        auto encoderJsonPath = QString("%1/%2").arg(QString(profilePath)).arg("streamEncoder.json");
+
+        OBSDataAutoRelease encoderSettings = obs_data_create_from_json_file(qUtf8Printable(encoderJsonPath));        
+        if (encoderSettings) {
+            applyDefaults(defaults, encoderSettings);
+        }
+
     } else {
         videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
-        videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
         audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
         recFormat = config_get_string(config, "SimpleOutput", "RecFormat2");
         path = config_get_string(config, "SimpleOutput", "FilePath");
+
+        // Apply encoder's defaults
+        OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(videoEncoderId);
+        applyDefaults(defaults, encoderDefaults);
+
+        auto videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
+        obs_data_set_default_int(defaults, "bitrate", videoBitrate);
+        
+        auto preset = config_get_string(config, "SimpleOutput", "Preset");
+        obs_data_set_default_string(defaults, "preset", preset);
+
+        auto preset2 = config_get_string(config, "SimpleOutput", "NVENCPreset2");
+        obs_data_set_default_string(defaults, "preset2", preset2);
     }
 
     obs_data_set_default_string(defaults, "video_encoder", videoEncoderId);
-    obs_data_set_default_int(defaults, "bitrate", videoBitrate);
     obs_data_set_default_string(defaults, "audio_encoder", audioEncoderId);
     obs_data_set_default_int(defaults, "audio_bitrate", audioBitrate);
     obs_data_set_default_string(defaults, "audio_source", "");
@@ -478,10 +497,6 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
 
     QString filenameFormatting = QString("%1_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
     obs_data_set_default_string(defaults, "filename_formatting", qUtf8Printable(filenameFormatting));
-
-    // Apply encoder's defaults
-    OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(videoEncoderId);
-    applyDefaults(defaults, encoderDefaults);
 
     obs_log(LOG_DEBUG, "%s: Default settings applied", qUtf8Printable(name));
 }
