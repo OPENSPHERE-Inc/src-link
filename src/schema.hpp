@@ -1231,18 +1231,28 @@ public:
     inline int getTlsPort() const { return value("tls_port").toInt(); }
     inline void setTlsPort(int value) { insert("tls_port", value); }
 
-    inline QString getHost() const
+    inline QString getApiHost() const
     {
         // The host always has "api" subdomain added to the address
         return QString("api.%1").arg(getAddress());
     }
 
-    inline QString getHostAndPort() const
+    inline QString getApiHostAndPort() const
     {
-        return QString("%1:%2").arg(getHost()).arg(getTlsPort() ? getTlsPort() : getPort());
+        return QString("%1:%2").arg(getApiHost()).arg(getTlsPort() ? getTlsPort() : getPort());
     }
 
-    inline QString getUrl() const { return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getHostAndPort()); }
+    inline QString getApiUrl() const
+    {
+        return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getApiHostAndPort());
+    }
+
+    inline QString getTlsUrl() const
+    {
+        return getTlsPort() ? QString("wss://%1:%2").arg(getAddress()).arg(getTlsPort()) : "";
+    }
+
+    inline QString getNonTlsUrl() const { return QString("ws://%1:%2").arg(getAddress()).arg(getPort()); }
 
     inline bool isValid() const
     {

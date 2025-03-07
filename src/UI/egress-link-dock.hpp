@@ -42,6 +42,7 @@ class EgressLinkDock : public QFrame {
     void updateConnections(const Stage &stage);
     void clearConnections();
     void setClientActive(bool active);
+    void updateGuidance();
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);

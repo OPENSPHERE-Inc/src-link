@@ -38,6 +38,9 @@ class WsPortalDock : public QFrame {
     QImage defaultWsPortalPicture;
 
     void setClientActive(bool active);
+    const WsPortal getActiveWsPortal() const;
+    void updateGuidance();
+    void updateConnectionInfo();
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);

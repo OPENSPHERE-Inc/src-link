@@ -20,6 +20,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <qt-wrappers.hpp>
 
 #include <QMessageBox>
+#include <QApplication>
+#include <QClipboard>
 
 #include "../utils.hpp"
 #include "ws-portal-dock.hpp"
@@ -39,6 +41,9 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
 
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     ui->wsPortalPictureLabel->setPixmap(QPixmap::fromImage(defaultWsPortalPicture));
+    ui->connectionInfoWidget->setVisible(false);
+    ui->connectionInfoTabs->setTabVisible(0, false);
+    ui->connectionInfoTabs->setTabVisible(1, false);
 
     connect(
         apiClient, SIGNAL(accountInfoReady(const AccountInfo &)), this, SLOT(onAccountInfoReady(const AccountInfo &))
@@ -61,6 +66,27 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->wsPortalComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveWsPortalChanged(int)));
     connect(ui->wsPortalsButton, SIGNAL(clicked()), this, SLOT(onWsPortalsButtonClicked()));
     connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
+    connect(ui->showConnectionInfoCheckBox, &QCheckBox::toggled, this, [this](bool value) {
+        ui->connectionInfoTabs->setVisible(value);
+    });
+    connect(ui->tlsAddressCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->tlsAddressValueLabel->text());
+    });
+    connect(ui->tlsPortCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->tlsPortValueLabel->text());
+    });
+    connect(ui->tlsUrlCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->tlsUrlValueLabel->text());
+    });
+    connect(ui->nonTlsAddressCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->nonTlsAddressValueLabel->text());
+    });
+    connect(ui->nonTlsPortCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->nonTlsPortValueLabel->text());
+    });
+    connect(ui->nonTlsUrlCopyButton, &QToolButton::clicked, this, [this]() {
+        QApplication::clipboard()->setText(ui->nonTlsUrlValueLabel->text());
+    });
 
     setClientActive(apiClient->isLoggedIn());
     if (!apiClient->getAccountInfo().isEmpty()) {
@@ -78,6 +104,16 @@ WsPortalDock::WsPortalDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
     ui->wsPortalStatus->setText(QTStr("Unlinked"));
     setThemeID(ui->wsPortalStatus, "error", "text-danger");
+    ui->showConnectionInfoCheckBox->setText(QTStr("ShowConnectionInfo"));
+    ui->connectionInfoTabs->setTabText(0, QTStr("TLS"));
+    ui->connectionInfoTabs->setTabText(1, QTStr("NonTLS"));
+    ui->tlsAddressLabel->setText(QTStr("Address"));
+    ui->tlsPortLabel->setText(QTStr("Port"));
+    ui->tlsUrlLabel->setText(QTStr("URL"));
+    ui->nonTlsAddressLabel->setText(QTStr("Address"));
+    ui->nonTlsPortLabel->setText(QTStr("Port"));
+    ui->nonTlsUrlLabel->setText(QTStr("URL"));
+    ui->nonTlsNoticeLabel->setText(QTStr("NonTLSNotice"));
 
     obs_log(LOG_DEBUG, "WsPortalDock created");
 }
@@ -97,10 +133,58 @@ void WsPortalDock::setClientActive(bool active)
         ui->wsPortalWidget->setVisible(false);
         ui->signupWidget->setVisible(true);
         ui->wsPortalComboBox->clear();
+        ui->guidanceWidget->setVisible(false);
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
         ui->wsPortalWidget->setVisible(true);
         ui->signupWidget->setVisible(false);
+        ui->guidanceWidget->setVisible(true);
+        updateGuidance();
+    }
+}
+
+void WsPortalDock::updateGuidance()
+{
+    if (ui->wsPortalComboBox->count() > 1) {
+        auto portalId = ui->wsPortalComboBox->currentData().toString();
+        if (portalId.isEmpty() || portalId == WS_PORTAL_SELECTION_NONE) {
+            ui->guidanceLabel->setText(QTStr("Guidance.SelectPortal"));
+        } else {
+            ui->guidanceLabel->setText(QTStr("Guidance.ConnectPortal"));
+        }    
+    } else {
+        ui->guidanceLabel->setText(QTStr("Guidance.CreatePortal"));
+    }
+}
+
+const WsPortal WsPortalDock::getActiveWsPortal() const
+{
+    auto portalId = ui->wsPortalComboBox->currentData().toString();
+    return apiClient->getWsPortals().find([portalId](const WsPortal &_portal) { return _portal.getId() == portalId; });
+}
+
+void WsPortalDock::updateConnectionInfo()
+{
+    auto portal = getActiveWsPortal();
+
+    if (portal.isEmpty() || portal.getFacilityView().isEmpty()) {
+        ui->connectionInfoWidget->setVisible(false);
+        ui->showConnectionInfoCheckBox->setChecked(false);
+        return;
+
+    } else {
+        if (portal.getFacilityView().getTlsPort()) {
+            ui->connectionInfoTabs->setTabVisible(0, true);
+            ui->tlsAddressValueLabel->setText(portal.getFacilityView().getAddress());
+            ui->tlsPortValueLabel->setText(QString::number(portal.getFacilityView().getTlsPort()));
+            ui->tlsUrlValueLabel->setText(portal.getFacilityView().getTlsUrl());
+        }
+        ui->connectionInfoTabs->setTabVisible(1, true);
+        ui->nonTlsAddressValueLabel->setText(portal.getFacilityView().getAddress());
+        ui->nonTlsPortValueLabel->setText(QString::number(portal.getFacilityView().getPort()));
+        ui->nonTlsUrlValueLabel->setText(portal.getFacilityView().getNonTlsUrl());
+        ui->connectionInfoTabs->setVisible(ui->showConnectionInfoCheckBox->isChecked());
+        ui->connectionInfoWidget->setVisible(true);
     }
 }
 
@@ -164,9 +248,7 @@ void WsPortalDock::onPictureFailed(const QString &pictureId)
 
 void WsPortalDock::onActiveWsPortalChanged(int)
 {
-    auto portalId = ui->wsPortalComboBox->currentData().toString();
-    auto portal =
-        apiClient->getWsPortals().find([portalId](const WsPortal &_portal) { return _portal.getId() == portalId; });
+    auto portal = getActiveWsPortal();
 
     // Apply default picture first
     ui->wsPortalPictureLabel->setProperty("pictureId", "");
@@ -180,11 +262,14 @@ void WsPortalDock::onActiveWsPortalChanged(int)
         }
     }
 
-    if (apiClient->getSettings()->getWsPortalId() != portalId) {
-        apiClient->getSettings()->setWsPortalId(portalId);
+    if (apiClient->getSettings()->getWsPortalId() != portal.getId()) {
+        apiClient->getSettings()->setWsPortalId(portal.getId());
         // Stop when portalId is empty
         wsPortalClient->restart();
     }
+
+    updateConnectionInfo();
+    updateGuidance();
 }
 
 void WsPortalDock::onWsPortalsReady(const WsPortalArray &portals)

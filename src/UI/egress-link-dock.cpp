@@ -105,12 +105,25 @@ void EgressLinkDock::setClientActive(bool active)
         ui->accountNameLabel->setText(QTStr("NotLoggedInYet"));
         ui->uplinkWidget->setVisible(false);
         ui->signupWidget->setVisible(true);
+        ui->guidanceWidget->setVisible(false);
         ui->participantComboBox->clear();
         clearConnections();
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
         ui->uplinkWidget->setVisible(true);
         ui->signupWidget->setVisible(false);
+        ui->guidanceWidget->setVisible(true);
+        updateGuidance();
+    }
+}
+
+void EgressLinkDock::updateGuidance()
+{
+    if (apiClient->getUplink().getStage().isEmpty()) {
+        ui->guidanceLabel->setText(QTStr("Guidance.SelectReceiver"));
+    } else {
+        auto interlockType = ui->interlockTypeComboBox->currentData().toString();
+        ui->guidanceLabel->setText(QTStr(qUtf8Printable(QString("Guidance.%1").arg(interlockType))));
     }
 }
 
@@ -246,6 +259,8 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
         ui->seatAllocationStatus->setText(QTStr("NotReady"));
         setThemeID(ui->seatAllocationStatus, "error", "text-danger");
     }
+
+    updateGuidance();
 }
 
 void EgressLinkDock::onUplinkFailed(const QString &)
@@ -256,6 +271,8 @@ void EgressLinkDock::onUplinkFailed(const QString &)
 
     qDeleteAll(connectionWidgets);
     connectionWidgets.clear();
+
+    updateGuidance();
 }
 
 void EgressLinkDock::updateConnections(const Stage &stage)
@@ -305,6 +322,8 @@ void EgressLinkDock::onInterlockTypeChanged(int)
 {
     auto interlockType = ui->interlockTypeComboBox->currentData().toString();
     apiClient->getSettings()->setValue("interlock_type", interlockType);
+    
+    updateGuidance();
 }
 
 void EgressLinkDock::onConnectionButtonClicked()

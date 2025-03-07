@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/src-link">
+    <file>images/clone-regular.svg</file>
     <file>images/unknownclient.png</file>
     <file>images/unknownevent.png</file>
     <file>images/unknownman.png</file>
