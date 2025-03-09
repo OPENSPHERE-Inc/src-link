@@ -91,6 +91,7 @@ class EgressLinkOutput : public QObject {
     int initialDroppedFrames;
     uint64_t lastPutStatisticsAt; // milliseconds
 
+    void loadProfile(obs_data_t *settings);
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
