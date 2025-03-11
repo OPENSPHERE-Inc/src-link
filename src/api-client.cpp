@@ -69,6 +69,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
+#define MEMBER_ACTIVATE_URL (API_SERVER "/api/v1/members/activate")
 // Control Panel Pages
 #define AUTHORIZE_URL (FRONTEND_SERVER "/oauth2/authorize")
 #define STAGES_PAGE_URL (FRONTEND_SERVER "/receivers")
@@ -469,12 +470,6 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
         participants = newParticipants;
         API_LOG("Received %d participants", participants.size());
 
-        if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
-            settings->setParticipantId(participants[0].getId());
-            // Put uplink again
-            putUplink();
-        }
-
         emit participantsReady(participants);
     });
     invoker->get(QNetworkRequest(QUrl(PARTICIPANTS_URL)));
@@ -817,6 +812,55 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
         emit deleteUplinkSucceeded(uuid);
     });
     invoker->deleteResource(req);
+
+    return invoker;
+}
+
+const RequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCode)
+{
+    CHECK_CLIENT_TOKEN(nullptr);
+
+    auto req = QNetworkRequest(QUrl(QString(MEMBER_ACTIVATE_URL)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject body;
+    body["invite_code"] = inviteCode;
+
+    API_LOG("Activating member for %s", qUtf8Printable(inviteCode));
+    auto invoker = new RequestInvoker(sequencer, this);
+    connect(invoker, &RequestInvoker::finished, [this, inviteCode](QNetworkReply::NetworkError error, QByteArray replyData) {
+        if (error != QNetworkReply::NoError) {
+            ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), error);
+            emit redeemInviteCodeFailed(inviteCode);
+            return;
+        }
+        API_LOG("Activating member for %s succeeded", qUtf8Printable(inviteCode));
+
+        MemberActivationResult result = QJsonDocument::fromJson(replyData).object();
+
+        // Marge participants
+        for (const auto &participant : result.getParticipants().values()) {
+            auto index = participants.findIndex([participant](const PartyEventParticipant &participant) {
+                return participant.getId() == participant.getId();
+            });
+            if (index >= 0) {
+                participants.replace(index, participant);
+            } else {
+                participants.append(participant);
+            }
+        }
+
+        if (result.getParticipants().size() > 0) {
+            // Change current participant to activated one
+            settings->setParticipantId(result.getParticipants().values()[0].getId());
+            // Put uplink now
+            putUplink();
+        }
+
+        emit redeemInviteCodeSucceeded(result);
+        emit participantsReady(participants);
+    });
+    invoker->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }

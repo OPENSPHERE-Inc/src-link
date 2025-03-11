@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
 #include "ui_egress-link-dock.h"
+#include "redeem-invite-code-dialog.hpp"
 
 class EgressLinkConnectionWidget;
 
@@ -38,6 +39,7 @@ class EgressLinkDock : public QFrame {
     QImage defaultAccountPicture;
     QImage defaultStagePicture;
     QList<EgressLinkConnectionWidget *> connectionWidgets;
+    RedeemInviteCodeDialog *redeemInviteCodeDialog;
 
     void updateConnections(const Stage &stage);
     void clearConnections();
@@ -58,6 +60,7 @@ private slots:
     void onControlPanelButtonClicked();
     void onMembershipsButtonClicked();
     void onSignupButtonClicked();
+    void onRedeemInviteCodeAccepted(const QString &inviteCode);
 
 public:
     explicit EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);

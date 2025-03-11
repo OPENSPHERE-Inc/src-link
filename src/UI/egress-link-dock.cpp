@@ -36,6 +36,8 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
 {
     ui->setupUi(this);
 
+    redeemInviteCodeDialog = new RedeemInviteCodeDialog(this);
+
     ui->accountPictureLabel->setPixmap(QPixmap::fromImage(defaultAccountPicture));
     ui->participantPictureLabel->setPixmap(QPixmap::fromImage(defaultStagePicture));
 
@@ -71,6 +73,12 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
     connect(ui->membershipsButton, SIGNAL(clicked()), this, SLOT(onMembershipsButtonClicked()));
     connect(ui->signupButton, SIGNAL(clicked()), this, SLOT(onSignupButtonClicked()));
+    connect(ui->redeemInviteCodeButton, &QPushButton::clicked, [&]() { redeemInviteCodeDialog->show(); });
+
+    connect(
+        redeemInviteCodeDialog, SIGNAL(accepted(const QString &)), this,
+        SLOT(onRedeemInviteCodeAccepted(const QString &))
+    );
 
     setClientActive(apiClient->isLoggedIn());
     if (!apiClient->getAccountInfo().isEmpty()) {
@@ -87,6 +95,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->controlPanelButton->setText(QTStr("SRCLinkControlPanel"));
     ui->membershipsButton->setText(QTStr("Manage"));
     ui->signupButton->setText(QTStr("SignupSRCLinkControlPanel"));
+    ui->redeemInviteCodeButton->setText(QTStr("RedeemInvitationCode"));
 
     obs_log(LOG_DEBUG, "EgressLinkDock created");
 }
@@ -107,6 +116,7 @@ void EgressLinkDock::setClientActive(bool active)
         ui->signupWidget->setVisible(true);
         ui->guidanceWidget->setVisible(false);
         ui->participantComboBox->clear();
+        ui->redeemInviteCodeWidget->setVisible(false);
         clearConnections();
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
@@ -121,9 +131,11 @@ void EgressLinkDock::updateGuidance()
 {
     if (apiClient->getUplink().getStage().isEmpty()) {
         ui->guidanceLabel->setText(QTStr("Guidance.SelectReceiver"));
+        ui->redeemInviteCodeWidget->setVisible(true);
     } else {
         auto interlockType = ui->interlockTypeComboBox->currentData().toString();
         ui->guidanceLabel->setText(QTStr(qUtf8Printable(QString("Guidance.%1").arg(interlockType))));
+        ui->redeemInviteCodeWidget->setVisible(false);
     }
 }
 
@@ -322,7 +334,7 @@ void EgressLinkDock::onInterlockTypeChanged(int)
 {
     auto interlockType = ui->interlockTypeComboBox->currentData().toString();
     apiClient->getSettings()->setValue("interlock_type", interlockType);
-    
+
     updateGuidance();
 }
 
@@ -360,4 +372,17 @@ void EgressLinkDock::onMembershipsButtonClicked()
 void EgressLinkDock::onSignupButtonClicked()
 {
     apiClient->openSignupPage();
+}
+
+void EgressLinkDock::onRedeemInviteCodeAccepted(const QString &inviteCode)
+{
+    connect(
+        apiClient->redeemInviteCode(inviteCode), &RequestInvoker::finished, this,
+        [this](QNetworkReply::NetworkError error) {
+            if (error != QNetworkReply::NoError) {
+                QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
+                return;
+            }
+        }
+    );
 }

@@ -107,6 +107,8 @@ signals:
     void putUplinkStatusFailed(const QString &uuid);
     void deleteUplinkSucceeded(const QString &uuid);
     void deleteUplinkFailed(const QString &uuid);
+    void redeemInviteCodeSucceeded(const MemberActivationResult &result);
+    void redeemInviteCodeFailed(const QString &inviteCode);
     void putScreenshotSucceeded(const QString &sourceName);
     void putScreenshotFailed(const QString &sourceName);
     void getPictureSucceeded(const QString &pictureId, const QImage &picture);
@@ -169,6 +171,7 @@ public slots:
     const RequestInvoker *putUplink();
     const RequestInvoker *putUplinkStatus();
     const RequestInvoker *deleteUplink(const bool parallel = false);
+    const RequestInvoker *redeemInviteCode(const QString &inviteCode);
     void putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric);
     void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
