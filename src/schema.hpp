@@ -280,6 +280,47 @@ public:
     }
 };
 
+class AccountAccessCodeView : public QJsonObject {
+public:
+    AccountAccessCodeView() = default;
+    AccountAccessCodeView(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getValue() const { return value("value").toString(); }
+    inline void setValue(const QString &value) { insert("value", value); }
+    inline QDateTime getExpiryDate() const
+    {
+        return QDateTime::fromString(value("expiry_date").toString(), Qt::ISODate);
+    }
+    inline void setExpiryDate(const QDateTime &value) { insert("expiry_date", value.toString(Qt::ISODate)); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QDateTime getCreatedAt() const { return QDateTime::fromString(value("created_at").toString(), Qt::ISODate); }
+    inline void setCreatedAt(const QDateTime &value) { insert("created_at", value.toString(Qt::ISODate)); }
+
+    inline bool isValid() const
+    {
+        auto validId = (*this)["_id"].isString();
+        auto validValue = (*this)["value"].isString();
+        auto validExpiryDate = maybe((*this)["expiry_date"], (*this)["expiry_date"].isString());
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validCreatedAt = (*this)["created_at"].isString();
+
+        auto valid = validId && validValue && validExpiryDate && validDescription && validCreatedAt;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "AccountAccessCodeView: id=%d, value=%d, expiry_date=%d, description=%d, created_at=%d", validId,
+            validValue, validExpiryDate, validDescription, validCreatedAt
+        );
+#endif
+
+        return valid;
+    }
+};
+
 class Account : public QJsonObject {
 public:
     Account() = default;
@@ -291,19 +332,22 @@ public:
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
     inline QString getPictureId() const { return value("picture_id").toString(); }
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline AccountAccessCodeView getAccessCodeView() const { return value("access_code_view").toObject(); }
+    inline void setAccessCodeView(const AccountAccessCodeView &value) { insert("access_code_view", value); }
 
     inline bool isValid() const
     {
         auto validId = (*this)["_id"].isString();
         auto validDisplayName = (*this)["display_name"].isString();
         auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validAccessCodeView = maybe((*this)["access_code_view"], getAccessCodeView().isValid());
 
-        auto valid = validId && validDisplayName && validPictureId;
+        auto valid = validId && validDisplayName && validPictureId && validAccessCodeView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "Account: id=%d, display_name=%d, picture_id=%d", validId, validDisplayName,
-            validPictureId
+            valid ? LOG_DEBUG : LOG_ERROR, "Account: id=%d, display_name=%d, picture_id=%d, access_code_view=%d",
+            validId, validDisplayName, validPictureId, validAccessCodeView
         );
 #endif
 

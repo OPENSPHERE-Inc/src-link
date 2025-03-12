@@ -32,15 +32,18 @@ class SettingsDialog : public QDialog {
     Ui::SettingsDialog *ui;
 
     SRCLinkApiClient *apiClient;
+    QString latestAccessCode;
 
     void setClientActive(bool active);
+    void updateGuestCode();
 
 private slots:
     void onConnectionButtonClick();
     void onAccept();
-
     void onLinkingFailed();
     void onAccountInfoReady(const AccountInfo &accountInfo);
+    void onGuestCodeClicked();
+
     void saveSettings();
     void loadSettings();
 

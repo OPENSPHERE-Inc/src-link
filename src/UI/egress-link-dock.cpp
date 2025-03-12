@@ -73,7 +73,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
     connect(ui->membershipsButton, SIGNAL(clicked()), this, SLOT(onMembershipsButtonClicked()));
     connect(ui->signupButton, SIGNAL(clicked()), this, SLOT(onSignupButtonClicked()));
-    connect(ui->redeemInviteCodeButton, &QPushButton::clicked, [&]() { redeemInviteCodeDialog->show(); });
+    connect(ui->redeemInviteCodeButton, &QPushButton::clicked, this, [&]() { redeemInviteCodeDialog->show(); });
 
     connect(
         redeemInviteCodeDialog, SIGNAL(accepted(const QString &)), this,
@@ -179,10 +179,11 @@ void EgressLinkDock::onParticipantsReady(const PartyEventParticipantArray &parti
         }
 
         // Restore selection (or apply default)
-        if (selected.isEmpty()) {
+        if (selected.isEmpty() || selected == PARTICIPANT_SEELCTION_NONE) {
+            // Returns empty string if not selected
             selected = apiClient->getSettings()->getParticipantId();
         }
-        if (!selected.isEmpty()) {
+        if (!selected.isEmpty() && selected != PARTICIPANT_SEELCTION_NONE) {
             ui->participantComboBox->setCurrentIndex(std::max(ui->participantComboBox->findData(selected), 0));
         } else {
             ui->participantComboBox->setCurrentIndex(0);

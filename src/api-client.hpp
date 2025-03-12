@@ -183,6 +183,7 @@ public slots:
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
     void openWsPortalsPage();    // Just open web browser
+    void openGuestCodesPage();   // Just open web browser
     void syncUplinkStatus(bool force = false);
     QString retrievePrivateIp();
 

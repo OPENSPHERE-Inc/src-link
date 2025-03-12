@@ -77,6 +77,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
 #define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
 #define WS_PORTALS_PAGE (FRONTEND_SERVER "/ws-portals")
+#define GUEST_CODES_PAGE (FRONTEND_SERVER "/accounts/guest-codes")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -828,38 +829,41 @@ const RequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCo
 
     API_LOG("Activating member for %s", qUtf8Printable(inviteCode));
     auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this, inviteCode](QNetworkReply::NetworkError error, QByteArray replyData) {
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), error);
-            emit redeemInviteCodeFailed(inviteCode);
-            return;
-        }
-        API_LOG("Activating member for %s succeeded", qUtf8Printable(inviteCode));
-
-        MemberActivationResult result = QJsonDocument::fromJson(replyData).object();
-
-        // Marge participants
-        for (const auto &participant : result.getParticipants().values()) {
-            auto index = participants.findIndex([participant](const PartyEventParticipant &participant) {
-                return participant.getId() == participant.getId();
-            });
-            if (index >= 0) {
-                participants.replace(index, participant);
-            } else {
-                participants.append(participant);
+    connect(
+        invoker, &RequestInvoker::finished,
+        [this, inviteCode](QNetworkReply::NetworkError error, QByteArray replyData) {
+            if (error != QNetworkReply::NoError) {
+                ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), error);
+                emit redeemInviteCodeFailed(inviteCode);
+                return;
             }
-        }
+            API_LOG("Activating member for %s succeeded", qUtf8Printable(inviteCode));
 
-        if (result.getParticipants().size() > 0) {
-            // Change current participant to activated one
-            settings->setParticipantId(result.getParticipants().values()[0].getId());
-            // Put uplink now
-            putUplink();
-        }
+            MemberActivationResult result = QJsonDocument::fromJson(replyData).object();
 
-        emit redeemInviteCodeSucceeded(result);
-        emit participantsReady(participants);
-    });
+            // Marge participants
+            for (const auto &participant : result.getParticipants().values()) {
+                auto index = participants.findIndex([participant](const PartyEventParticipant &p) {
+                    return p.getId() == participant.getId();
+                });
+                if (index >= 0) {
+                    participants.replace(index, participant);
+                } else {
+                    participants.append(participant);
+                }
+            }
+
+            if (result.getParticipants().size() > 0) {
+                // Change current participant to activated one
+                settings->setParticipantId(result.getParticipants().values()[0].getId());
+                // Put uplink now
+                putUplink();
+            }
+
+            emit redeemInviteCodeSucceeded(result);
+            emit participantsReady(participants);
+        }
+    );
     invoker->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
@@ -951,6 +955,11 @@ void SRCLinkApiClient::openSignupPage()
 void SRCLinkApiClient::openWsPortalsPage()
 {
     QDesktopServices::openUrl(QUrl(WS_PORTALS_PAGE));
+}
+
+void SRCLinkApiClient::openGuestCodesPage()
+{
+    QDesktopServices::openUrl(QUrl(GUEST_CODES_PAGE));
 }
 
 void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
@@ -1149,9 +1158,7 @@ void SRCLinkApiClient::onWebSocketDataChanged(const WebSocketMessage &message)
                 return;
             }
 
-            auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
-                return participant.getId() == id;
-            });
+            auto index = participants.findIndex([id](const PartyEventParticipant &p) { return p.getId() == id; });
             if (index >= 0) {
                 participants.replace(index, newParticipant);
             } else {
