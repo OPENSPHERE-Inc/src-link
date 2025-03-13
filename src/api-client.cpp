@@ -718,8 +718,12 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
             return;
         }
         if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
-            emit putUplinkFailed(uuid);
+            if (error == QNetworkReply::ContentConflictError) {
+                ERROR_LOG("%s", obs_module_text("UuidConflictErrorDueToSecurity"));
+            } else {
+                ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+            }
+            emit putUplinkFailed(uuid, error);
             emit uplinkFailed(uuid);
             return;
         }
@@ -729,7 +733,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
         if (!newUplink.isValid()) {
             ERROR_LOG("Received malformed uplink data.");
             API_LOG("dump=%s", replyData.toStdString().c_str());
-            emit putUplinkFailed(uuid);
+            emit putUplinkFailed(uuid, QNetworkReply::UnknownContentError);
             emit uplinkFailed(uuid);
             return;
         }

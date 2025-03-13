@@ -40,6 +40,7 @@ class EgressLinkDock : public QFrame {
     QImage defaultStagePicture;
     QList<EgressLinkConnectionWidget *> connectionWidgets;
     RedeemInviteCodeDialog *redeemInviteCodeDialog;
+    QString errorText;
 
     void updateConnections(const Stage &stage);
     void clearConnections();
@@ -54,6 +55,7 @@ private slots:
     void onPictureFailed(const QString &pictureId);
     void onUplinkReady(const UplinkInfo &uplink);
     void onUplinkFailed(const QString &uuid);
+    void onPutUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
     void onInterlockTypeChanged(int index);
     void onConnectionButtonClicked();
     void onLogoutSucceeded();

@@ -32,7 +32,8 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
       ui(new Ui::EgressLinkDock),
       apiClient(_apiClient),
       defaultAccountPicture(":/src-link/images/unknownman.png"),
-      defaultStagePicture(":/src-link/images/unknownstage.png")
+      defaultStagePicture(":/src-link/images/unknownstage.png"),
+      errorText("")
 {
     ui->setupUi(this);
 
@@ -66,6 +67,10 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
     connect(apiClient, SIGNAL(uplinkFailed(const QString &)), this, SLOT(onUplinkFailed(const QString &)));
     connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
+    connect(
+        apiClient, SIGNAL(putUplinkFailed(const QString &, QNetworkReply::NetworkError)), this,
+        SLOT(onPutUplinkFailed(const QString &, QNetworkReply::NetworkError))
+    );
 
     connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
@@ -129,13 +134,19 @@ void EgressLinkDock::setClientActive(bool active)
 
 void EgressLinkDock::updateGuidance()
 {
-    if (apiClient->getUplink().getStage().isEmpty()) {
+    if (!errorText.isEmpty()) {
+        ui->guidanceLabel->setText(errorText);
+        ui->redeemInviteCodeWidget->setVisible(false);
+        setThemeID(ui->guidanceLabel, "error", "text-danger");
+    } else if (apiClient->getUplink().getStage().isEmpty()) {
         ui->guidanceLabel->setText(QTStr("Guidance.SelectReceiver"));
         ui->redeemInviteCodeWidget->setVisible(true);
+        setThemeID(ui->guidanceLabel, "", "");
     } else {
         auto interlockType = ui->interlockTypeComboBox->currentData().toString();
         ui->guidanceLabel->setText(QTStr(qUtf8Printable(QString("Guidance.%1").arg(interlockType))));
         ui->redeemInviteCodeWidget->setVisible(false);
+        setThemeID(ui->guidanceLabel, "", "");
     }
 }
 
@@ -273,18 +284,29 @@ void EgressLinkDock::onUplinkReady(const UplinkInfo &uplink)
         setThemeID(ui->seatAllocationStatus, "error", "text-danger");
     }
 
+    errorText = "";
     updateGuidance();
 }
 
 void EgressLinkDock::onUplinkFailed(const QString &)
 {
     ui->seatAllocationSeatName->setText("");
-    ui->seatAllocationStatus->setText(QTStr("NotReady"));
+    ui->seatAllocationStatus->setText(QTStr("Error"));
     setThemeID(ui->seatAllocationStatus, "error", "text-danger");
 
     qDeleteAll(connectionWidgets);
     connectionWidgets.clear();
 
+    updateGuidance();
+}
+
+void EgressLinkDock::onPutUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error)
+{
+    if (error == QNetworkReply::ContentConflictError) {
+        errorText = QTStr("UuidConflictErrorDueToSecurity");
+    } else {
+        errorText = QTStr("PutUplinkFailed");
+    }
     updateGuidance();
 }
 
@@ -358,6 +380,7 @@ void EgressLinkDock::onConnectionButtonClicked()
 void EgressLinkDock::onLogoutSucceeded()
 {
     setClientActive(false);
+    errorText = "";
 }
 
 void EgressLinkDock::onControlPanelButtonClicked()

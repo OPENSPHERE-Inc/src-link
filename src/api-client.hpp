@@ -102,7 +102,7 @@ signals:
     void deleteDownlinkSucceeded(const QString &uuid);
     void deleteDownlinkFailed(const QString &uuid);
     void putUplinkSucceeded(const UplinkInfo &uplink);
-    void putUplinkFailed(const QString &uuid);
+    void putUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
     void putUplinkStatusSucceeded(const UplinkInfo &uplink);
     void putUplinkStatusFailed(const QString &uuid);
     void deleteUplinkSucceeded(const QString &uuid);
