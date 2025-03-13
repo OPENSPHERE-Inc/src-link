@@ -39,5 +39,4 @@ protected:
 public:
     explicit RedeemInviteCodeDialog(QWidget *parent = nullptr);
     ~RedeemInviteCodeDialog();
-
 };

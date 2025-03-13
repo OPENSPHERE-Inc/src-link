@@ -536,10 +536,10 @@ void EgressLinkOutput::loadProfile(obs_data_t *_settings)
 
         OBSString profilePath = obs_frontend_get_current_profile_path();
         auto encoderJsonPath = QString("%1/%2").arg(QString(profilePath)).arg("streamEncoder.json");
-        OBSDataAutoRelease encoderSettings = obs_data_create_from_json_file(qUtf8Printable(encoderJsonPath));        
+        OBSDataAutoRelease encoderSettings = obs_data_create_from_json_file(qUtf8Printable(encoderJsonPath));
 
         if (encoderSettings) {
-            obs_data_apply(settings, encoderSettings);
+            obs_data_apply(_settings, encoderSettings);
         }
 
     } else {
@@ -548,18 +548,18 @@ void EgressLinkOutput::loadProfile(obs_data_t *_settings)
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
 
         auto videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
-        obs_data_set_int(settings, "bitrate", videoBitrate);
-        
+        obs_data_set_int(_settings, "bitrate", videoBitrate);
+
         auto preset = config_get_string(config, "SimpleOutput", "Preset");
-        obs_data_set_string(settings, "preset", preset);
+        obs_data_set_string(_settings, "preset", preset);
 
         auto preset2 = config_get_string(config, "SimpleOutput", "NVENCPreset2");
-        obs_data_set_string(settings, "preset2", preset2);
+        obs_data_set_string(_settings, "preset2", preset2);
     }
 
-    obs_data_set_string(settings, "video_encoder", videoEncoderId);
-    obs_data_set_string(settings, "audio_encoder", audioEncoderId);
-    obs_data_set_int(settings, "audio_bitrate", audioBitrate);
+    obs_data_set_string(_settings, "video_encoder", videoEncoderId);
+    obs_data_set_string(_settings, "audio_encoder", audioEncoderId);
+    obs_data_set_int(_settings, "audio_bitrate", audioBitrate);
 }
 
 void EgressLinkOutput::loadSettings()

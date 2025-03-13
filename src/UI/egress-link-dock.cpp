@@ -300,7 +300,7 @@ void EgressLinkDock::onUplinkFailed(const QString &)
     updateGuidance();
 }
 
-void EgressLinkDock::onPutUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error)
+void EgressLinkDock::onPutUplinkFailed(const QString &, QNetworkReply::NetworkError error)
 {
     if (error == QNetworkReply::ContentConflictError) {
         errorText = QTStr("UuidConflictErrorDueToSecurity");
