@@ -18,39 +18,25 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <obs-module.h>
-
 #include <QDialog>
-#include <QGraphicsScene>
 
-#include "ui_settings-dialog.h"
-#include "../api-client.hpp"
+#include "ui_redeem-invite-code-dialog.h"
 
-class SettingsDialog : public QDialog {
+class RedeemInviteCodeDialog : public QDialog {
     Q_OBJECT
 
-    Ui::SettingsDialog *ui;
+    Ui::RedeemInviteCodeDialog *ui;
 
-    SRCLinkApiClient *apiClient;
-    QString latestAccessCode;
-
-    void setClientActive(bool active);
-    void updateGuestCode();
+signals:
+    void accepted(const QString &inviteCode);
 
 private slots:
-    void onConnectionButtonClick();
-    void onAccept();
-    void onLinkingFailed();
-    void onAccountInfoReady(const AccountInfo &accountInfo);
-    void onGuestCodeClicked();
-
-    void saveSettings();
-    void loadSettings();
+    void onAccepted();
 
 protected:
     void showEvent(QShowEvent *event) override;
 
 public:
-    SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);
-    ~SettingsDialog();
+    explicit RedeemInviteCodeDialog(QWidget *parent = nullptr);
+    ~RedeemInviteCodeDialog();
 };

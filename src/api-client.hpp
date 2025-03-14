@@ -102,11 +102,13 @@ signals:
     void deleteDownlinkSucceeded(const QString &uuid);
     void deleteDownlinkFailed(const QString &uuid);
     void putUplinkSucceeded(const UplinkInfo &uplink);
-    void putUplinkFailed(const QString &uuid);
+    void putUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
     void putUplinkStatusSucceeded(const UplinkInfo &uplink);
     void putUplinkStatusFailed(const QString &uuid);
     void deleteUplinkSucceeded(const QString &uuid);
     void deleteUplinkFailed(const QString &uuid);
+    void redeemInviteCodeSucceeded(const MemberActivationResult &result);
+    void redeemInviteCodeFailed(const QString &inviteCode);
     void putScreenshotSucceeded(const QString &sourceName);
     void putScreenshotFailed(const QString &sourceName);
     void getPictureSucceeded(const QString &pictureId, const QImage &picture);
@@ -166,9 +168,10 @@ public slots:
     const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
     const RequestInvoker *putDownlinkStatus(const QString &sourceUuid);
     const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
-    const RequestInvoker *putUplink(const bool force = false);
+    const RequestInvoker *putUplink();
     const RequestInvoker *putUplinkStatus();
     const RequestInvoker *deleteUplink(const bool parallel = false);
+    const RequestInvoker *redeemInviteCode(const QString &inviteCode);
     void putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric);
     void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);
@@ -180,6 +183,7 @@ public slots:
     void openMembershipsPage();  // Just open web browser
     void openSignupPage();       // Just open web browser
     void openWsPortalsPage();    // Just open web browser
+    void openGuestCodesPage();   // Just open web browser
     void syncUplinkStatus(bool force = false);
     QString retrievePrivateIp();
 

@@ -280,6 +280,47 @@ public:
     }
 };
 
+class AccountAccessCodeView : public QJsonObject {
+public:
+    AccountAccessCodeView() = default;
+    AccountAccessCodeView(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getId() const { return value("_id").toString(); }
+    inline void setId(const QString &value) { insert("_id", value); }
+    inline QString getValue() const { return value("value").toString(); }
+    inline void setValue(const QString &value) { insert("value", value); }
+    inline QDateTime getExpiryDate() const
+    {
+        return QDateTime::fromString(value("expiry_date").toString(), Qt::ISODate);
+    }
+    inline void setExpiryDate(const QDateTime &value) { insert("expiry_date", value.toString(Qt::ISODate)); }
+    inline QString getDescription() const { return value("description").toString(); }
+    inline void setDescription(const QString &value) { insert("description", value); }
+    inline QDateTime getCreatedAt() const { return QDateTime::fromString(value("created_at").toString(), Qt::ISODate); }
+    inline void setCreatedAt(const QDateTime &value) { insert("created_at", value.toString(Qt::ISODate)); }
+
+    inline bool isValid() const
+    {
+        auto validId = (*this)["_id"].isString();
+        auto validValue = (*this)["value"].isString();
+        auto validExpiryDate = maybe((*this)["expiry_date"], (*this)["expiry_date"].isString());
+        auto validDescription = maybe((*this)["description"], (*this)["description"].isString());
+        auto validCreatedAt = (*this)["created_at"].isString();
+
+        auto valid = validId && validValue && validExpiryDate && validDescription && validCreatedAt;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "AccountAccessCodeView: id=%d, value=%d, expiry_date=%d, description=%d, created_at=%d", validId,
+            validValue, validExpiryDate, validDescription, validCreatedAt
+        );
+#endif
+
+        return valid;
+    }
+};
+
 class Account : public QJsonObject {
 public:
     Account() = default;
@@ -291,19 +332,22 @@ public:
     inline void setDisplayName(const QString &value) { insert("display_name", value); }
     inline QString getPictureId() const { return value("picture_id").toString(); }
     inline void setPictureId(const QString &value) { insert("picture_id", value); }
+    inline AccountAccessCodeView getAccessCodeView() const { return value("access_code_view").toObject(); }
+    inline void setAccessCodeView(const AccountAccessCodeView &value) { insert("access_code_view", value); }
 
     inline bool isValid() const
     {
         auto validId = (*this)["_id"].isString();
         auto validDisplayName = (*this)["display_name"].isString();
         auto validPictureId = maybe((*this)["picture_id"], (*this)["picture_id"].isString());
+        auto validAccessCodeView = maybe((*this)["access_code_view"], getAccessCodeView().isValid());
 
-        auto valid = validId && validDisplayName && validPictureId;
+        auto valid = validId && validDisplayName && validPictureId && validAccessCodeView;
 
 #ifdef SCHEMA_DEBUG
         obs_log(
-            valid ? LOG_DEBUG : LOG_ERROR, "Account: id=%d, display_name=%d, picture_id=%d", validId, validDisplayName,
-            validPictureId
+            valid ? LOG_DEBUG : LOG_ERROR, "Account: id=%d, display_name=%d, picture_id=%d, access_code_view=%d",
+            validId, validDisplayName, validPictureId, validAccessCodeView
         );
 #endif
 
@@ -653,6 +697,58 @@ public:
 
 typedef TypedJsonArray<Party> PartyArray;
 
+class PartyMember : public QJsonObject {
+public:
+    PartyMember() = default;
+    PartyMember(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline QString getPartyId() const { return value("party_id").toString(); }
+    inline void setPartyId(const QString &value) { insert("party_id", value); }
+    inline QString getInviteCode() const { return value("invite_code").toString(); }
+    inline void setInviteCode(const QString &value) { insert("invite_code", value); }
+    inline QString getDisplayName() const { return value("display_name").toString(); }
+    inline void setDisplayName(const QString &value) { insert("display_name", value); }
+    inline QString getAccountId() const { return value("account_id").toString(); }
+    inline void setAccountId(const QString &value) { insert("account_id", value); }
+    inline QDateTime getMembershipDate() const
+    {
+        return QDateTime::fromString(value("membership_date").toString(), Qt::ISODate);
+    }
+    inline void setMembershipDate(const QDateTime &value) { insert("membership_date", value.toString(Qt::ISODate)); }
+    inline PartyView getPartyView() const { return value("party_view").toObject(); }
+    inline void setPartyView(const PartyView &value) { insert("party_view", value); }
+    inline AccountView getAccountView() const { return value("account_view").toObject(); }
+    inline void setAccountView(const AccountView &value) { insert("account_view", value); }
+    inline bool getByol() const { return value("byol").toBool(); }
+    inline void setByol(bool value) { insert("byol", value); }
+
+    inline bool isValid() const
+    {
+        auto validPartyId = (*this)["party_id"].isString();
+        auto validInviteCode = maybe((*this)["invite_code"], (*this)["invite_code"].isString());
+        auto validDisplayName = (*this)["display_name"].isString();
+        auto validAccountId = maybe((*this)["account_id"], (*this)["account_id"].isString());
+        auto validMembershipDate = maybe((*this)["membership_date"], (*this)["membership_date"].isString());
+        auto validPartyView = getPartyView().isValid();
+        auto validAccountView = maybe((*this)["account_view"], getAccountView().isValid());
+        auto validByol = maybe((*this)["byol"], (*this)["byol"].isBool());
+
+        auto valid = validPartyId && validInviteCode && validDisplayName && validAccountId && validMembershipDate &&
+                     validPartyView && validAccountView && validByol;
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR,
+            "PartyMember: party_id=%d, invite_code=%d, display_name=%d, account_id=%d, membership_date=%d, "
+            "party_view=%d, account_view=%d, byol=%d",
+            validPartyId, validInviteCode, validDisplayName, validAccountId, validMembershipDate, validPartyView,
+            validAccountView, validByol
+        );
+#endif
+
+        return valid;
+    }
+};
+
 class PartyEvent : public QJsonObject {
 public:
     PartyEvent() = default;
@@ -848,6 +944,41 @@ public:
 };
 
 typedef TypedJsonArray<PartyEventParticipant> PartyEventParticipantArray;
+
+class MemberActivationResult : public QJsonObject {
+public:
+    MemberActivationResult() = default;
+    MemberActivationResult(const QJsonObject &_json) : QJsonObject(_json) {}
+
+    inline Party getParty() const { return value("party").toObject(); }
+    inline void setParty(const Party &value) { insert("party", value); }
+    inline PartyMember getMember() const { return value("member").toObject(); }
+    inline void setMember(const PartyMember &value) { insert("member", value); }
+    inline PartyEventParticipantArray getParticipants() const { return value("participants").toArray(); }
+    inline void setParticipants(const PartyEventParticipantArray &value) { insert("participants", value); }
+
+    inline bool isValid() const
+    {
+        auto validParty = getParty().isValid();
+        auto validMember = getMember().isValid();
+        auto validParticipants = maybe(
+            (*this)["participants"],
+            (*this)["participants"].isArray() &&
+                getParticipants().every([](const PartyEventParticipant &value) { return value.isValid(); })
+        );
+
+        auto valid = validParty && validMember && validParticipants;
+
+#ifdef SCHEMA_DEBUG
+        obs_log(
+            valid ? LOG_DEBUG : LOG_ERROR, "MemberActivationResult: party=%d, member=%d, participants=%d", validParty,
+            validMember, validParticipants
+        );
+#endif
+
+        return valid;
+    }
+};
 
 class ConnectionAdvices : public QJsonObject {
 public:
@@ -1231,18 +1362,33 @@ public:
     inline int getTlsPort() const { return value("tls_port").toInt(); }
     inline void setTlsPort(int value) { insert("tls_port", value); }
 
-    inline QString getHost() const
+    inline QString getApiHost() const
     {
         // The host always has "api" subdomain added to the address
         return QString("api.%1").arg(getAddress());
     }
 
-    inline QString getHostAndPort() const
+    inline QString getApiHostAndPort() const
     {
-        return QString("%1:%2").arg(getHost()).arg(getTlsPort() ? getTlsPort() : getPort());
+        return QString("%1:%2").arg(getApiHost()).arg(getTlsPort() ? getTlsPort() : getPort());
     }
 
-    inline QString getUrl() const { return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getHostAndPort()); }
+    inline QString getApiUrl() const
+    {
+        return QString("%1://%2").arg(getTlsPort() ? "wss" : "ws").arg(getApiHostAndPort());
+    }
+
+    inline QString getHost(const QString &id) const { return QString("%1.%2").arg(id).arg(getAddress()); }
+
+    inline QString getTlsUrl(const QString &id) const
+    {
+        return getTlsPort() ? QString("wss://%1:%2").arg(getHost(id)).arg(getTlsPort()) : "";
+    }
+
+    inline QString getNonTlsUrl(const QString &id) const
+    {
+        return QString("ws://%1:%2").arg(getHost(id)).arg(getPort());
+    }
 
     inline bool isValid() const
     {

@@ -28,6 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWidget>
 #include <QMutex>
 #include <QNetworkInterface>
+#include <QRegularExpression>
 
 using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
 using OBSAudio = OBSPtr<audio_t *, audio_output_close>;
@@ -253,3 +254,18 @@ QString getFormatExt(const char *container);
 
 // The type must be registered for Linux platform
 Q_DECLARE_OPAQUE_POINTER(obs_data_t *)
+
+inline QStringList splitBy4(const QString &raw)
+{
+    QRegularExpression re(R"(.{1,4})");
+    QStringList matches;
+    for (const auto &match : re.globalMatch(raw)) {
+        matches.append(match.captured(0));
+    }
+    return matches;
+}
+
+inline QString fancyId(const QString &raw)
+{
+    return splitBy4(raw).join("-");
+}

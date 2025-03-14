@@ -69,6 +69,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define SCREENSHOTS_URL (API_SERVER "/api/v1/screenshots/%1/%2")
 #define PICTURES_URL (API_SERVER "/pictures/%1")
 #define WEBSOCKET_URL (API_WS_SERVER "/api/v1/websocket")
+#define MEMBER_ACTIVATE_URL (API_SERVER "/api/v1/members/activate")
 // Control Panel Pages
 #define AUTHORIZE_URL (FRONTEND_SERVER "/oauth2/authorize")
 #define STAGES_PAGE_URL (FRONTEND_SERVER "/receivers")
@@ -76,6 +77,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define MEMBERSHIPS_PAGE (FRONTEND_SERVER "/memberships")
 #define SIGNUP_PAGE (FRONTEND_SERVER "/accounts/register")
 #define WS_PORTALS_PAGE (FRONTEND_SERVER "/ws-portals")
+#define GUEST_CODES_PAGE (FRONTEND_SERVER "/accounts/guest-codes")
 // OAuth2 Client info
 #ifndef CLIENT_ID
 #define CLIENT_ID "testClientId"
@@ -215,7 +217,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 
     connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
-            putUplink(settings->getForceConnection());
+            putUplink();
         }
     });
 
@@ -233,13 +235,10 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
             }
 
             //syncOnlineResources(); // Now received by WebSocket
-            connect(
-                putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
-                [this](QNetworkReply::NetworkError) {
-                    // WebSocket will be started even if uplink upload failed.
-                    websocket->start();
-                }
-            );
+            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+                // WebSocket will be started even if uplink upload failed.
+                websocket->start();
+            });
         });
 
         // Schedule next refresh
@@ -472,12 +471,6 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
         participants = newParticipants;
         API_LOG("Received %d participants", participants.size());
 
-        if (settings->getParticipantId().isEmpty() && participants.size() > 0) {
-            settings->setParticipantId(participants[0].getId());
-            // Put uplink again
-            putUplink(settings->getForceConnection());
-        }
-
         emit participantsReady(participants);
     });
     invoker->get(QNetworkRequest(QUrl(PARTICIPANTS_URL)));
@@ -699,7 +692,7 @@ const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
+const RequestInvoker *SRCLinkApiClient::putUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
@@ -709,10 +702,10 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
     QJsonObject body;
     auto participantId = settings->getParticipantId();
     body["participant_id"] = participantId != PARTICIPANT_SEELCTION_NONE ? participantId : "";
-    body["force"] = force ? "1" : "0";
     body["uplink_status"] = uplinkStatus;
     body["protocols"] = QJsonArray({"srt", "rtmp"});
     body["relay_apps"] = QJsonArray({RELAY_APP_SRTRELAY, RELAY_APP_MEDIAMTX});
+    body["force"] = "true";
 
     API_LOG(
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),
@@ -725,8 +718,12 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
             return;
         }
         if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
-            emit putUplinkFailed(uuid);
+            if (error == QNetworkReply::ContentConflictError) {
+                ERROR_LOG("%s", obs_module_text("UuidConflictErrorDueToSecurity"));
+            } else {
+                ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+            }
+            emit putUplinkFailed(uuid, error);
             emit uplinkFailed(uuid);
             return;
         }
@@ -736,7 +733,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink(const bool force)
         if (!newUplink.isValid()) {
             ERROR_LOG("Received malformed uplink data.");
             API_LOG("dump=%s", replyData.toStdString().c_str());
-            emit putUplinkFailed(uuid);
+            emit putUplinkFailed(uuid, QNetworkReply::UnknownContentError);
             emit uplinkFailed(uuid);
             return;
         }
@@ -820,6 +817,58 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
         emit deleteUplinkSucceeded(uuid);
     });
     invoker->deleteResource(req);
+
+    return invoker;
+}
+
+const RequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCode)
+{
+    CHECK_CLIENT_TOKEN(nullptr);
+
+    auto req = QNetworkRequest(QUrl(QString(MEMBER_ACTIVATE_URL)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject body;
+    body["invite_code"] = inviteCode;
+
+    API_LOG("Activating member for %s", qUtf8Printable(inviteCode));
+    auto invoker = new RequestInvoker(sequencer, this);
+    connect(
+        invoker, &RequestInvoker::finished,
+        [this, inviteCode](QNetworkReply::NetworkError error, QByteArray replyData) {
+            if (error != QNetworkReply::NoError) {
+                ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), error);
+                emit redeemInviteCodeFailed(inviteCode);
+                return;
+            }
+            API_LOG("Activating member for %s succeeded", qUtf8Printable(inviteCode));
+
+            MemberActivationResult result = QJsonDocument::fromJson(replyData).object();
+
+            // Marge participants
+            for (const auto &participant : result.getParticipants().values()) {
+                auto index = participants.findIndex([participant](const PartyEventParticipant &p) {
+                    return p.getId() == participant.getId();
+                });
+                if (index >= 0) {
+                    participants.replace(index, participant);
+                } else {
+                    participants.append(participant);
+                }
+            }
+
+            if (result.getParticipants().size() > 0) {
+                // Change current participant to activated one
+                settings->setParticipantId(result.getParticipants().values()[0].getId());
+                // Put uplink now
+                putUplink();
+            }
+
+            emit redeemInviteCodeSucceeded(result);
+            emit participantsReady(participants);
+        }
+    );
+    invoker->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -912,6 +961,11 @@ void SRCLinkApiClient::openWsPortalsPage()
     QDesktopServices::openUrl(QUrl(WS_PORTALS_PAGE));
 }
 
+void SRCLinkApiClient::openGuestCodesPage()
+{
+    QDesktopServices::openUrl(QUrl(GUEST_CODES_PAGE));
+}
+
 void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
@@ -939,13 +993,10 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
                 }
 
                 //syncOnlineResources(); // Now received by WebSocket
-                connect(
-                    putUplink(settings->getForceConnection()), &RequestInvoker::finished, this,
-                    [this](QNetworkReply::NetworkError) {
-                        // WebSocket will be started even if uplink upload failed.
-                        websocket->start();
-                    }
-                );
+                connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+                    // WebSocket will be started even if uplink upload failed.
+                    websocket->start();
+                });
             });
         }
 
@@ -1111,9 +1162,7 @@ void SRCLinkApiClient::onWebSocketDataChanged(const WebSocketMessage &message)
                 return;
             }
 
-            auto index = participants.findIndex([id](const PartyEventParticipant &participant) {
-                return participant.getId() == id;
-            });
+            auto index = participants.findIndex([id](const PartyEventParticipant &p) { return p.getId() == id; });
             if (index >= 0) {
                 participants.replace(index, newParticipant);
             } else {

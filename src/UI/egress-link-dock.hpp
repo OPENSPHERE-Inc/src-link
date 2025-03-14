@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
 #include "ui_egress-link-dock.h"
+#include "redeem-invite-code-dialog.hpp"
 
 class EgressLinkConnectionWidget;
 
@@ -38,10 +39,13 @@ class EgressLinkDock : public QFrame {
     QImage defaultAccountPicture;
     QImage defaultStagePicture;
     QList<EgressLinkConnectionWidget *> connectionWidgets;
+    RedeemInviteCodeDialog *redeemInviteCodeDialog;
+    QString errorText;
 
     void updateConnections(const Stage &stage);
     void clearConnections();
     void setClientActive(bool active);
+    void updateGuidance();
 
 private slots:
     void onAccountInfoReady(const AccountInfo &accountInfo);
@@ -51,12 +55,14 @@ private slots:
     void onPictureFailed(const QString &pictureId);
     void onUplinkReady(const UplinkInfo &uplink);
     void onUplinkFailed(const QString &uuid);
+    void onPutUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
     void onInterlockTypeChanged(int index);
     void onConnectionButtonClicked();
     void onLogoutSucceeded();
     void onControlPanelButtonClicked();
     void onMembershipsButtonClicked();
     void onSignupButtonClicked();
+    void onRedeemInviteCodeAccepted(const QString &inviteCode);
 
 public:
     explicit EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent = nullptr);

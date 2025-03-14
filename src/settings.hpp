@@ -40,11 +40,6 @@ public:
     inline const QString getParticipantId() { return value("participantId"); }
     inline void setWsPortalId(const QString &portalId) { setValue("wsPortalId", portalId); }
     inline const QString getWsPortalId() { return value("wsPortalId"); }
-    inline void setForceConnection(const bool forceConnection)
-    {
-        setValue("forceConnection", forceConnection ? "true" : "false");
-    }
-    inline bool getForceConnection() { return value("forceConnection", "false") == "true"; }
     inline int getIngressPortMax() { return value("ingress.portMax", "10099").toInt(); }
     inline void setIngressPortMax(int value) { setValue("ingress.portMax", QString::number(value)); }
     inline int getIngressPortMin() { return value("ingress.portMin", "10000").toInt(); }

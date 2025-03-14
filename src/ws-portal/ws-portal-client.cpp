@@ -95,7 +95,7 @@ void WsPortalClient::createWsSocket()
     // Ensure previous client is destroyed
     destroyWsSocket();
 
-    client = new QWebSocket("https://" + wsPortal.getFacilityView().getHost(), QWebSocketProtocol::Version13, this);
+    client = new QWebSocket("https://" + wsPortal.getFacilityView().getApiHost(), QWebSocketProtocol::Version13, this);
 
     connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
     connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
@@ -120,7 +120,7 @@ void WsPortalClient::destroyWsSocket()
     client->deleteLater();
     client = nullptr;
 
-    API_LOG("WebSocket closed: %s", qUtf8Printable(wsPortal.getFacilityView().getHostAndPort()));
+    API_LOG("WebSocket closed: %s", qUtf8Printable(wsPortal.getFacilityView().getApiHostAndPort()));
 }
 
 void WsPortalClient::open(const QString &portalId)
@@ -135,7 +135,7 @@ void WsPortalClient::open(const QString &portalId)
 
     createWsSocket();
 
-    QUrl url = QUrl(wsPortal.getFacilityView().getUrl());
+    QUrl url = QUrl(wsPortal.getFacilityView().getApiUrl());
     url.setPath(WS_PORTALS_PATH);
     url.setQuery(parameters);
     API_LOG("Opening WebSocket: %s", qUtf8Printable(url.toString()));

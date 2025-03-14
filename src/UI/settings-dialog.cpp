@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <QClipboard>
+#include <QWidget>
 #include <QUrl>
 #include <QDesktopServices>
 #include <QGraphicsPixmapItem>
@@ -49,6 +51,8 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->ssIntervalComboBox->addItem(QTStr("30secs"), 30);
     ui->ssIntervalComboBox->addItem(QTStr("60secs"), 60);
 
+    ui->visibleGuestCodeCheckBox->setChecked(false);
+
     auto addresses = getPrivateIPv4Addresses();
     foreach (auto &address, addresses) {
         ui->privateIpComboBox->addItem(address, address);
@@ -59,11 +63,18 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClick()));
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
-    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, [this](bool checked) {
+    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, this, [&](bool checked) {
         ui->reconnectDelayTimeWidget->setVisible(checked);
         ui->networkBufferWidget->setVisible(checked);
         ui->protocolWidget->setVisible(checked);
         ui->pbkeylenWidget->setVisible(checked);
+    });
+    connect(ui->visibleGuestCodeCheckBox, SIGNAL(clicked()), this, SLOT(onGuestCodeClicked()));
+    connect(ui->manageGuestCodesButton, &QPushButton::clicked, this, [&]() { apiClient->openGuestCodesPage(); });
+    connect(ui->copyGuestCodeButton, &QToolButton::clicked, this, [&]() {
+        if (!latestAccessCode.isEmpty()) {
+            QApplication::clipboard()->setText(fancyId("SRCG" + latestAccessCode));
+        }
     });
 
     loadSettings();
@@ -72,7 +83,6 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     onAccountInfoReady(apiClient->getAccountInfo());
 
     // Translations
-    ui->forceConnectionCheckBox->setText(QTStr("ForceDisconnectOtherClients"));
     ui->ingressLinkSettingsLabel->setText(QTStr("DownlinkSettings"));
     ui->advancedSettingsCheckBox->setText(QTStr("AdvancedSettings"));
     ui->portRangeLabel->setText(QTStr("UDPListenPortRange"));
@@ -90,6 +100,9 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->privateIpLabel->setText(QTStr("PrivateIPForLAN"));
     ui->authorLabel->setText(QTStr("AppInfo").arg(PLUGIN_VERSION));
     ui->ossLabel->setText(QTStr("OpenSourceLibraries"));
+    ui->guestCodeGroupBox->setTitle(QTStr("LatestGuestCode"));
+    ui->guestCodeLabel->setText(QTStr("GuestCodeNotFound"));
+    ui->manageGuestCodesButton->setText(QTStr("Manage"));
     setWindowTitle(QTStr("SourceLinkSettings"));
 
     // Read oss info markdown
@@ -119,6 +132,25 @@ void SettingsDialog::setClientActive(bool active)
         ui->accountName->setText(QTStr("NotLoggedInYet"));
     } else {
         ui->connectionButton->setText(QTStr("Logout"));
+    }
+}
+
+void SettingsDialog::updateGuestCode()
+{
+    if (latestAccessCode.isEmpty()) {
+        ui->visibleGuestCodeCheckBox->setVisible(false);
+        ui->guestCodeLabel->setText(QTStr("GuestCodeNotFound"));
+        ui->copyGuestCodeButton->setVisible(false);
+        return;
+    }
+
+    ui->visibleGuestCodeCheckBox->setVisible(true);
+    ui->copyGuestCodeButton->setVisible(true);
+
+    if (ui->visibleGuestCodeCheckBox->isChecked()) {
+        ui->guestCodeLabel->setText(fancyId("SRCG" + latestAccessCode));
+    } else {
+        ui->guestCodeLabel->setText(QTStr("ShowTheCode"));
     }
 }
 
@@ -153,6 +185,13 @@ void SettingsDialog::onAccountInfoReady(const AccountInfo &accountInfo)
     setClientActive(true);
     // "Logged in: %1"
     ui->accountName->setText(QTStr("LoggedInAccount").arg(accountInfo.getAccount().getDisplayName()));
+    latestAccessCode = accountInfo.getAccount().getAccessCodeView().getValue();
+    updateGuestCode();
+}
+
+void SettingsDialog::onGuestCodeClicked()
+{
+    updateGuestCode();
 }
 
 void SettingsDialog::saveSettings()
@@ -178,7 +217,6 @@ void SettingsDialog::saveSettings()
     auto egressRefreshNeeded = egressScreenshotInterval != apiClient->getSettings()->getEgressScreenshotInterval();
 
     auto settings = apiClient->getSettings();
-    settings->setForceConnection(ui->forceConnectionCheckBox->isChecked());
     settings->setIngressPortMin(ingressPortMin);
     settings->setIngressPortMax(ingressPortMax);
     settings->setIngressReconnectDelayTime(ingressReconnectDelayTime);
@@ -203,7 +241,6 @@ void SettingsDialog::saveSettings()
 void SettingsDialog::loadSettings()
 {
     auto settings = apiClient->getSettings();
-    ui->forceConnectionCheckBox->setChecked(settings->getForceConnection());
     ui->portMinSpinBox->setValue(settings->getIngressPortMin());
     ui->portMaxSpinBox->setValue(settings->getIngressPortMax());
     ui->reconnectDelayTimeSpinBox->setValue(settings->getIngressReconnectDelayTime());
@@ -233,4 +270,6 @@ void SettingsDialog::showEvent(QShowEvent *event)
     QDialog::showEvent(event);
 
     setClientActive(apiClient->isLoggedIn());
+    ui->visibleGuestCodeCheckBox->setChecked(false);
+    updateGuestCode();
 }

@@ -126,6 +126,8 @@ target_sources(
           src/UI/egress-link-connection-widget.cpp
           src/UI/ws-portal-dock.ui
           src/UI/ws-portal-dock.cpp
+          src/UI/redeem-invite-code-dialog.ui
+          src/UI/redeem-invite-code-dialog.cpp
           src/UI/resources.qrc
           src/sources/ingress-link-source.cpp
           src/sources/audio-capture.cpp

@@ -519,6 +519,49 @@ void EgressLinkOutput::setSourceUuid(const QString &value)
     storedSettingsRev++;
 }
 
+void EgressLinkOutput::loadProfile(obs_data_t *_settings)
+{
+    auto config = obs_frontend_get_profile_config();
+    auto mode = config_get_string(config, "Output", "Mode");
+    bool advanced_out = !strcmp(mode, "Advanced") || !strcmp(mode, "advanced");
+
+    const char *videoEncoderId;
+    const char *audioEncoderId;
+    uint64_t audioBitrate;
+
+    if (advanced_out) {
+        videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
+        audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
+        audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
+
+        OBSString profilePath = obs_frontend_get_current_profile_path();
+        auto encoderJsonPath = QString("%1/%2").arg(QString(profilePath)).arg("streamEncoder.json");
+        OBSDataAutoRelease encoderSettings = obs_data_create_from_json_file(qUtf8Printable(encoderJsonPath));
+
+        if (encoderSettings) {
+            obs_data_apply(_settings, encoderSettings);
+        }
+
+    } else {
+        videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
+        audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
+        audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
+
+        auto videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
+        obs_data_set_int(_settings, "bitrate", videoBitrate);
+
+        auto preset = config_get_string(config, "SimpleOutput", "Preset");
+        obs_data_set_string(_settings, "preset", preset);
+
+        auto preset2 = config_get_string(config, "SimpleOutput", "NVENCPreset2");
+        obs_data_set_string(_settings, "preset2", preset2);
+    }
+
+    obs_data_set_string(_settings, "video_encoder", videoEncoderId);
+    obs_data_set_string(_settings, "audio_encoder", audioEncoderId);
+    obs_data_set_int(_settings, "audio_bitrate", audioBitrate);
+}
+
 void EgressLinkOutput::loadSettings()
 {
     settings = obs_data_create();
@@ -528,6 +571,9 @@ void EgressLinkOutput::loadSettings()
     // Apply default first
     OBSDataAutoRelease defaults = obs_data_get_defaults(settings);
     obs_data_apply(settings, defaults);
+
+    // Load settings from profile
+    loadProfile(settings);
 
     // Load settings from json
     OBSString path = obs_module_get_config_path(obs_current_module(), qUtf8Printable(QString("%1.json").arg(name)));
