@@ -36,6 +36,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_START_DELAY_MSECS 1000
 #define OUTPUT_SCREENSHOT_HEIGHT 720
 #define OUTPUT_STATISTICS_INTERVAL_MSECS 5000
+#define OUTPUT_ENCODER_PRESETS_DIR_NAME "presets"
+#define OUTPUT_DEFAULT_VIDEO_ENCODER "obs_x264"
+#define OUTPUT_DEFAULT_VIDEO_BITRATE 10000
+#define OUTPUT_DEFAULT_AUDIO_ENCODER "ffmpeg_aac"
+#define OUTPUT_DEFAULT_AUDIO_BITRATE 160
+
 
 inline audio_t *createSilenceAudio()
 {
@@ -94,6 +100,22 @@ inline QString makeFormatToolTip()
     html += "</table>";
     return html;
 }
+
+// Lower priority -> Higher priority
+QStringList priorityHardwardEncoders = {
+    // MacOS
+    //"com.apple.videotoolbox.videoencoder.ave.hevc"
+    //"com.apple.videotoolbox.videoencoder.ave.avc",
+    // Windows
+    "obs_qsv11_hevc",
+    "h265_texture_amf",
+    "jim_hevc_nvenc",
+    "obs_nvenc_hevc_tex",
+    "obs_qsv11_v2",
+    "h264_texture_amf",
+    "jim_nvenc",
+    "obs_nvenc_h264_tex",
+};
 
 //--- EgressLinkOutput class ---//
 
@@ -351,6 +373,9 @@ obs_properties_t *EgressLinkOutput::getProperties()
             OBSDataAutoRelease encoderDefaults = obs_encoder_defaults(_encoderId);
             applyDefaults(_settings, encoderDefaults);
 
+            // Apply low-latency preset (if exists)
+            _output->loadPreset(_settings, _encoderId);
+
             obs_properties_remove_by_name(_videoEncoderGroup, "video_encoder_settings_group");
 
             auto encoderProps = obs_get_encoder_properties(_encoderId);
@@ -422,10 +447,10 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     auto mode = config_get_string(config, "Output", "Mode");
     bool advanced_out = !strcmp(mode, "Advanced") || !strcmp(mode, "advanced");
 
-    const char *videoEncoderId;
-    uint64_t videoBitrate;
-    const char *audioEncoderId;
-    uint64_t audioBitrate;
+    const char *videoEncoderId = OUTPUT_DEFAULT_VIDEO_ENCODER;
+    uint64_t videoBitrate = OUTPUT_DEFAULT_VIDEO_BITRATE;
+    const char *audioEncoderId = OUTPUT_DEFAULT_AUDIO_ENCODER;
+    uint64_t audioBitrate = OUTPUT_DEFAULT_AUDIO_BITRATE;
     const char *recFormat;
     bool recSplitFile = false;
     const char *recSplitFileType = "Time";
@@ -433,11 +458,38 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     uint64_t recSplitFileSizeMb = 2048;
     const char *path;
 
+    // Choose hardware encoder if available
+    if (apiClient->getSettings()->getEgressPreferHardwareEncoder()) {
+        const char *encoderId = nullptr;
+        size_t i = 0;
+        int hwEncoderIndex = -1;
+
+        while (obs_enum_encoder_types(i++, &encoderId)) {
+            auto caps = obs_get_encoder_caps(encoderId);
+            if (caps & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL)) {
+                // Ignore deprecated and internal
+                continue;
+            }
+            if (obs_get_encoder_type(encoderId) != OBS_ENCODER_VIDEO) {
+                continue;
+            }
+    
+            auto index = priorityHardwardEncoders.indexOf(encoderId);
+            if (index > hwEncoderIndex) {
+                // Pick higher priority encoder
+                hwEncoderIndex = index;
+                videoEncoderId = encoderId;
+            }
+        }    
+    }
+
     if (advanced_out) {
+        /* // Deprecated
         videoEncoderId = config_get_string(config, "AdvOut", "Encoder");
         videoBitrate = config_get_uint(config, "AdvOut", "FFVBitrate");
-        audioEncoderId = config_get_string(config, "AdvOut", "AudioEncoder");
+        audioEncoderId = OUTPUT_DEFAULT_AUDIO_ENCODER;
         audioBitrate = config_get_uint(config, "AdvOut", "FFABitrate");
+        */
         recFormat = config_get_string(config, "AdvOut", "RecFormat2");
         recSplitFile = config_get_bool(config, "AdvOut", "RecSplitFile");
         recSplitFileTimeMins = config_get_uint(config, "AdvOut", "RecSplitFileTime");
@@ -447,10 +499,12 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
         bool ffmpegRecording = !astrcmpi(recType, "ffmpeg") && config_get_bool(config, "AdvOut", "FFOutputToFile");
         path = config_get_string(config, "AdvOut", ffmpegRecording ? "FFFilePath" : "RecFilePath");
     } else {
+        /* // Deprecated
         videoEncoderId = getSimpleVideoEncoder(config_get_string(config, "SimpleOutput", "StreamEncoder"));
         videoBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
         audioEncoderId = getSimpleAudioEncoder(config_get_string(config, "SimpleOutput", "StreamAudioEncoder"));
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
+        */
         recFormat = config_get_string(config, "SimpleOutput", "RecFormat2");
         path = config_get_string(config, "SimpleOutput", "FilePath");
     }
@@ -519,6 +573,7 @@ void EgressLinkOutput::setSourceUuid(const QString &value)
     storedSettingsRev++;
 }
 
+// Deprecated
 void EgressLinkOutput::loadProfile(obs_data_t *_settings)
 {
     auto config = obs_frontend_get_profile_config();
@@ -562,18 +617,37 @@ void EgressLinkOutput::loadProfile(obs_data_t *_settings)
     obs_data_set_int(_settings, "audio_bitrate", audioBitrate);
 }
 
+void EgressLinkOutput::loadPreset(obs_data_t *_settings, const QString &encoderId)
+{
+    QString presetJsonPath = QString("%1/%2/%3.json")
+                                 .arg(obs_get_module_data_path(obs_current_module()))
+                                 .arg(OUTPUT_ENCODER_PRESETS_DIR_NAME)
+                                 .arg(encoderId);
+    OBSDataAutoRelease presetData = obs_data_create_from_json_file(qUtf8Printable(presetJsonPath));
+
+    if (presetData) {
+        obs_data_apply(_settings, presetData);
+    }
+}
+
 void EgressLinkOutput::loadSettings()
 {
     settings = obs_data_create();
 
     // Initialize defaults
     getDefaults(settings);
+
     // Apply default first
     OBSDataAutoRelease defaults = obs_data_get_defaults(settings);
     obs_data_apply(settings, defaults);
 
-    // Load settings from profile
+    // Load encoder's preset if exists
+    auto encoderId = obs_data_get_string(settings, "video_encoder");
+    loadPreset(settings, encoderId);
+
+    /* // (Deprecated) Load settings from profile
     loadProfile(settings);
+    */
 
     // Load settings from json
     OBSString path = obs_module_get_config_path(obs_current_module(), qUtf8Printable(QString("%1.json").arg(name)));

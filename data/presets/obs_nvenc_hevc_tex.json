@@ -1,0 +1,1 @@
+{"bitrate":10000,"max_bitrate":10000,"keyint_sec":1,"cqp":20,"rate_control":"CBR","preset2":"p5","multipass":"disabled","tune":"ull","profile":"main","psycho_aq":true,"gpu":0,"bf":0,"repeat_headers":false,"audio_track":1,"target_quality":20,"device":-1,"preset":"p1","adaptive_quantization":true,"lookahead":false,"force_cuda_tex":false,"disable_scenecut":false}

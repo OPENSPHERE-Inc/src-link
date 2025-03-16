@@ -75,4 +75,9 @@ public:
     {
         setValue("egress.screenshotInterval", QString::number(value));
     }
+    inline bool getEgressPreferHardwareEncoder() { return value("egress.preferHardwareEncoder", "true") == "true"; }
+    inline void setEgressPreferHardwareEncoder(bool value)
+    {
+        setValue("egress.preferHardwareEncoder", value ? "true" : "false");
+    }
 };

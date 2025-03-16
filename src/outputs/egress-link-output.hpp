@@ -92,6 +92,7 @@ class EgressLinkOutput : public QObject {
     uint64_t lastPutStatisticsAt; // milliseconds
 
     void loadProfile(obs_data_t *settings);
+    void loadPreset(obs_data_t *settings, const QString &encoderId);
     void loadSettings();
     void saveSettings();
     obs_data_t *createEgressSettings(const StageConnection &connection);
