@@ -42,7 +42,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define OUTPUT_DEFAULT_AUDIO_ENCODER "ffmpeg_aac"
 #define OUTPUT_DEFAULT_AUDIO_BITRATE 160
 
-
 inline audio_t *createSilenceAudio()
 {
     obs_audio_info ai = {0};
@@ -107,14 +106,8 @@ QStringList priorityHardwardEncoders = {
     //"com.apple.videotoolbox.videoencoder.ave.hevc"
     //"com.apple.videotoolbox.videoencoder.ave.avc",
     // Windows
-    "obs_qsv11_hevc",
-    "h265_texture_amf",
-    "jim_hevc_nvenc",
-    "obs_nvenc_hevc_tex",
-    "obs_qsv11_v2",
-    "h264_texture_amf",
-    "jim_nvenc",
-    "obs_nvenc_h264_tex",
+    "obs_qsv11_hevc", "h265_texture_amf", "jim_hevc_nvenc", "obs_nvenc_hevc_tex",
+    "obs_qsv11_v2",   "h264_texture_amf", "jim_nvenc",      "obs_nvenc_h264_tex",
 };
 
 //--- EgressLinkOutput class ---//
@@ -473,14 +466,14 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
             if (obs_get_encoder_type(encoderId) != OBS_ENCODER_VIDEO) {
                 continue;
             }
-    
+
             auto index = priorityHardwardEncoders.indexOf(encoderId);
             if (index > hwEncoderIndex) {
                 // Pick higher priority encoder
                 hwEncoderIndex = index;
                 videoEncoderId = encoderId;
             }
-        }    
+        }
     }
 
     if (advanced_out) {
