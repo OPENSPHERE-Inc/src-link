@@ -155,6 +155,7 @@ void WsPortalDock::updateGuidance()
     } else {
         ui->guidanceLabel->setText(QTStr("Guidance.CreatePortal"));
     }
+    setThemeID(ui->guidanceLabel, "", "");
 }
 
 const WsPortal WsPortalDock::getActiveWsPortal() const
@@ -334,16 +335,23 @@ void WsPortalDock::onConnected()
 {
     ui->wsPortalStatus->setText(QTStr("Linked"));
     setThemeID(ui->wsPortalStatus, "good", "text-success");
+
+    updateGuidance();
 }
 
 void WsPortalDock::onDisconnected()
 {
     ui->wsPortalStatus->setText(QTStr("Unlinked"));
     setThemeID(ui->wsPortalStatus, "error", "text-danger");
+
+    updateGuidance();
 }
 
 void WsPortalDock::onReconnecting()
 {
     ui->wsPortalStatus->setText(QTStr("Retrying"));
     setThemeID(ui->wsPortalStatus, "warning", "text-warning");
+
+    ui->guidanceLabel->setText(QTStr("Guidance.ReconnectingPortal"));
+    setThemeID(ui->guidanceLabel, "error", "text-danger");
 }
