@@ -1,0 +1,1 @@
+{"bitrate":10000,"cqp":20,"rate_control":"CBR","preset":"speed","profile":"baseline","bf":0,"ffmpeg_opts":"usage=ultralowlatency","use_bufsize":false,"buffer_size":2500,"keyint_sec":1,"crf":23,"tune":"zerolatency","x264opts":"","repeat_headers":false}

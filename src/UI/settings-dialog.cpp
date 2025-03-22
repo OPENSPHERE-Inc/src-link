@@ -103,6 +103,7 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     ui->guestCodeGroupBox->setTitle(QTStr("LatestGuestCode"));
     ui->guestCodeLabel->setText(QTStr("GuestCodeNotFound"));
     ui->manageGuestCodesButton->setText(QTStr("Manage"));
+    ui->uplinkHwEncoderCheckBox->setText(QTStr("PreferHardwareEncoder"));
     setWindowTitle(QTStr("SourceLinkSettings"));
 
     // Read oss info markdown
@@ -228,6 +229,7 @@ void SettingsDialog::saveSettings()
     settings->setIngressPrivateIpIndex(ui->privateIpComboBox->currentIndex());
     settings->setIngressPrivateIpValue(ingressPrivateIp);
     settings->setEgressScreenshotInterval(egressScreenshotInterval);
+    settings->setEgressPreferHardwareEncoder(ui->uplinkHwEncoderCheckBox->isChecked());
 
     apiClient->putUplink();
     if (ingressRefreshNeeded) {
@@ -250,6 +252,7 @@ void SettingsDialog::loadSettings()
     ui->pbkeylenComboBox->setCurrentIndex(ui->pbkeylenComboBox->findData(settings->getIngressSrtPbkeylen()));
     ui->advancedSettingsCheckBox->setChecked(settings->getIngressAdvancedSettings());
     ui->ssIntervalComboBox->setCurrentIndex(ui->ssIntervalComboBox->findData(settings->getEgressScreenshotInterval()));
+    ui->uplinkHwEncoderCheckBox->setChecked(settings->getEgressPreferHardwareEncoder());
 
     auto privateIpIndex = ui->privateIpComboBox->findData(settings->getIngressPrivateIpValue());
     if (privateIpIndex < 0) {
