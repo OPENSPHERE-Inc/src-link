@@ -69,6 +69,10 @@ class IngressLinkSource : public QObject {
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);
     void resetDecoder(const StageConnection &connection = StageConnection());
+    void startAudio();
+    void stopAudio();
+
+    static void onOBSFrontendEvent(enum obs_frontend_event event, void *paramd);
 
 signals:
     void settingsUpdate(obs_data_t *settings);
@@ -94,6 +98,7 @@ public:
     inline uint32_t getHeight() { return connRequest.getHeight(); }
     void videoRenderCallback(gs_effect_t *effect);
     void updateCallback(obs_data_t *settings);
+    void destroyCallback();
 
     static void getDefaults(obs_data_t *settings, SRCLinkApiClient *apiClient);
 };

@@ -88,8 +88,7 @@ IngressLinkSource::IngressLinkSource(
     speakers = ai.speakers;
     samplesPerSec = ai.samples_per_sec;
 
-    audioThread = new SourceAudioThread(this, this);
-    audioThread->start();
+    startAudio();
 
     connect(apiClient, SIGNAL(downlinkReady(const DownlinkInfo &)), this, SLOT(onDownlinkReady(const DownlinkInfo &)));
     connect(apiClient, SIGNAL(downlinkRemoved(const QString &)), this, SLOT(onDeleteDownlinkSucceeded(const QString &)));
@@ -121,15 +120,13 @@ IngressLinkSource::IngressLinkSource(
         this
     );
 
+    obs_frontend_add_event_callback(onOBSFrontendEvent, this);
+
     obs_log(LOG_INFO, "%s: Source created", qUtf8Printable(name));
 }
 
 IngressLinkSource::~IngressLinkSource()
 {
-    obs_log(LOG_DEBUG, "%s: Source destroying", qUtf8Printable(name));
-
-    renameSignal.Disconnect();
-
     disconnect(this);
 
     apiClient->deleteDownlink(uuid, true);
@@ -137,14 +134,64 @@ IngressLinkSource::~IngressLinkSource()
         apiClient->releasePort(connRequest.getPort());
     }
 
+    stopAudio();
+
+    obs_frontend_remove_event_callback(onOBSFrontendEvent, this);
+}
+
+void IngressLinkSource::destroyCallback()
+{
+    obs_log(LOG_DEBUG, "%s: Source destroying", qUtf8Printable(name));
+
+    renameSignal.Disconnect();
+
+    // Free decoder source
+    obs_source_dec_active(decoderSource);
+    decoderSource = nullptr;
+    weakSource = nullptr;
+
+    // Delete self in proper thread
+    deleteLater();
+
+    obs_log(LOG_INFO, "%s: Source destroyed", qUtf8Printable(name));
+}
+
+void IngressLinkSource::onOBSFrontendEvent(enum obs_frontend_event event, void *param)
+{
+    auto source = static_cast<IngressLinkSource *>(param);
+    // Force stop on shutdown
+    switch (event) {
+    case OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN:
+    case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
+        source->stopAudio();
+        break;
+    default:
+        // Nothing to do
+        break;
+    }
+}
+
+void IngressLinkSource::startAudio()
+{
+    if (audioThread) {
+        return;
+    }
+
+    audioThread = new SourceAudioThread(this, this);
+    audioThread->start();
+}
+
+void IngressLinkSource::stopAudio()
+{
+    if (!audioThread) {
+        return;
+    }
+
     // Destroy decoder private source
     audioThread->requestInterruption();
     audioThread->wait();
     delete audioThread;
-
-    obs_source_dec_active(decoderSource);
-
-    obs_log(LOG_INFO, "%s: Source destroyed", qUtf8Printable(name));
+    audioThread = nullptr;
 }
 
 QString IngressLinkSource::compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req)
@@ -783,7 +830,7 @@ void destroySource(void *data)
 {
     auto ingressLinkSource = static_cast<IngressLinkSource *>(data);
     // Delete with thread-safe way
-    ingressLinkSource->deleteLater();
+    ingressLinkSource->destroyCallback();
 }
 
 obs_properties_t *getProperties(void *data)
