@@ -398,11 +398,23 @@ obs_properties_t *EgressLinkOutput::getProperties()
         return true;
     };
 
+    auto useProfilePath = obs_properties_add_bool(
+        recordingGroup, "use_profile_recording_path", obs_module_text("UseProfileRecordingPath")
+    );
+
+    auto useProfilePathChangeHandler = [](void *, obs_properties_t *_props, obs_property_t *, obs_data_t *settings) {
+        auto _useProfilePath = obs_data_get_bool(settings, "use_profile_recording_path");
+        obs_property_set_enabled(obs_properties_get(_props, "path"), !_useProfilePath);
+        return true;
+    };
+    obs_property_set_modified_callback2(useProfilePath, useProfilePathChangeHandler, nullptr);
+
     obs_properties_add_path(recordingGroup, "path", obs_module_text("Path"), OBS_PATH_DIRECTORY, nullptr, nullptr);
     auto filenameFormatting = obs_properties_add_text(
         recordingGroup, "filename_formatting", obs_module_text("FilenameFormatting"), OBS_TEXT_DEFAULT
     );
     obs_property_set_long_description(filenameFormatting, qUtf8Printable(makeFormatToolTip()));
+    obs_properties_add_bool(recordingGroup, "no_space_filename", obs_module_text("NoSpaceFileName"));
 
     // Only support limited formats
     auto fileFormatList = obs_properties_add_list(
@@ -450,6 +462,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     uint64_t recSplitFileTimeMins = 15;
     uint64_t recSplitFileSizeMb = 2048;
     const char *path;
+    bool fileNameWithoutSpace = true;
 
     // Choose hardware encoder if available
     if (apiClient->getSettings()->getEgressPreferHardwareEncoder()) {
@@ -487,6 +500,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
         recSplitFile = config_get_bool(config, "AdvOut", "RecSplitFile");
         recSplitFileTimeMins = config_get_uint(config, "AdvOut", "RecSplitFileTime");
         recSplitFileSizeMb = config_get_uint(config, "AdvOut", "RecSplitFileSize");
+        fileNameWithoutSpace = config_get_bool(config, "AdvOut", "RecFileNameWithoutSpace");
 
         const char *recType = config_get_string(config, "AdvOut", "RecType");
         bool ffmpegRecording = !astrcmpi(recType, "ffmpeg") && config_get_bool(config, "AdvOut", "FFOutputToFile");
@@ -499,6 +513,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
         audioBitrate = config_get_uint(config, "SimpleOutput", "ABitrate");
         */
         recFormat = config_get_string(config, "SimpleOutput", "RecFormat2");
+        fileNameWithoutSpace = config_get_bool(config, "SimpleOutput", "FileNameWithoutSpace");
         path = config_get_string(config, "SimpleOutput", "FilePath");
     }
 
@@ -510,6 +525,8 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     obs_data_set_default_bool(defaults, "visible", true);
     obs_data_set_default_string(defaults, "path", path);
     obs_data_set_default_string(defaults, "rec_format", recFormat);
+    obs_data_set_default_bool(defaults, "use_profile_recording_path", false);
+    obs_data_set_default_bool(defaults, "no_space_filename", fileNameWithoutSpace);
 
     const char *splitFileValue = "";
     if (recSplitFile && strcmp(recSplitFileType, "Manual")) {
@@ -523,7 +540,7 @@ void EgressLinkOutput::getDefaults(obs_data_t *defaults)
     obs_data_set_default_int(defaults, "split_file_time_mins", recSplitFileTimeMins);
     obs_data_set_default_int(defaults, "split_file_size_mb", recSplitFileSizeMb);
 
-    QString filenameFormatting = QString("%1_") + QString(config_get_string(config, "Output", "FilenameFormatting"));
+    QString filenameFormatting = QString("%1 ") + QString(config_get_string(config, "Output", "FilenameFormatting"));
     obs_data_set_default_string(defaults, "filename_formatting", qUtf8Printable(filenameFormatting));
 
     // Apply encoder's defaults
@@ -776,13 +793,16 @@ obs_data_t *EgressLinkOutput::createRecordingSettings(obs_data_t *egressSettings
     // TODO: Add filtering for other platforms
 #endif
 
-    auto path = obs_data_get_string(egressSettings, "path");
+    auto useProfileRecordingPath = obs_data_get_bool(egressSettings, "use_profile_recording_path");
+    auto path = useProfileRecordingPath ? getProfileRecordingPath(config) : obs_data_get_string(egressSettings, "path");
     auto recFormat = obs_data_get_string(egressSettings, "rec_format");
 
     // Add filter name to filename format
     QString sourceName = qUtf8Printable(name);
-    filenameFormat = filenameFormat.arg(sourceName.replace(QRegularExpression("[\\s/\\\\.:;*?\"<>|&$,]"), "-"));
-    auto compositePath = getOutputFilename(path, recFormat, true, false, qUtf8Printable(filenameFormat));
+    bool noSpace = obs_data_get_bool(egressSettings, "no_space_filename");
+    auto re = noSpace ? QRegularExpression("[\\s/\\\\.:;*?\"<>|&$,]") : QRegularExpression("[/\\\\.:;*?\"<>|&$,]");
+    filenameFormat = filenameFormat.arg(sourceName.replace(re, "-"));
+    auto compositePath = getOutputFilename(path, recFormat, noSpace, false, qUtf8Printable(filenameFormat));
 
     obs_data_set_string(recordingSettings, "path", qUtf8Printable(compositePath));
 

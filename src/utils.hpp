@@ -22,6 +22,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs.hpp>
 #include <obs-frontend-api.h>
 #include <util/threading.h>
+#include <util/config-file.h>
+#include <util/dstr.h>
 
 #include <QString>
 #include <QRandomGenerator>
@@ -268,4 +270,21 @@ inline QStringList splitBy4(const QString &raw)
 inline QString fancyId(const QString &raw)
 {
     return splitBy4(raw).join("-");
+}
+
+inline bool isAdvancedMode(config_t *config = obs_frontend_get_profile_config())
+{
+    auto mode = config_get_string(config, "Output", "Mode");
+    return !strcmp(mode, "Advanced") || !strcmp(mode, "advanced");
+}
+
+inline const char *getProfileRecordingPath(config_t *config = obs_frontend_get_profile_config())
+{
+    if (isAdvancedMode(config)) {
+        const char *recType = config_get_string(config, "AdvOut", "RecType");
+        bool ffmpegRecording = !astrcmpi(recType, "ffmpeg") && config_get_bool(config, "AdvOut", "FFOutputToFile");
+        return config_get_string(config, "AdvOut", ffmpegRecording ? "FFFilePath" : "RecFilePath");
+    } else {
+        return config_get_string(config, "SimpleOutput", "FilePath");
+    }
 }
