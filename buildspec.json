@@ -23,7 +23,7 @@
             "baseUrl": "https://github.com/OPENSPHERE-Inc/obs-deps/releases/download",
             "label": "Pre-Built Qt6",
             "hashes": {
-                "macos": "8b2d3ff3a250a34e40602f318a78988fb94658bb651b739601cc58a777cdfa58",
+                "macos": "1b30e78cac558bdb200b8b084039e5474391b7a5594d119e4ac28b6a8c165fa8",
                 "windows-x64": "5194771beccb72a153d1f5183d4c10926dd0c18495ae17aa4a3c5e35aae94b07"
             },
             "debugSymbols": {
