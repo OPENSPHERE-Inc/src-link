@@ -43,8 +43,6 @@
     "website": "https://opensphere.co.jp/",
     "email": "info@opensphere.co.jp",
     "uuids": {
-        "windowsApp": "AB75A815-F13E-6E1F-AA2A-C5AEE023DE2A",
-        "macosPackage": "133F9D45-ACA2-C38C-4F3D-8C8A220FC5B8",
-        "macosInstaller": "DE8376D7-4CC7-971E-BE93-C97E4F534144"
+        "windowsApp": "AB75A815-F13E-6E1F-AA2A-C5AEE023DE2A"
     }
 }
