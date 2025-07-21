@@ -154,6 +154,14 @@ string(
   dependencies
   qt6
   version)
+string(
+  JSON
+  qtversion_6_8_3
+  GET
+  ${buildspec}
+  dependencies
+  "qt6-8-3"
+  version)
 
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
   install(
@@ -181,4 +189,13 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
     CONFIGURATIONS RelWithDebInfo Debug Release
     DESTINATION bin/64bit)
+
+  install(
+    FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion_6_8_3}-x64/bin/Qt6WebSockets.dll"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION qt6.8.3/bin/64bit)
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion_6_8_3}-x64/plugins/tls"
+    CONFIGURATIONS RelWithDebInfo Debug Release
+    DESTINATION qt6.8.3/bin/64bit)
 endif()

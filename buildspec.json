@@ -19,9 +19,21 @@
             }
         },
         "qt6": {
-            "version": "2025-07-19",
+            "version": "2024-10-23",
             "baseUrl": "https://github.com/OPENSPHERE-Inc/obs-deps/releases/download",
             "label": "Pre-Built Qt6",
+            "hashes": {
+                "macos": "31805b39e64776b31d1449097a4dd5c4b3764ac7b03038d82ba28f904d119b19",
+                "windows-x64": "db6842a61e091a0684dc22334db615c1a27e2791fe91b54d93a25434f88a2674"
+            },
+            "debugSymbols": {
+                "windows-x64": "4c672a1cffd743c9960cebb5a164e8a418639b3fe98447a7d26d8c554cb5eab9"
+            }
+        },
+        "qt6-8-3": {
+            "version": "2025-07-19",
+            "baseUrl": "https://github.com/OPENSPHERE-Inc/obs-deps/releases/download",
+            "label": "Pre-Built Qt6.8.3",
             "hashes": {
                 "macos": "1b30e78cac558bdb200b8b084039e5474391b7a5594d119e4ac28b6a8c165fa8",
                 "windows-x64": "5194771beccb72a153d1f5183d4c10926dd0c18495ae17aa4a3c5e35aae94b07"
