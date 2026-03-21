@@ -36,8 +36,13 @@ include(helpers)
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
+find_package(CURL REQUIRED)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl)
+
+if(OS_WINDOWS)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32)
+endif()
 
 target_compile_definitions(
   ${CMAKE_PROJECT_NAME}
@@ -135,7 +140,13 @@ target_sources(
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp
           src/ws-portal/ws-portal-client.cpp
-          src/ws-portal/event-handler.cpp)
+          src/ws-portal/event-handler.cpp
+          src/net/http-error.cpp
+          src/net/curl-http-client.cpp
+          src/net/ws-client.cpp
+          src/net/local-http-server.cpp
+          src/net/oauth2-client.cpp
+          src/net/http-request-invoker.cpp)
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
