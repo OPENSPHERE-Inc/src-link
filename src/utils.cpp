@@ -113,7 +113,7 @@ QString getFormatExt(const char *container)
     QString ext = container;
     if (ext == "fragmented_mp4")
         ext = "mp4";
-    if (ext == "hybrid_mp4")
+    else if (ext == "hybrid_mp4")
         ext = "mp4";
     else if (ext == "fragmented_mov")
         ext = "mov";

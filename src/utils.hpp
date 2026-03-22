@@ -1,6 +1,6 @@
 /*
 SRC-Link
-Copyright (C) 2024 OPENSPHERE Inc. ifo@opensphere.co.jp
+Copyright (C) 2024 OPENSPHERE Inc. info@opensphere.co.jp
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -54,7 +54,7 @@ generatePassword(const int length = 10, const QString &symbol = "_!#%&()*+-.,/~$
 {
     QString chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890" + symbol;
     QString password;
-    for (int i = 0; i < length; i++) {
+    while (password.size() < length) {
         auto index = QRandomGenerator::global()->bounded(chars.size());
         auto c = chars[index];
         if (exclude.contains(c)) {
