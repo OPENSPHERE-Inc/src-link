@@ -139,11 +139,23 @@ void OAuth2Client::link()
         return;
     }
 
-    // Choose port
-    int port = localPort_ > 0 ? localPort_ : QRandomGenerator::global()->bounded(8000, 9000);
-
-    if (!localServer->listen(port)) {
-        obs_log(LOG_ERROR, "OAuth2Client: Failed to start local server on port %d", port);
+    // Choose port — retry with different random ports if bind fails
+    int port = 0;
+    static constexpr int maxRetries = 5;
+    for (int i = 0; i < maxRetries; i++) {
+        port = localPort_ > 0 ? localPort_ : QRandomGenerator::global()->bounded(8000, 9000);
+        if (localServer->listen(port)) {
+            break;
+        }
+        obs_log(LOG_WARNING, "OAuth2Client: Port %d unavailable, retrying (%d/%d)", port, i + 1, maxRetries);
+        port = 0;
+        // If a fixed port was specified, no point retrying
+        if (localPort_ > 0) {
+            break;
+        }
+    }
+    if (port == 0) {
+        obs_log(LOG_ERROR, "OAuth2Client: Failed to start local server after %d attempts", maxRetries);
         emit linkingFailed();
         return;
     }
@@ -344,7 +356,13 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
         }
 
         token_ = accessToken;
-        refreshToken_ = obj.value("refresh_token").toString();
+
+        // RFC 6749 §4.1.4: refresh_token is OPTIONAL in the token response.
+        // Only update if the server returns one; preserve any existing value otherwise.
+        QString newRefreshToken = obj.value("refresh_token").toString();
+        if (!newRefreshToken.isEmpty()) {
+            refreshToken_ = newRefreshToken;
+        }
 
         qint64 expiresIn = static_cast<qint64>(obj.value("expires_in").toInt(0));
         expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;

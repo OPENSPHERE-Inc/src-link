@@ -27,6 +27,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDir>
 #include <QAction>
 
+#include "net/http-error.hpp"
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
@@ -111,6 +112,16 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
+    // curl_global_init() is intentionally NOT called here.
+    // OBS Studio already calls curl_global_init(CURL_GLOBAL_ALL) in obs-main.cpp.
+    // Calling it again from a plugin risks reference count mismatch — if this plugin's
+    // curl_global_cleanup() runs before OBS or other plugins finish using curl, it
+    // could tear down shared curl state prematurely. curl_easy_init() is safe to call
+    // without a prior curl_global_init() when the process has already initialized curl.
+    // See: Phase 1 review R3-#7, Phase 2 review OBS-1.
+
+    qRegisterMetaType<HttpError>("HttpError");
+
     // Initialize the cpu stats
     cpuUsageInfo = os_cpu_usage_info_start();
 
@@ -162,6 +173,8 @@ void obs_module_post_load()
 
 void obs_module_unload(void)
 {
+    obs_frontend_remove_event_callback(frontendEventCallback, nullptr);
+
     delete apiClient;
     apiClient = nullptr;
 
@@ -169,6 +182,8 @@ void obs_module_unload(void)
 
     // Destroy the cpu stats
     os_cpu_usage_info_destroy(cpuUsageInfo);
+
+    // curl_global_cleanup() is intentionally NOT called here — see comment in obs_module_load().
 
     obs_log(LOG_INFO, "plugin unloaded");
 }
