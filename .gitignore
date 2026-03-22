@@ -41,3 +41,6 @@
 !Frameworks.cmake.in
 !README_ja.md
 !/mediamtx
+!/AGENTS.md
+!/CLAUDE.md
+!/.claude
