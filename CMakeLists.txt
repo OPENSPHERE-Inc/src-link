@@ -55,8 +55,8 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core Network WebSockets)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::WebSockets)
+  find_package(Qt6 COMPONENTS Widgets Core)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
                                   -Wno-comma>)
@@ -69,19 +69,6 @@ endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/shared/properties-view)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
-
-set(o2_SRCS
-    lib/o2/src/o2.cpp
-    lib/o2/src/o2pollserver.cpp
-    lib/o2/src/o2reply.cpp
-    lib/o2/src/o2replyserver.cpp
-    lib/o2/src/o2requestor.cpp
-    lib/o2/src/o2simplecrypt.cpp
-    lib/o2/src/o0jsonresponse.cpp
-    lib/o2/src/o0settingsstore.cpp
-    lib/o2/src/o0baseauth.cpp)
-
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
 configure_file(lib/obs-websocket/src/plugin-macros.h.in plugin-macros.generated.h)
 
@@ -149,46 +136,8 @@ target_sources(
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
+  PRIVATE ${CMAKE_SOURCE_DIR}/shared/properties-view
           ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers
           ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
 
-if(NOT buildspec)
-  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)
-endif()
-string(
-  JSON
-  qtversion
-  GET
-  ${buildspec}
-  dependencies
-  qt6
-  version)
-
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "."
-    REGEX "Headers" EXCLUDE)
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION ".")
-
-  configure_file(Frameworks.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake" @ONLY)
-  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake")
-endif()
-
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
-
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-  install(
-    FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit)
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit)
-endif()
