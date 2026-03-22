@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- SRCLinkSettingsStore class ---//
 
-SRCLinkSettingsStore::SRCLinkSettingsStore(QObject *parent) : O0AbstractStore(parent)
+SRCLinkSettingsStore::SRCLinkSettingsStore(QObject *parent) : QObject(parent)
 {
     OBSString config_dir_path = obs_module_get_config_path(obs_current_module(), "");
     os_mkdirs(config_dir_path);

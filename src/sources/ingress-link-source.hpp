@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMutex>
 
 #include "../api-client.hpp"
+#include "../net/http-request-invoker.hpp"
 #include "audio-capture.hpp"
 #include "image-renderer.hpp"
 
@@ -64,7 +65,7 @@ class IngressLinkSource : public QObject {
     // Return value must be release via obs_data_release()
     obs_data_t *createDecoderSettings();
     // Unregister connection if no stage/seat/source selected.
-    const RequestInvoker *putConnection();
+    const HttpRequestInvoker *putConnection();
     QString compositeParameters(obs_data_t *settings, const DownlinkRequestBody &req);
     void loadSettings(obs_data_t *settings);
     void saveSettings(obs_data_t *settings);

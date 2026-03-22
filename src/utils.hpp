@@ -29,8 +29,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QRandomGenerator>
 #include <QWidget>
 #include <QMutex>
-#include <QNetworkInterface>
 #include <QRegularExpression>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#else
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#endif
 
 using OBSProperties = OBSPtr<obs_properties_t *, obs_properties_destroy>;
 using OBSAudio = OBSPtr<audio_t *, audio_output_close>;
@@ -186,13 +194,58 @@ inline bool isPrivateIPv4(quint32 ip)
 inline QList<QString> getPrivateIPv4Addresses()
 {
     QList<QString> privateAddresses;
-    auto addresses = QNetworkInterface::allAddresses();
 
-    foreach (auto &address, addresses) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol && isPrivateIPv4(address.toIPv4Address())) {
-            privateAddresses.append(address.toString());
+#ifdef _WIN32
+    ULONG bufferSize = 15000;
+    PIP_ADAPTER_ADDRESSES addresses = nullptr;
+    ULONG result;
+
+    do {
+        addresses = (PIP_ADAPTER_ADDRESSES)malloc(bufferSize);
+        if (!addresses) {
+            return privateAddresses;
+        }
+        result = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, addresses,
+                                      &bufferSize);
+        if (result == ERROR_BUFFER_OVERFLOW) {
+            free(addresses);
+            addresses = nullptr;
+        }
+    } while (result == ERROR_BUFFER_OVERFLOW);
+
+    if (result == NO_ERROR) {
+        for (auto adapter = addresses; adapter; adapter = adapter->Next) {
+            for (auto unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
+                auto sockaddr = (struct sockaddr_in *)unicast->Address.lpSockaddr;
+                quint32 ip = ntohl(sockaddr->sin_addr.s_addr);
+                if (isPrivateIPv4(ip)) {
+                    char addrStr[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &sockaddr->sin_addr, addrStr, sizeof(addrStr));
+                    privateAddresses.append(QString(addrStr));
+                }
+            }
         }
     }
+
+    free(addresses);
+#else
+    struct ifaddrs *ifAddrList = nullptr;
+    if (getifaddrs(&ifAddrList) == 0) {
+        for (auto ifa = ifAddrList; ifa; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
+                continue;
+            }
+            auto sockaddr = (struct sockaddr_in *)ifa->ifa_addr;
+            quint32 ip = ntohl(sockaddr->sin_addr.s_addr);
+            if (isPrivateIPv4(ip)) {
+                char addrStr[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &sockaddr->sin_addr, addrStr, sizeof(addrStr));
+                privateAddresses.append(QString(addrStr));
+            }
+        }
+        freeifaddrs(ifAddrList);
+    }
+#endif
 
     return privateAddresses;
 }

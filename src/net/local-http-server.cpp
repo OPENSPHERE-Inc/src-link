@@ -162,7 +162,8 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
 {
     // Read the HTTP request
     QByteArray requestData;
-    char buffer[4096];
+    static constexpr int MAX_REQUEST_HEADER_SIZE = 8192;
+    char buffer[MAX_REQUEST_HEADER_SIZE];
 
     // Set client socket to blocking with a 5-second receive timeout
     // to prevent UI thread blocking from slow or malicious clients
@@ -182,7 +183,16 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
     // TCP may split the request across multiple segments.
     while (requestData.indexOf("\r\n\r\n") == -1 && requestData.size() < static_cast<int>(sizeof(buffer)) - 1) {
         int bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1 - requestData.size(), 0);
-        if (bytesRead <= 0) {
+        if (bytesRead < 0) {
+#ifdef _WIN32
+            obs_log(LOG_WARNING, "LocalHttpServer: recv() failed with error %d", WSAGetLastError());
+#else
+            obs_log(LOG_WARNING, "LocalHttpServer: recv() failed with errno %d", errno);
+#endif
+            break;
+        }
+        if (bytesRead == 0) {
+            // Client closed connection before sending complete headers
             break;
         }
         requestData.append(buffer, bytesRead);
@@ -214,7 +224,14 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
                           "\r\n" +
                           responseBody;
 
-    send(clientSocket, response.constData(), static_cast<int>(response.size()), 0);
+    int sendResult = send(clientSocket, response.constData(), static_cast<int>(response.size()), 0);
+    if (sendResult < 0) {
+#ifdef _WIN32
+        obs_log(LOG_WARNING, "LocalHttpServer: send() failed with error %d", WSAGetLastError());
+#else
+        obs_log(LOG_WARNING, "LocalHttpServer: send() failed with errno %d", errno);
+#endif
+    }
     closeSocket(clientSocket);
 
     obs_log(LOG_DEBUG, "LocalHttpServer: Received OAuth2 callback with %d parameters", params.size());

@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QFrame>
 #include <QGraphicsScene>
 
+#include "../net/http-error.hpp"
 #include "../api-client.hpp"
 #include "output-dialog.hpp"
 #include "ui_egress-link-dock.h"
@@ -55,7 +56,7 @@ private slots:
     void onPictureFailed(const QString &pictureId);
     void onUplinkReady(const UplinkInfo &uplink);
     void onUplinkFailed(const QString &uuid);
-    void onPutUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
+    void onPutUplinkFailed(const QString &uuid, HttpError error);
     void onInterlockTypeChanged(int index);
     void onConnectionButtonClicked();
     void onLogoutSucceeded();

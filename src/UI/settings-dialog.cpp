@@ -63,15 +63,15 @@ SettingsDialog::SettingsDialog(SRCLinkApiClient *_apiClient, QWidget *parent)
     );
     connect(ui->connectionButton, SIGNAL(clicked()), this, SLOT(onConnectionButtonClick()));
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(onAccept()));
-    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, this, [&](bool checked) {
+    connect(ui->advancedSettingsCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         ui->reconnectDelayTimeWidget->setVisible(checked);
         ui->networkBufferWidget->setVisible(checked);
         ui->protocolWidget->setVisible(checked);
         ui->pbkeylenWidget->setVisible(checked);
     });
     connect(ui->visibleGuestCodeCheckBox, SIGNAL(clicked()), this, SLOT(onGuestCodeClicked()));
-    connect(ui->manageGuestCodesButton, &QPushButton::clicked, this, [&]() { apiClient->openGuestCodesPage(); });
-    connect(ui->copyGuestCodeButton, &QToolButton::clicked, this, [&]() {
+    connect(ui->manageGuestCodesButton, &QPushButton::clicked, this, [this]() { apiClient->openGuestCodesPage(); });
+    connect(ui->copyGuestCodeButton, &QToolButton::clicked, this, [this]() {
         if (!latestAccessCode.isEmpty()) {
             QApplication::clipboard()->setText(fancyId("SRCG" + latestAccessCode));
         }

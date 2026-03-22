@@ -40,6 +40,7 @@ CurlHttpClient::~CurlHttpClient()
 {
     obs_log(LOG_DEBUG, "CurlHttpClient destroying");
 
+    disconnect(pollTimer, nullptr, this, nullptr);
     pollTimer->stop();
     cancelAll();
     curl_multi_cleanup(multi);
@@ -75,9 +76,11 @@ CURL *CurlHttpClient::createEasyHandle(
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(easy, CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
+    // Use OS native CA store (Windows: Schannel, macOS: Secure Transport)
     curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 #endif
 
@@ -260,7 +263,7 @@ size_t CurlHttpClient::writeCallback(char *ptr, size_t size, size_t nmemb, void 
     auto *ctx = static_cast<RequestContext *>(userdata);
     size_t totalSize = size * nmemb;
     if (ctx->responseData.size() + static_cast<qsizetype>(totalSize) > CURL_MAX_RESPONSE_SIZE) {
-        // Reject oversized response — returning 0 signals an error to curl
+        obs_log(LOG_WARNING, "CurlHttpClient: Response exceeded %d bytes limit, aborting", CURL_MAX_RESPONSE_SIZE);
         return 0;
     }
     ctx->responseData.append(ptr, static_cast<qsizetype>(totalSize));

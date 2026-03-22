@@ -20,19 +20,19 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs.hpp>
 
-#include <o2.h>
+#include "net/oauth2-client.hpp"
 
-class SRCLinkSettingsStore : public O0AbstractStore {
+class SRCLinkSettingsStore : public QObject, public OAuth2TokenStore {
     Q_OBJECT
 
     OBSDataAutoRelease settingsData;
 
 public:
     explicit SRCLinkSettingsStore(QObject *parent = nullptr);
-    ~SRCLinkSettingsStore();
+    ~SRCLinkSettingsStore() override;
 
-    QString value(const QString &key, const QString &defaultValue = QString());
-    void setValue(const QString &key, const QString &value);
+    QString value(const QString &key, const QString &defaultValue = QString()) override;
+    void setValue(const QString &key, const QString &value) override;
 
     inline void setPartyId(const QString &partyId) { setValue("partyId", partyId); }
     inline const QString getPartyId() { return value("partyId"); }
