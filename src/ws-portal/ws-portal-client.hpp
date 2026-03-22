@@ -21,7 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-websocket-api.h>
 
 #include <QObject>
-#include <QWebSocket>
+#include "../net/ws-client.hpp"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -41,7 +41,7 @@ class SRCLinkApiClient;
 class WsPortalClient : public QObject {
     Q_OBJECT
 
-    QWebSocket *client;
+    WsClient *client;
     SRCLinkApiClient *apiClient;
     WsPortalStatus status;
     int reconnectCount;
@@ -71,7 +71,6 @@ private slots:
     void onLogoutSucceeded();
     void onConnected();
     void onDisconnected();
-    void onPong(quint64 elapsedTime, const QByteArray &payload);
     void onTextMessageReceived(const QString &message);
     void onBinaryMessageReceived(const QByteArray &message);
     void send(const QByteArray &message);
