@@ -138,10 +138,9 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     uuid = settings->value("uuid");
     if (uuid.isEmpty()) {
         // Generate new UUID for the client
-        auto defaultUuid = os_generate_uuid();
+        OBSString defaultUuid(os_generate_uuid());
         uuid = QString(defaultUuid);
         settings->setValue("uuid", uuid);
-        bfree(defaultUuid);
     }
 
     // Retrieve private IP addresses

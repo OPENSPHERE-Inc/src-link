@@ -61,7 +61,7 @@ class WsPortalClient : public QObject {
 
 signals:
     void connected();
-    void ready(bool reconect);
+    void ready(bool reconnect);
     void disconnected();
     void reconnecting();
 
@@ -80,7 +80,7 @@ public:
     ~WsPortalClient();
 
 public slots:
-    inline bool getStatus() const { return status; }
+    inline WsPortalStatus getStatus() const { return status; }
     void start();
     void stop();
     void restart();
