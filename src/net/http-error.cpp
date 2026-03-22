@@ -36,6 +36,8 @@ HttpError httpErrorFromStatusCode(int statusCode)
     case 409:
         return HttpError::ContentConflict;
     default:
+        // 3xx: Not expected here — CURLOPT_FOLLOWLOCATION handles redirects automatically.
+        // If a 3xx somehow reaches this function, it falls through to NetworkError.
         if (statusCode >= 400 && statusCode <= 499) {
             return HttpError::UnknownContentError;
         }

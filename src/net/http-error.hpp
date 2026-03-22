@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <QMetaType>
 #include <QString>
 
 enum class HttpError {
@@ -34,6 +35,8 @@ enum class HttpError {
     NetworkError,           // Connection-level errors
     OperationCanceled,
 };
+
+Q_DECLARE_METATYPE(HttpError)
 
 /// Convert HTTP status code to HttpError
 HttpError httpErrorFromStatusCode(int statusCode);

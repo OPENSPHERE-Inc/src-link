@@ -43,6 +43,11 @@ public:
     explicit CurlHttpClient(QObject *parent = nullptr);
     ~CurlHttpClient();
 
+    /// @warning The callback may capture `this` of the caller. If the caller can be destroyed
+    /// before the request completes, it must either: (a) call cancelAll(false) in its destructor
+    /// to prevent dangling callbacks, or (b) use QPointer guards in the callback lambda.
+    /// See OAuth2Client::~OAuth2Client() for pattern (a).
+
     /// HTTP GET request
     void get(
         const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,

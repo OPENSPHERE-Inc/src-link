@@ -114,7 +114,8 @@ void WsClient::performConnect()
     curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(easy, CURLOPT_TCP_KEEPIDLE, 30L);
     curl_easy_setopt(easy, CURLOPT_TCP_KEEPINTVL, 15L);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
+    // Use OS native CA store (Windows: Schannel, macOS: Secure Transport)
     curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 #endif
     // Enable WebSocket upgrade (CONNECT_ONLY=2 performs HTTP upgrade handshake only)

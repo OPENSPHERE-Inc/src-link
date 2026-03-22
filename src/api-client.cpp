@@ -19,10 +19,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <util/platform.h>
 
+#include <algorithm>
+#include <climits>
+
 #include <QMessageBox>
 #include <QRandomGenerator>
 #include <QDesktopServices>
-#include <QMetaEnum>
 #include <QString>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -31,9 +33,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QByteArray>
 #include <QBuffer>
 #include <QFile>
-
-#include <o0settingsstore.h>
-#include <o0globals.h>
 
 #include "plugin-support.h"
 #include "api-client.hpp"
@@ -87,8 +86,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #endif
 
 //--- Macros ---//
-#define QENUM_NAME(o, e, v) (o::staticMetaObject.enumerator(o::staticMetaObject.indexOfEnumerator(#e)).valueToKey((v)))
-#define GRANTFLOW_STR(v) QString(QENUM_NAME(O2, GrantFlow, v))
 
 #ifdef API_DEBUG
 #define API_LOG(...) obs_log(LOG_DEBUG, "client: " __VA_ARGS__)
@@ -99,31 +96,33 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define ERROR_LOG(...) obs_log(LOG_ERROR, "client: " __VA_ARGS__)
 #define WARNING_LOG(...) obs_log(LOG_WARNING, "client: " __VA_ARGS__)
 
-#define CHECK_CLIENT_TOKEN(...)                    \
-    {                                              \
-        if (client->refreshToken().isEmpty()) {    \
-            ERROR_LOG("client: No access token."); \
-            return __VA_ARGS__;                    \
-        }                                          \
-    }
+#define CHECK_CLIENT_TOKEN(...)                                \
+    do {                                                      \
+        if (oauth2Client->refreshTokenValue().isEmpty()) {    \
+            ERROR_LOG("client: Client not authenticated.");   \
+            return __VA_ARGS__;                               \
+        }                                                     \
+    } while (0)
 
 #define CHECK_RESPONSE_NOERROR(signal, message, ...) \
-    {                                                \
-        if (error != QNetworkReply::NoError) {       \
+    do {                                             \
+        if (error != HttpError::NoError) {           \
             ERROR_LOG(message, __VA_ARGS__);         \
             emit signal();                           \
             return;                                  \
         }                                            \
-    }
+    } while (0)
+
+#define HTTP_ERR(e) static_cast<int>(e)
 
 //--- SRCLinkApiClient class ---//
 
 SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     : QObject(parent),
-      // Create store object for writing the received tokens (It will be child of O2 instance)
-      settings(new SRCLinkSettingsStore()),
-      networkManager(nullptr),
-      client(nullptr),
+      // Create store object for writing the received tokens
+      settings(new SRCLinkSettingsStore(this)),
+      httpClient(nullptr),
+      oauth2Client(nullptr),
       activeOutputs(0),
       standByOutputs(0),
       uplinkStatus(UPLINK_STATUS_INACTIVE),
@@ -131,9 +130,9 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 {
     API_LOG("SRCLinkApiClient creating with %s,%s,%s", API_SERVER, API_WS_SERVER, FRONTEND_SERVER);
 
-    networkManager = new QNetworkAccessManager(this);
-    client = new O2(this, networkManager, settings);
-    sequencer = new RequestSequencer(networkManager, client, this);
+    httpClient = new CurlHttpClient(this);
+    oauth2Client = new OAuth2Client(httpClient, this);
+    sequencer = new HttpRequestSequencer(httpClient, oauth2Client, this);
     websocket = new SRCLinkWebSocketClient(QUrl(WEBSOCKET_URL), this, this);
 
     uuid = settings->value("uuid");
@@ -148,15 +147,14 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     // Retrieve private IP addresses
     retrievePrivateIp();
 
-    client->setRequestUrl(AUTHORIZE_URL);
-    client->setTokenUrl(TOKEN_URL);
-    client->setRefreshTokenUrl(TOKEN_URL);
-    client->setClientId(CLIENT_ID);
-    // FIXME: o2 didn't support PKCE yet, so we use embeded client secret for now
-    client->setClientSecret(CLIENT_SECRET);
-    client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
-    client->setScope(QString::fromLatin1(SCOPE));
-    client->setGrantFlow(O2::GrantFlow::GrantFlowAuthorizationCode);
+    oauth2Client->setRequestUrl(AUTHORIZE_URL);
+    oauth2Client->setTokenUrl(TOKEN_URL);
+    oauth2Client->setRefreshTokenUrl(TOKEN_URL);
+    oauth2Client->setClientId(CLIENT_ID);
+    oauth2Client->setClientSecret(CLIENT_SECRET);
+    oauth2Client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
+    oauth2Client->setScope(QString::fromLatin1(SCOPE));
+    oauth2Client->setStore(settings);
 
     // Read reply content html
     QString replyHtmlFile =
@@ -165,17 +163,14 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     if (!replyContent.open(QIODevice::ReadOnly)) {
         ERROR_LOG("Failed to read reply content html: %s", qUtf8Printable(replyHtmlFile));
     } else {
-        client->setReplyContent(replyContent.readAll());
+        oauth2Client->setReplyContent(replyContent.readAll());
     }
 
-    connect(client, SIGNAL(linkedChanged()), this, SLOT(onO2LinkedChanged()));
-    connect(client, SIGNAL(linkingSucceeded()), this, SLOT(onO2LinkingSucceeded()));
-    connect(client, SIGNAL(linkingFailed()), this, SLOT(onO2LinkingFailed()));
-    connect(client, SIGNAL(openBrowser(QUrl)), this, SLOT(onO2OpenBrowser(QUrl)));
-    connect(
-        client, SIGNAL(refreshFinished(QNetworkReply::NetworkError)), this,
-        SLOT(onO2RefreshFinished(QNetworkReply::NetworkError))
-    );
+    connect(oauth2Client, SIGNAL(linkedChanged()), this, SLOT(onOAuth2LinkedChanged()));
+    connect(oauth2Client, SIGNAL(linkingSucceeded()), this, SLOT(onOAuth2LinkingSucceeded()));
+    connect(oauth2Client, SIGNAL(linkingFailed()), this, SLOT(onOAuth2LinkingFailed()));
+    connect(oauth2Client, SIGNAL(openBrowser(QUrl)), this, SLOT(onOAuth2OpenBrowser(QUrl)));
+    connect(oauth2Client, SIGNAL(refreshFinished(HttpError)), this, SLOT(onOAuth2RefreshFinished(HttpError)));
 
     connect(websocket, SIGNAL(ready(bool)), this, SLOT(onWebSocketReady(bool)));
     connect(websocket, SIGNAL(aborted(const QString &)), this, SLOT(onWebSocketAborted(const QString &)));
@@ -215,7 +210,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
         [this](const QString &name, const QJsonObject &payload) { emit webSocketInvokeFailed(name, payload); }
     );
 
-    connect(this, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
+    connect(this, &SRCLinkApiClient::licenseChanged, this, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
             putUplink();
         }
@@ -223,26 +218,27 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
 
     tokenRefreshTimer = new QTimer(this);
     tokenRefreshTimer->setSingleShot(true);
-    connect(tokenRefreshTimer, SIGNAL(timeout()), this, SLOT(refresh()));
+    connect(tokenRefreshTimer, &QTimer::timeout, this, [this]() { refresh(); });
 
-    if (client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
+    if (oauth2Client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
         // Refresh token now
         refresh();
     } else {
-        connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-            if (error != QNetworkReply::NoError) {
+        connect(requestAccountInfo(), &HttpRequestInvoker::finished, this, [this](HttpError error) {
+            if (error != HttpError::NoError) {
                 return;
             }
 
             //syncOnlineResources(); // Now received by WebSocket
-            connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+            connect(putUplink(), &HttpRequestInvoker::finished, this, [this](HttpError) {
                 // WebSocket will be started even if uplink upload failed.
                 websocket->start();
             });
         });
 
-        // Schedule next refresh
-        tokenRefreshTimer->start(client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch());
+        // Schedule next refresh (guard against negative/overflow values)
+        qint64 refreshInterval = oauth2Client->expires() * 1000 - 60000 - QDateTime::currentMSecsSinceEpoch();
+        tokenRefreshTimer->start(static_cast<int>(std::clamp(refreshInterval, static_cast<qint64>(1000), static_cast<qint64>(INT_MAX))));
     }
 
     API_LOG("SRCLinkApiClient created");
@@ -255,25 +251,25 @@ SRCLinkApiClient::~SRCLinkApiClient()
 
 void SRCLinkApiClient::login()
 {
-    API_LOG("Starting OAuth 2 with grant flow type %s", qUtf8Printable(GRANTFLOW_STR(client->grantFlow())));
-    client->link();
+    API_LOG("Starting OAuth 2 Authorization Code flow");
+    oauth2Client->link();
 }
 
 void SRCLinkApiClient::logout()
 {
-    connect(deleteUplink(true), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
-        client->unlink();
+    connect(deleteUplink(true), &HttpRequestInvoker::finished, this, [this](HttpError) {
+        oauth2Client->unlink();
     });
 }
 
 bool SRCLinkApiClient::isLoggedIn()
 {
-    return client->linked();
+    return oauth2Client->linked();
 }
 
-const RequestInvoker *SRCLinkApiClient::refresh()
+const HttpRequestInvoker *SRCLinkApiClient::refresh()
 {
-    auto invoker = new RequestInvoker(sequencer, this);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
     invoker->refresh();
     return invoker;
 }
@@ -348,6 +344,11 @@ void SRCLinkApiClient::syncUplinkStatus(bool force)
 QString SRCLinkApiClient::retrievePrivateIp()
 {
     auto privateAddresses = getPrivateIPv4Addresses();
+    if (privateAddresses.isEmpty()) {
+        settings->setIngressPrivateIpValue("");
+        settings->setIngressPrivateIpIndex(0);
+        return "";
+    }
     auto index = privateAddresses.indexOf(settings->getIngressPrivateIpValue());
     if (index < 0) {
         // IP had been changed -> fallback to index
@@ -359,14 +360,14 @@ QString SRCLinkApiClient::retrievePrivateIp()
     return settings->getIngressPrivateIpValue();
 }
 
-const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
+const HttpRequestInvoker *SRCLinkApiClient::requestAccountInfo()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting account info.");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(accountInfoFailed, "Requesting account info failed: %d", error);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(accountInfoFailed, "Requesting account info failed: %d", HTTP_ERR(error));
 
         AccountInfo newAccountInfo = QJsonDocument::fromJson(replyData).object();
         if (!newAccountInfo.isValid()) {
@@ -388,19 +389,19 @@ const RequestInvoker *SRCLinkApiClient::requestAccountInfo()
             emit licenseChanged(newAccountInfo.getSubscriptionLicense());
         }
     });
-    invoker->get(QNetworkRequest(QUrl(ACCOUNT_INFO_URL)));
+    invoker->get(QUrl(ACCOUNT_INFO_URL));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestParties()
+const HttpRequestInvoker *SRCLinkApiClient::requestParties()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting parties.");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(partiesFailed, "Requesting parties failed: %d", error);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(partiesFailed, "Requesting parties failed: %d", HTTP_ERR(error));
 
         PartyArray newParties = QJsonDocument::fromJson(replyData).array();
         if (!newParties.every([](const Party &party) { return party.isValid(); })) {
@@ -419,19 +420,19 @@ const RequestInvoker *SRCLinkApiClient::requestParties()
 
         emit partiesReady(parties);
     });
-    invoker->get(QNetworkRequest(QUrl(PARTIES_URL)));
+    invoker->get(QUrl(PARTIES_URL));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestPartyEvents()
+const HttpRequestInvoker *SRCLinkApiClient::requestPartyEvents()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting party events");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(partyEventsFailed, "Requesting party events failed: %d", error);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(partyEventsFailed, "Requesting party events failed: %d", HTTP_ERR(error));
 
         PartyEventArray newPartyEvents = QJsonDocument::fromJson(replyData).array();
         if (!newPartyEvents.every([](const PartyEvent &event) { return event.isValid(); })) {
@@ -446,19 +447,19 @@ const RequestInvoker *SRCLinkApiClient::requestPartyEvents()
 
         emit partyEventsReady(partyEvents);
     });
-    invoker->get(QNetworkRequest(QUrl(PARTY_EVENTS_URL)));
+    invoker->get(QUrl(PARTY_EVENTS_URL));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestParticipants()
+const HttpRequestInvoker *SRCLinkApiClient::requestParticipants()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting participants");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(participantsFailed, "Requesting participants failed: %d", error);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(participantsFailed, "Requesting participants failed: %d", HTTP_ERR(error));
 
         PartyEventParticipantArray newParticipants = QJsonDocument::fromJson(replyData).array();
         if (!newParticipants.every([](const PartyEventParticipant &participant) { return participant.isValid(); })) {
@@ -473,19 +474,19 @@ const RequestInvoker *SRCLinkApiClient::requestParticipants()
 
         emit participantsReady(participants);
     });
-    invoker->get(QNetworkRequest(QUrl(PARTICIPANTS_URL)));
+    invoker->get(QUrl(PARTICIPANTS_URL));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestStages()
+const HttpRequestInvoker *SRCLinkApiClient::requestStages()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting receivers.");
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
-        CHECK_RESPONSE_NOERROR(stagesFailed, "Requesting receivers failed: %d", error);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
+        CHECK_RESPONSE_NOERROR(stagesFailed, "Requesting receivers failed: %d", HTTP_ERR(error));
 
         StageArray newStages = QJsonDocument::fromJson(replyData).array();
         if (!newStages.every([](const Stage &stage) { return stage.isValid(); })) {
@@ -500,24 +501,24 @@ const RequestInvoker *SRCLinkApiClient::requestStages()
 
         emit stagesReady(stages);
     });
-    invoker->get(QNetworkRequest(QUrl(STAGES_URL)));
+    invoker->get(QUrl(STAGES_URL));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestUplink()
+const HttpRequestInvoker *SRCLinkApiClient::requestUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting uplink for %s", qUtf8Printable(uuid));
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
         if (terminating) {
             WARNING_LOG("Ignore the response during terminating");
             return;
         }
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Requesting uplink for %s failed: %d", qUtf8Printable(uuid), error);
+        if (error != HttpError::NoError) {
+            ERROR_LOG("Requesting uplink for %s failed: %d", qUtf8Printable(uuid), HTTP_ERR(error));
             emit uplinkFailed(uuid);
             return;
         }
@@ -535,22 +536,22 @@ const RequestInvoker *SRCLinkApiClient::requestUplink()
 
         emit uplinkReady(uplink);
     });
-    invoker->get(QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid))));
+    invoker->get(QUrl(QString(UPLINK_URL).arg(uuid)));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::requestDownlink(const QString &sourceUuid)
+const HttpRequestInvoker *SRCLinkApiClient::requestDownlink(const QString &sourceUuid)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
     API_LOG("Requesting downlink for %s", qUtf8Printable(sourceUuid));
-    auto invoker = new RequestInvoker(sequencer, this);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
     connect(
-        invoker, &RequestInvoker::finished,
-        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
-                ERROR_LOG("Requesting downlink for %s failed: %d", qUtf8Printable(sourceUuid), error);
+        invoker, &HttpRequestInvoker::finished, this,
+        [this, sourceUuid](HttpError error, QByteArray replyData) {
+            if (error != HttpError::NoError) {
+                ERROR_LOG("Requesting downlink for %s failed: %d", qUtf8Printable(sourceUuid), HTTP_ERR(error));
                 emit downlinkFailed(sourceUuid);
                 return;
             }
@@ -569,26 +570,26 @@ const RequestInvoker *SRCLinkApiClient::requestDownlink(const QString &sourceUui
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->get(QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid))));
+    invoker->get(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, const DownlinkRequestBody &params)
+const HttpRequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, const DownlinkRequestBody &params)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto url = QUrl(QString(DOWNLINK_URL).arg(sourceUuid));
+    QMap<QByteArray, QByteArray> headers = {{"Content-Type", "application/json"}};
 
     API_LOG("Putting downlink: %s rev.%d", qUtf8Printable(sourceUuid), params.getRevision());
-    auto invoker = new RequestInvoker(sequencer, this);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
     connect(
-        invoker, &RequestInvoker::finished,
-        [this, sourceUuid, params](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
+        invoker, &HttpRequestInvoker::finished, this,
+        [this, sourceUuid, params](HttpError error, QByteArray replyData) {
+            if (error != HttpError::NoError) {
                 ERROR_LOG(
-                    "Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid), params.getRevision(), error
+                    "Putting downlink %s rev.%d failed: %d", qUtf8Printable(sourceUuid), params.getRevision(), HTTP_ERR(error)
                 );
                 emit putDownlinkFailed(sourceUuid);
                 emit downlinkFailed(sourceUuid);
@@ -616,25 +617,25 @@ const RequestInvoker *SRCLinkApiClient::putDownlink(const QString &sourceUuid, c
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument(params).toJson(QJsonDocument::Compact));
+    invoker->put(url, headers, QJsonDocument(params).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceUuid)
+const HttpRequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceUuid)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_STATUS_URL).arg(sourceUuid)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto url = QUrl(QString(DOWNLINK_STATUS_URL).arg(sourceUuid));
+    QMap<QByteArray, QByteArray> headers = {{"Content-Type", "application/json"}};
 
     API_LOG("Putting downlink status: %s", qUtf8Printable(sourceUuid));
-    auto invoker = new RequestInvoker(sequencer, this);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
     connect(
-        invoker, &RequestInvoker::finished,
-        [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
-                ERROR_LOG("Putting downlink status %s failed: %d", qUtf8Printable(sourceUuid), error);
+        invoker, &HttpRequestInvoker::finished, this,
+        [this, sourceUuid](HttpError error, QByteArray replyData) {
+            if (error != HttpError::NoError) {
+                ERROR_LOG("Putting downlink status %s failed: %d", qUtf8Printable(sourceUuid), HTTP_ERR(error));
                 emit putDownlinkStatusFailed(sourceUuid);
                 emit downlinkFailed(sourceUuid);
                 return;
@@ -659,22 +660,22 @@ const RequestInvoker *SRCLinkApiClient::putDownlinkStatus(const QString &sourceU
             emit downlinkReady(downlinks[sourceUuid]);
         }
     );
-    invoker->put(req, QJsonDocument().toJson(QJsonDocument::Compact));
+    invoker->put(url, headers, QJsonDocument().toJson(QJsonDocument::Compact));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
+const HttpRequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid, const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(DOWNLINK_URL).arg(sourceUuid)));
+    auto url = QUrl(QString(DOWNLINK_URL).arg(sourceUuid));
 
     API_LOG("Deleting downlink of %s", qUtf8Printable(sourceUuid));
-    auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
-    connect(invoker, &RequestInvoker::finished, [this, sourceUuid](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Deleting downlink of %s failed: %d", qUtf8Printable(sourceUuid), error);
+    auto invoker = !parallel ? new HttpRequestInvoker(sequencer, this) : new HttpRequestInvoker(httpClient, oauth2Client, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this, sourceUuid](HttpError error, QByteArray) {
+        if (error != HttpError::NoError) {
+            ERROR_LOG("Deleting downlink of %s failed: %d", qUtf8Printable(sourceUuid), HTTP_ERR(error));
             emit deleteDownlinkFailed(sourceUuid);
             return;
         }
@@ -687,17 +688,17 @@ const RequestInvoker *SRCLinkApiClient::deleteDownlink(const QString &sourceUuid
             emit deleteDownlinkSucceeded(sourceUuid);
         }
     });
-    invoker->deleteResource(req);
+    invoker->deleteResource(url);
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putUplink()
+const HttpRequestInvoker *SRCLinkApiClient::putUplink()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto url = QUrl(QString(UPLINK_URL).arg(uuid));
+    QMap<QByteArray, QByteArray> headers = {{"Content-Type", "application/json"}};
 
     QJsonObject body;
     auto participantId = settings->getParticipantId();
@@ -711,17 +712,17 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
         "Putting uplink of %s (participant=%s, force=%s)", qUtf8Printable(uuid),
         qUtf8Printable(body["participant_id"].toString()), qUtf8Printable(body["force"].toString())
     );
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
         if (terminating) {
             WARNING_LOG("Ignore the response during terminating");
             return;
         }
-        if (error != QNetworkReply::NoError) {
-            if (error == QNetworkReply::ContentConflictError) {
+        if (error != HttpError::NoError) {
+            if (error == HttpError::ContentConflict) {
                 ERROR_LOG("%s", obs_module_text("UuidConflictErrorDueToSecurity"));
             } else {
-                ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+                ERROR_LOG("Putting uplink of %s failed: %d", qUtf8Printable(uuid), HTTP_ERR(error));
             }
             emit putUplinkFailed(uuid, error);
             emit uplinkFailed(uuid);
@@ -733,7 +734,7 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
         if (!newUplink.isValid()) {
             ERROR_LOG("Received malformed uplink data.");
             API_LOG("dump=%s", replyData.toStdString().c_str());
-            emit putUplinkFailed(uuid, QNetworkReply::UnknownContentError);
+            emit putUplinkFailed(uuid, HttpError::UnknownContentError);
             emit uplinkFailed(uuid);
             return;
         }
@@ -745,30 +746,30 @@ const RequestInvoker *SRCLinkApiClient::putUplink()
         emit putUplinkSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    invoker->put(url, headers, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
+const HttpRequestInvoker *SRCLinkApiClient::putUplinkStatus()
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(UPLINK_STATUS_URL).arg(uuid)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto url = QUrl(QString(UPLINK_STATUS_URL).arg(uuid));
+    QMap<QByteArray, QByteArray> headers = {{"Content-Type", "application/json"}};
 
     QJsonObject body;
     body["uplink_status"] = uplinkStatus;
 
     API_LOG("Putting uplink status of %s", qUtf8Printable(uuid));
-    auto invoker = new RequestInvoker(sequencer, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray replyData) {
+    auto invoker = new HttpRequestInvoker(sequencer, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray replyData) {
         if (terminating) {
             WARNING_LOG("Ignore the response during terminating");
             return;
         }
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Putting uplink status of %s failed: %d", qUtf8Printable(uuid), error);
+        if (error != HttpError::NoError) {
+            ERROR_LOG("Putting uplink status of %s failed: %d", qUtf8Printable(uuid), HTTP_ERR(error));
             emit putUplinkStatusFailed(uuid);
             emit uplinkFailed(uuid);
             return;
@@ -789,22 +790,22 @@ const RequestInvoker *SRCLinkApiClient::putUplinkStatus()
         emit putUplinkStatusSucceeded(uplink);
         emit uplinkReady(uplink);
     });
-    invoker->put(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    invoker->put(url, headers, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
+const HttpRequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(UPLINK_URL).arg(uuid)));
+    auto url = QUrl(QString(UPLINK_URL).arg(uuid));
 
     API_LOG("Deleting uplink of %s", qUtf8Printable(uuid));
-    auto invoker = !parallel ? new RequestInvoker(sequencer, this) : new RequestInvoker(networkManager, client, this);
-    connect(invoker, &RequestInvoker::finished, [this](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            ERROR_LOG("Deleting uplink of %s failed: %d", qUtf8Printable(uuid), error);
+    auto invoker = !parallel ? new HttpRequestInvoker(sequencer, this) : new HttpRequestInvoker(httpClient, oauth2Client, this);
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error, QByteArray) {
+        if (error != HttpError::NoError) {
+            ERROR_LOG("Deleting uplink of %s failed: %d", qUtf8Printable(uuid), HTTP_ERR(error));
             emit deleteUplinkFailed(uuid);
             return;
         }
@@ -816,28 +817,28 @@ const RequestInvoker *SRCLinkApiClient::deleteUplink(const bool parallel)
 
         emit deleteUplinkSucceeded(uuid);
     });
-    invoker->deleteResource(req);
+    invoker->deleteResource(url);
 
     return invoker;
 }
 
-const RequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCode)
+const HttpRequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCode)
 {
     CHECK_CLIENT_TOKEN(nullptr);
 
-    auto req = QNetworkRequest(QUrl(QString(MEMBER_ACTIVATE_URL)));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    auto url = QUrl(QString(MEMBER_ACTIVATE_URL));
+    QMap<QByteArray, QByteArray> headers = {{"Content-Type", "application/json"}};
 
     QJsonObject body;
     body["invite_code"] = inviteCode;
 
     API_LOG("Activating member for %s", qUtf8Printable(inviteCode));
-    auto invoker = new RequestInvoker(sequencer, this);
+    auto invoker = new HttpRequestInvoker(sequencer, this);
     connect(
-        invoker, &RequestInvoker::finished,
-        [this, inviteCode](QNetworkReply::NetworkError error, QByteArray replyData) {
-            if (error != QNetworkReply::NoError) {
-                ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), error);
+        invoker, &HttpRequestInvoker::finished, this,
+        [this, inviteCode](HttpError error, QByteArray replyData) {
+            if (error != HttpError::NoError) {
+                ERROR_LOG("Activating membership for %s failed: %d", qUtf8Printable(inviteCode), HTTP_ERR(error));
                 emit redeemInviteCodeFailed(inviteCode);
                 return;
             }
@@ -868,7 +869,7 @@ const RequestInvoker *SRCLinkApiClient::redeemInviteCode(const QString &inviteCo
             emit participantsReady(participants);
         }
     );
-    invoker->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    invoker->post(url, headers, QJsonDocument(body).toJson(QJsonDocument::Compact));
 
     return invoker;
 }
@@ -920,20 +921,23 @@ void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &im
 
 void SRCLinkApiClient::getPicture(const QString &pictureId)
 {
-    auto reply = networkManager->get(QNetworkRequest(QUrl(QString(PICTURES_URL).arg(pictureId))));
-    connect(reply, &QNetworkReply::finished, [this, pictureId, reply]() {
-        if (reply->error() != QNetworkReply::NoError) {
-            ERROR_LOG("Getting picture of %s failed: %d", qUtf8Printable(pictureId), reply->error());
-            emit getPictureFailed(pictureId);
-            return;
+    // Uses CurlHttpClient directly (bypasses HttpRequestInvoker) because this is a
+    // public endpoint that does not require authentication or 401 retry logic.
+    httpClient->get(
+        QUrl(QString(PICTURES_URL).arg(pictureId)), {},
+        [this, pictureId](HttpResponse response) {
+            if (response.error != HttpError::NoError) {
+                ERROR_LOG("Getting picture of %s failed: %d", qUtf8Printable(pictureId), response.statusCode);
+                emit getPictureFailed(pictureId);
+                return;
+            }
+            API_LOG("Get picture of %s succeeded", qUtf8Printable(pictureId));
+
+            auto picture = QImage::fromData(response.data);
+
+            emit getPictureSucceeded(pictureId, picture);
         }
-        API_LOG("Get picture of %s succeeded", qUtf8Printable(pictureId));
-
-        auto picture = QImage::fromData(reply->readAll());
-
-        emit getPictureSucceeded(pictureId, picture);
-        reply->deleteLater();
-    });
+    );
 }
 
 void SRCLinkApiClient::openStagesPage()
@@ -966,12 +970,12 @@ void SRCLinkApiClient::openGuestCodesPage()
     QDesktopServices::openUrl(QUrl(GUEST_CODES_PAGE));
 }
 
-void SRCLinkApiClient::onO2OpenBrowser(const QUrl &url)
+void SRCLinkApiClient::onOAuth2OpenBrowser(const QUrl &url)
 {
     QDesktopServices::openUrl(url);
 }
 
-void SRCLinkApiClient::onO2LinkedChanged()
+void SRCLinkApiClient::onOAuth2LinkedChanged()
 {
     CHECK_CLIENT_TOKEN();
 
@@ -979,21 +983,21 @@ void SRCLinkApiClient::onO2LinkedChanged()
 }
 
 // This is called when link, unlink or refresh token succeeded
-void SRCLinkApiClient::onO2LinkingSucceeded()
+void SRCLinkApiClient::onOAuth2LinkingSucceeded()
 {
-    if (client->linked()) {
+    if (oauth2Client->linked()) {
         CHECK_CLIENT_TOKEN();
         INFO_LOG("The API client has linked up.");
 
         if (accountInfo.isEmpty()) {
             // Called only the first time after logging in
-            connect(requestAccountInfo(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError error) {
-                if (error != QNetworkReply::NoError) {
+            connect(requestAccountInfo(), &HttpRequestInvoker::finished, this, [this](HttpError error) {
+                if (error != HttpError::NoError) {
                     return;
                 }
 
                 //syncOnlineResources(); // Now received by WebSocket
-                connect(putUplink(), &RequestInvoker::finished, this, [this](QNetworkReply::NetworkError) {
+                connect(putUplink(), &HttpRequestInvoker::finished, this, [this](HttpError) {
                     // WebSocket will be started even if uplink upload failed.
                     websocket->start();
                 });
@@ -1013,7 +1017,7 @@ void SRCLinkApiClient::onO2LinkingSucceeded()
     }
 }
 
-void SRCLinkApiClient::onO2LinkingFailed()
+void SRCLinkApiClient::onOAuth2LinkingFailed()
 {
     ERROR_LOG("The API client linking failed.");
 
@@ -1022,15 +1026,16 @@ void SRCLinkApiClient::onO2LinkingFailed()
     emit loginFailed();
 }
 
-void SRCLinkApiClient::onO2RefreshFinished(QNetworkReply::NetworkError error)
+void SRCLinkApiClient::onOAuth2RefreshFinished(HttpError error)
 {
-    if (error != QNetworkReply::NoError) {
+    if (error != HttpError::NoError) {
         return;
     }
     CHECK_CLIENT_TOKEN();
 
-    // Schedule next refresh
-    tokenRefreshTimer->start(client->expires() * 1000 - 60000 - (int)QDateTime().currentMSecsSinceEpoch());
+    // Schedule next refresh (guard against negative/overflow values)
+    qint64 refreshInterval = oauth2Client->expires() * 1000 - 60000 - QDateTime::currentMSecsSinceEpoch();
+    tokenRefreshTimer->start(static_cast<int>(std::clamp(refreshInterval, static_cast<qint64>(1000), static_cast<qint64>(INT_MAX))));
 }
 
 void SRCLinkApiClient::onWebSocketReady(bool reconnect)

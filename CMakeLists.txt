@@ -41,7 +41,7 @@ find_package(CURL REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl)
 
 if(OS_WINDOWS)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi)
 endif()
 
 target_compile_definitions(
@@ -117,7 +117,6 @@ target_sources(
   PRIVATE src/plugin-main.cpp
           src/api-client.cpp
           src/api-websocket.cpp
-          src/request-invoker.cpp
           src/schema.hpp
           src/utils.cpp
           src/settings.cpp

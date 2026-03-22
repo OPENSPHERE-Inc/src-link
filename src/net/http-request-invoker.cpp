@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
+#include <QPointer>
+
 #include "http-request-invoker.hpp"
 #include "curl-http-client.hpp"
 #include "oauth2-client.hpp"
@@ -126,19 +128,26 @@ void HttpRequestInvoker::handleResponse(
     // 401 auto-retry: refresh token and retry once
     if (statusCode == 401 && !retried && sequencer->oauth2Client) {
         retried = true;
+        // Use QPointer to guard against dangling this in QueuedConnection lambda.
+        // If the invoker is destroyed (e.g., via cancelAll/sequencer dtor) before the
+        // queued lambda executes, the QPointer becomes null and we skip the callback.
+        QPointer<HttpRequestInvoker> self = this;
         connect(
             sequencer->oauth2Client, &OAuth2Client::refreshFinished, this,
-            [this, retryFunc, data](HttpError refreshError) {
+            [self, retryFunc, data](HttpError refreshError) {
+                if (!self) {
+                    return;
+                }
                 if (refreshError == HttpError::NoError) {
                     // Token refreshed, retry the request
                     retryFunc();
                 } else {
                     // Refresh failed, propagate the original error
-                    QMutexLocker locker(&sequencer->mutex);
-                    sequencer->requestQueue.removeOne(this);
+                    QMutexLocker locker(&self->sequencer->mutex);
+                    self->sequencer->requestQueue.removeOne(self);
                     locker.unlock();
-                    emit finished(HttpError::AuthenticationRequired, data);
-                    deleteLater();
+                    emit self->finished(HttpError::AuthenticationRequired, data);
+                    self->deleteLater();
                 }
             },
             static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::SingleShotConnection)
@@ -163,15 +172,21 @@ void HttpRequestInvoker::refresh()
         return;
     }
 
+    // Use QPointer to guard against dangling this in QueuedConnection lambda,
+    // consistent with handleResponse() (R3-CPP-7).
+    QPointer<HttpRequestInvoker> self = this;
     connect(
         sequencer->oauth2Client, &OAuth2Client::refreshFinished, this,
-        [this](HttpError error) {
-            QMutexLocker locker(&sequencer->mutex);
-            sequencer->requestQueue.removeOne(this);
+        [self](HttpError error) {
+            if (!self) {
+                return;
+            }
+            QMutexLocker locker(&self->sequencer->mutex);
+            self->sequencer->requestQueue.removeOne(self);
             locker.unlock();
 
-            emit finished(error, {});
-            deleteLater();
+            emit self->finished(error, {});
+            self->deleteLater();
         },
         static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::SingleShotConnection)
     );
