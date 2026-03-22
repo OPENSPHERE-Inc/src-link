@@ -115,19 +115,19 @@ After all fixes are complete, update the review document. Since the document use
 For fixed findings:
 
 ```
-> **{finding-id} Status: Fixed** — {Brief description of the fix.}
+> - **{finding-id} Status: Fixed** — {Brief description of the fix.}
 ```
 
 For "Won't Fix" decisions (triaged by you during Step 2):
 
 ```
-> **{finding-id} Status: Won't Fix** — {Reason why no action is needed.}
+> - **{finding-id} Status: Won't Fix** — {Reason why no action is needed.}
 ```
 
 For findings already marked `[No Action Needed]` by the reviewer — add your assessment of the reviewer's rationale:
 
 ```
-> **{finding-id} Status: Acknowledged** — {Your assessment: agree/disagree with the reviewer's rationale and why.}
+> - **{finding-id} Status: Acknowledged** — {Your assessment: agree/disagree with the reviewer's rationale and why.}
 ```
 
 ### Rules
