@@ -39,27 +39,35 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
-      apiClient(_apiClient),
       url(_url),
+      apiClient(_apiClient),
       started(false),
       reconnectCount(0)
 {
     intervalTimer = new QTimer(this);
-    client = new QWebSocket("https://" + url.host(), QWebSocketProtocol::Version13, this);
+    client = new WsClient(this);
 
-    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
-    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
-    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
-    connect(client, SIGNAL(textMessageReceived(QString)), this, SLOT(onTextMessageReceived(QString)));
-
-    /* Required Qt 6.5 (Error on Ubuntu 22.04)
-    connect(client, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
-        ERROR_LOG("Error received: %d", error);
+    connect(client, &WsClient::opened, this, &SRCLinkWebSocketClient::onConnected);
+    connect(client, &WsClient::closed, this, &SRCLinkWebSocketClient::onDisconnected);
+    connect(client, &WsClient::textMessageReceived, this, &SRCLinkWebSocketClient::onTextMessageReceived);
+    connect(client, &WsClient::errorOccurred, this, [this](const QString &reason) {
+        ERROR_LOG("Error received: %s", qUtf8Printable(reason));
+        // Reconnect on connection failure (errorOccurred may fire without closed signal)
+        if (started && !client->isValid()) {
+            auto expectedCount = reconnectCount;
+            QTimer::singleShot(5000, this, [this, expectedCount]() {
+                if (started && !client->isValid() && reconnectCount == expectedCount) {
+                    API_LOG("Reconnecting after error");
+                    reconnectCount++;
+                    open();
+                    emit reconnecting();
+                }
+            });
+        }
     });
-    */
 
     // Setup interval timer for pinging
-    connect(intervalTimer, &QTimer::timeout, [this]() {
+    connect(intervalTimer, &QTimer::timeout, this, [this]() {
         if (started && client->isValid()) {
             client->ping();
         }
@@ -93,12 +101,6 @@ void SRCLinkWebSocketClient::onDisconnected()
         API_LOG("Disconnected");
         emit disconnected();
     }
-}
-
-void SRCLinkWebSocketClient::onPong(quint64 elapsedTime, const QByteArray &)
-{
-    UNUSED_PARAMETER(elapsedTime);
-    API_LOG("Pong received: %llu", elapsedTime);
 }
 
 void SRCLinkWebSocketClient::onTextMessageReceived(QString message)
@@ -139,10 +141,10 @@ void SRCLinkWebSocketClient::open()
         return;
     }
 
-    auto req = QNetworkRequest(url);
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
-
-    client->open(req);
+    QMap<QByteArray, QByteArray> headers;
+    headers.insert("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
+    client->setHeaders(headers);
+    client->open(url);
 }
 
 void SRCLinkWebSocketClient::start()

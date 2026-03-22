@@ -45,22 +45,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
-      apiClient(_apiClient),
       client(nullptr),
+      apiClient(_apiClient),
       status(WS_PORTAL_STATUS_INACTIVE),
       reconnectCount(0)
 {
     intervalTimer = new QTimer(this);
 
-    connect(apiClient, SIGNAL(ready(bool)), this, SLOT(onApiClientReady(bool)));
-    connect(
-        apiClient, SIGNAL(wsPortalsReady(const WsPortalArray &)), this, SLOT(onWsPortalsReady(const WsPortalArray &))
-    );
-    connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
-    connect(apiClient, SIGNAL(loginFailed()), this, SLOT(onLogoutSucceeded()));
+    connect(apiClient, &SRCLinkApiClient::ready, this, &WsPortalClient::onApiClientReady);
+    connect(apiClient, &SRCLinkApiClient::wsPortalsReady, this, &WsPortalClient::onWsPortalsReady);
+    connect(apiClient, &SRCLinkApiClient::logoutSucceeded, this, &WsPortalClient::onLogoutSucceeded);
+    connect(apiClient, &SRCLinkApiClient::loginFailed, this, &WsPortalClient::onLogoutSucceeded);
 
     // Setup interval timer for pinging
-    connect(intervalTimer, &QTimer::timeout, [this]() {
+    connect(intervalTimer, &QTimer::timeout, this, [this]() {
         if (status == WS_PORTAL_STATUS_ACTIVE && client && client->isValid()) {
             client->ping();
         }
@@ -95,16 +93,31 @@ void WsPortalClient::createWsSocket()
     // Ensure previous client is destroyed
     destroyWsSocket();
 
-    client = new QWebSocket("https://" + wsPortal.getFacilityView().getApiHost(), QWebSocketProtocol::Version13, this);
+    client = new WsClient(this);
 
-    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
-    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
-    connect(client, SIGNAL(textMessageReceived(const QString &)), this, SLOT(onTextMessageReceived(const QString &)));
-    connect(
-        client, SIGNAL(binaryMessageReceived(const QByteArray &)), this,
-        SLOT(onBinaryMessageReceived(const QByteArray &))
-    );
-    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
+    connect(client, &WsClient::opened, this, &WsPortalClient::onConnected);
+    connect(client, &WsClient::closed, this, &WsPortalClient::onDisconnected);
+    connect(client, &WsClient::textMessageReceived, this, &WsPortalClient::onTextMessageReceived);
+    connect(client, &WsClient::binaryMessageReceived, this, &WsPortalClient::onBinaryMessageReceived);
+    connect(client, &WsClient::errorOccurred, this, [this](const QString &reason) {
+        ERROR_LOG("Error received: %s", qUtf8Printable(reason));
+
+        // WsClient emits errorOccurred but NOT closed on connection failure,
+        // so we need to handle reconnect here as well.
+        auto portalId = apiClient->getSettings()->getWsPortalId();
+        if (status != WS_PORTAL_STATUS_INACTIVE && (!client || !client->isValid()) && !portalId.isEmpty() &&
+            portalId != "none") {
+            API_LOG("Reconnecting after error");
+            reconnectCount++;
+            auto expectedCount = reconnectCount;
+            QTimer::singleShot(5000, this, [this, portalId, expectedCount]() {
+                if (status != WS_PORTAL_STATUS_INACTIVE && reconnectCount == expectedCount) {
+                    open(portalId);
+                    emit reconnecting();
+                }
+            });
+        }
+    });
 
     API_LOG("WebSocket created for the portal: %s", qUtf8Printable(wsPortal.getName()));
 }
@@ -140,10 +153,10 @@ void WsPortalClient::open(const QString &portalId)
     url.setQuery(parameters);
     API_LOG("Opening WebSocket: %s", qUtf8Printable(url.toString()));
 
-    auto req = QNetworkRequest(url);
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
-
-    client->open(req);
+    QMap<QByteArray, QByteArray> headers;
+    headers.insert("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
+    client->setHeaders(headers);
+    client->open(url);
 }
 
 void WsPortalClient::start()
@@ -232,12 +245,6 @@ void WsPortalClient::onDisconnected()
         open(portalId);
         emit reconnecting();
     }
-}
-
-void WsPortalClient::onPong(quint64 elapsedTime, const QByteArray &)
-{
-    UNUSED_PARAMETER(elapsedTime);
-    API_LOG("Pong received: %llu", elapsedTime);
 }
 
 void WsPortalClient::onTextMessageReceived(const QString &message)
@@ -374,7 +381,7 @@ void WsPortalClient::sendEvent(uint64_t requiredIntent, const char *eventType, c
 
     // Filter out events with portal's event subscriptions
     // Default subscriptions is "All" (But high volume events are excluded)
-    auto eventSubscriptions = (wsPortal["event_subscription"].isUndefined() || wsPortal["event_subscriptions"].isNull())
+    auto eventSubscriptions = (wsPortal["event_subscriptions"].isUndefined() || wsPortal["event_subscriptions"].isNull())
                                   ? (int)0x7FF
                                   : wsPortal.getEventSubscriptions();
     if (!(requiredIntent & eventSubscriptions)) {

@@ -235,6 +235,19 @@ void OAuth2Client::refresh()
     httpClient->post(url, headers, body, [this](HttpResponse response) {
         if (response.error != HttpError::NoError) {
             obs_log(LOG_ERROR, "OAuth2Client: Token refresh failed with error %d", static_cast<int>(response.error));
+            // RFC 6749 §5.2: Parse error response fields for diagnostics
+            QJsonDocument errDoc = QJsonDocument::fromJson(response.data);
+            if (errDoc.isObject()) {
+                QJsonObject errObj = errDoc.object();
+                QString errCode = errObj.value("error").toString();
+                QString errDesc = errObj.value("error_description").toString();
+                if (!errCode.isEmpty()) {
+                    obs_log(LOG_ERROR, "OAuth2Client: Server error: %s", qUtf8Printable(errCode));
+                }
+                if (!errDesc.isEmpty()) {
+                    obs_log(LOG_ERROR, "OAuth2Client: Error description: %s", qUtf8Printable(errDesc));
+                }
+            }
             refreshing_ = false;
             // O2 compatibility: O2::onRefreshError() calls unlink() before emitting refreshFinished.
             // This clears stale tokens and triggers the consumer's logout flow,
@@ -336,6 +349,19 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
             obs_log(
                 LOG_ERROR, "OAuth2Client: Token exchange failed with error %d", static_cast<int>(response.error)
             );
+            // RFC 6749 §5.2: Parse error response fields for diagnostics
+            QJsonDocument errDoc = QJsonDocument::fromJson(response.data);
+            if (errDoc.isObject()) {
+                QJsonObject errObj = errDoc.object();
+                QString errCode = errObj.value("error").toString();
+                QString errDesc = errObj.value("error_description").toString();
+                if (!errCode.isEmpty()) {
+                    obs_log(LOG_ERROR, "OAuth2Client: Server error: %s", qUtf8Printable(errCode));
+                }
+                if (!errDesc.isEmpty()) {
+                    obs_log(LOG_ERROR, "OAuth2Client: Error description: %s", qUtf8Printable(errDesc));
+                }
+            }
             emit linkingFailed();
             return;
         }
