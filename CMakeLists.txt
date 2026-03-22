@@ -36,12 +36,100 @@ include(helpers)
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
-find_package(CURL REQUIRED)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl)
+# =============================================================================
+# curl static build (WebSocket support enabled)
+#
+# obs-deps ships curl without WebSocket protocol support (CURL_VERSION_WEBSOCKETS absent).
+# We build curl from source with ENABLE_WEBSOCKETS=ON and statically link it,
+# so the plugin carries its own curl instance independent of OBS's libcurl.dll.
+# TLS backend: platform-native (Schannel on Windows, Secure Transport on macOS,
+# mbedtls on Linux) to use OS CA certificate stores without bundling CA files.
+# =============================================================================
+include(FetchContent)
+
+# --- mbedtls (Linux only — Windows/macOS use OS-native TLS) ---
+if(OS_LINUX)
+  FetchContent_Declare(
+    mbedtls
+    URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
+    URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
+  set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+  set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+  set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+  set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(MBEDTLS_AS_SUBPROJECT ON CACHE BOOL "" FORCE)
+  set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
+  FetchContent_GetProperties(mbedtls)
+  if(NOT mbedtls_POPULATED)
+    FetchContent_Populate(mbedtls)
+    add_subdirectory(${mbedtls_SOURCE_DIR} ${mbedtls_BINARY_DIR} EXCLUDE_FROM_ALL)
+  endif()
+endif()
+
+# --- curl (static, WebSocket enabled) ---
+FetchContent_Declare(
+  curl
+  URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz
+  URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
+# Static library only
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(CURL_STATICLIB ON CACHE BOOL "" FORCE)
+# TLS backend: platform-native for OS CA store access
+if(OS_WINDOWS)
+  set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+  set(CURL_USE_MBEDTLS OFF CACHE BOOL "" FORCE)
+  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+elseif(OS_MACOS)
+  set(CURL_USE_SECTRANSP ON CACHE BOOL "" FORCE)
+  set(CURL_USE_MBEDTLS OFF CACHE BOOL "" FORCE)
+  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+else()
+  set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
+  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+  set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+  set(MBEDTLS_LIBRARY mbedtls CACHE STRING "" FORCE)
+  set(MBEDX509_LIBRARY mbedx509 CACHE STRING "" FORCE)
+  set(MBEDCRYPTO_LIBRARY mbedcrypto CACHE STRING "" FORCE)
+endif()
+# WebSocket support
+set(ENABLE_WEBSOCKETS ON CACHE BOOL "" FORCE)
+# Disable unused protocols (binary size reduction)
+set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_FTP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_FTPS ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_TFTP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_SMTP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_SMTPS ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_POP3 ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_POP3S ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_IMAP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_IMAPS ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_TELNET ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_DICT ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_GOPHER ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_MQTT ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_RTSP ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_ALTSVC ON CACHE BOOL "" FORCE)
+set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
+set(HTTP_ONLY OFF CACHE BOOL "" FORCE)
+FetchContent_GetProperties(curl)
+if(NOT curl_POPULATED)
+  FetchContent_Populate(curl)
+  add_subdirectory(${curl_SOURCE_DIR} ${curl_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# =============================================================================
+
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE CURL_STATICLIB)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl_static)
 
 if(OS_WINDOWS)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi crypt32 bcrypt)
 endif()
 
 target_compile_definitions(

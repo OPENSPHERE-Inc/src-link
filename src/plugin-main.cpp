@@ -27,6 +27,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDir>
 #include <QAction>
 
+#include <curl/curl.h>
+
 #include "net/http-error.hpp"
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
@@ -112,13 +114,25 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
-    // curl_global_init() is intentionally NOT called here.
-    // OBS Studio already calls curl_global_init(CURL_GLOBAL_ALL) in obs-main.cpp.
-    // Calling it again from a plugin risks reference count mismatch — if this plugin's
-    // curl_global_cleanup() runs before OBS or other plugins finish using curl, it
-    // could tear down shared curl state prematurely. curl_easy_init() is safe to call
-    // without a prior curl_global_init() when the process has already initialized curl.
-    // See: Phase 1 review R3-#7, Phase 2 review OBS-1.
+    // Initialize the plugin's own statically-linked curl instance.
+    // This is separate from OBS Studio's curl (dynamically linked libcurl.dll),
+    // so we must call curl_global_init() for our own instance.
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+        auto *info = curl_version_info(CURLVERSION_NOW);
+        bool hasWs = false;
+        if (info->protocols) {
+            for (int i = 0; info->protocols[i]; i++) {
+                if (strcmp(info->protocols[i], "wss") == 0) {
+                    hasWs = true;
+                    break;
+                }
+            }
+        }
+        obs_log(LOG_INFO, "plugin curl: %s (ssl: %s, websocket: %s)", info->version,
+                info->ssl_version ? info->ssl_version : "none", hasWs ? "yes" : "no");
+    }
 
     qRegisterMetaType<HttpError>("HttpError");
 
@@ -183,7 +197,8 @@ void obs_module_unload(void)
     // Destroy the cpu stats
     os_cpu_usage_info_destroy(cpuUsageInfo);
 
-    // curl_global_cleanup() is intentionally NOT called here — see comment in obs_module_load().
+    // Clean up the plugin's own statically-linked curl instance.
+    curl_global_cleanup();
 
     obs_log(LOG_INFO, "plugin unloaded");
 }
