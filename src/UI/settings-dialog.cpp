@@ -23,7 +23,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGraphicsPixmapItem>
 #include <QImageReader>
 #include <QMessageBox>
-#include <QNetworkInterface>
 #include <QFile>
 
 #include "../utils.hpp"

@@ -265,7 +265,15 @@ void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
 
     auto connectionId = QString::fromStdString(messageObj["connectionId"]);
     // The body is stored in msgpack encoded binary
+    if (!messageObj["body"].is_binary()) {
+        API_LOG("Invalid message body type");
+        return;
+    }
     auto body = json::from_msgpack(messageObj["body"].get_binary(), true, false);
+    if (body.is_discarded()) {
+        API_LOG("Invalid message body data");
+        return;
+    }
 
     int op = body["op"];
     auto data = body["d"];
@@ -323,22 +331,31 @@ json WsPortalClient::processRequest(const json &request)
 
     OBSDataAutoRelease data = requestData.size() ? obs_data_create_from_json(requestData.dump().c_str())
                                                  : obs_data_create();
-    auto response = obs_websocket_call_request(qUtf8Printable(requestType), data);
+    OBSWebSocketRequestResponse response(obs_websocket_call_request(qUtf8Printable(requestType), data));
     if (!response) {
         return responseJson;
     }
 
-    json requestStatus = {{"code", (int)response->status_code}, {"result", response->status_code == 100}};
-    if (response->comment) {
-        requestStatus["comment"] = response->comment;
+    obs_websocket_request_response *raw = response;
+    json requestStatus = {{"code", (int)raw->status_code}, {"result", raw->status_code == 100}};
+    if (raw->comment) {
+        requestStatus["comment"] = raw->comment;
     }
 
     responseJson["requestType"] = qUtf8Printable(requestType);
     responseJson["requestId"] = qUtf8Printable(requestId);
     responseJson["requestStatus"] = requestStatus;
-    responseJson["responseData"] = response->response_data ? json::parse(response->response_data) : nullptr;
-
-    obs_websocket_request_response_free(response);
+    if (raw->response_data) {
+        auto responseData = json::parse(raw->response_data, nullptr, false);
+        if (responseData.is_discarded()) {
+            obs_log(LOG_WARNING, "[WsPortalClient] Failed to parse response data JSON from obs-websocket");
+            responseJson["responseData"] = nullptr;
+        } else {
+            responseJson["responseData"] = std::move(responseData);
+        }
+    } else {
+        responseJson["responseData"] = nullptr;
+    }
 
     return responseJson;
 }
@@ -388,7 +405,20 @@ void WsPortalClient::sendEvent(uint64_t requiredIntent, const char *eventType, c
         return;
     }
 
-    json data = {{"eventType", eventType}, {"eventIntent", (int)requiredIntent}, {"eventData", json::parse(eventData)}};
+    json parsedEventData = nullptr;
+    if (eventData) {
+        parsedEventData = json::parse(eventData, nullptr, false);
+        if (parsedEventData.is_discarded()) {
+            obs_log(LOG_WARNING, "[WsPortalClient] Failed to parse event data JSON for event: %s", eventType);
+            return;
+        }
+    }
+
+    json data = {
+        {"eventType", eventType},
+        {"eventIntent", static_cast<int64_t>(requiredIntent)},
+        {"eventData", std::move(parsedEventData)},
+    };
     json body = {{"op", 5}, {"d", data}};
     // The body is stored in msgpack encoded binary
     json message = {{"body", json::to_msgpack(body)}};

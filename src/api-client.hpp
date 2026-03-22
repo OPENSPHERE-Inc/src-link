@@ -142,12 +142,12 @@ public:
     ~SRCLinkApiClient();
 
     inline const QString &getUuid() const { return uuid; }
-    inline const AccountInfo getAccountInfo() const { return accountInfo; }
+    inline AccountInfo getAccountInfo() const { return accountInfo; }
     inline const PartyArray &getParties() const { return parties; }
     inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
     inline const PartyEventParticipantArray &getParticipants() const { return participants; }
     inline const StageArray &getStages() const { return stages; }
-    inline const UplinkInfo getUplink() const { return uplink; }
+    inline UplinkInfo getUplink() const { return uplink; }
     inline SRCLinkSettingsStore *getSettings() const { return settings; }
     inline const WsPortalArray &getWsPortals() const { return wsPortals; }
 

@@ -43,7 +43,7 @@ class SRCLinkWebSocketClient : public QObject {
     void open();
 
 signals:
-    void ready(bool reconect);
+    void ready(bool reconnect);
     void aborted(const QString &reason);
     void connected();
     void disconnected();
