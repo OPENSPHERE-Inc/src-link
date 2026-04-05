@@ -37,13 +37,13 @@ typedef int SocketHandle;
 #define INVALID_SOCKET_HANDLE (-1)
 #endif
 
-#define LOCAL_SERVER_POLL_INTERVAL_MSECS 100
-#define LOCAL_SERVER_TIMEOUT_MSECS 120000
-
 class LocalHttpServer : public QObject {
     Q_OBJECT
 
 public:
+    static constexpr int POLL_INTERVAL_MSECS = 100;
+    static constexpr int TIMEOUT_MSECS = 120000;
+
     explicit LocalHttpServer(QObject *parent = nullptr);
     ~LocalHttpServer();
 

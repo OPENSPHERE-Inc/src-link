@@ -58,6 +58,7 @@ class WsPortalClient : public QObject {
     void createWsSocket();
     void destroyWsSocket();
     void open(const QString &portalId);
+    int reconnectDelayMs() const;
 
 signals:
     void connected();

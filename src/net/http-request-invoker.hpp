@@ -28,8 +28,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "http-error.hpp"
 
-#define HTTP_DEFAULT_TIMEOUT_MSECS (10 * 1000)
-
 class CurlHttpClient;
 class OAuth2Client;
 class HttpRequestInvoker;
@@ -54,6 +52,10 @@ public:
 class HttpRequestInvoker : public QObject {
     Q_OBJECT
 
+public:
+    static constexpr int DEFAULT_TIMEOUT_MSECS = 10 * 1000;
+
+private:
     HttpRequestSequencer *sequencer;
     bool retried;
 
@@ -78,32 +80,24 @@ public:
     void refresh();
 
     /// HTTP GET request
-    void get(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {},
-        int timeout = HTTP_DEFAULT_TIMEOUT_MSECS
-    );
+    void get(const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {}, int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// HTTP POST request with body
     void post(
         const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &data,
-        int timeout = HTTP_DEFAULT_TIMEOUT_MSECS
+        int timeout = DEFAULT_TIMEOUT_MSECS
     );
 
     /// HTTP PUT request with body
-    void put(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &data,
-        int timeout = HTTP_DEFAULT_TIMEOUT_MSECS
-    );
+    void
+    put(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &data,
+        int timeout = DEFAULT_TIMEOUT_MSECS);
 
     /// HTTP DELETE request
     void deleteResource(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {},
-        int timeout = HTTP_DEFAULT_TIMEOUT_MSECS
+        const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {}, int timeout = DEFAULT_TIMEOUT_MSECS
     );
 
     /// HTTP HEAD request
-    void head(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {},
-        int timeout = HTTP_DEFAULT_TIMEOUT_MSECS
-    );
+    void head(const QUrl &url, const QMap<QByteArray, QByteArray> &headers = {}, int timeout = DEFAULT_TIMEOUT_MSECS);
 };

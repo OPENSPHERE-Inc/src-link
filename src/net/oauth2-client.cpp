@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QUuid>
 #include <QRandomGenerator>
 #include <QDateTime>
+#include <QPointer>
 
 #include <obs-module.h>
 
@@ -50,11 +51,12 @@ OAuth2Client::OAuth2Client(CurlHttpClient *httpClient, QObject *parent)
 OAuth2Client::~OAuth2Client()
 {
     obs_log(LOG_DEBUG, "OAuth2Client destroying");
-    // Cancel any in-flight HTTP requests (token exchange, refresh) without invoking
-    // callbacks, to avoid dangling `this` access in lambdas (R4-4) and prevent
-    // canceling unrelated requests if CurlHttpClient is shared (R5-1).
+    // Disconnect all signal/slot connections to this object to prevent dangling
+    // `this` access in lambdas queued via CurlHttpClient callbacks (R4-4).
+    // Note: We intentionally do NOT call httpClient->cancelAll() here because
+    // CurlHttpClient is a shared resource — canceling all requests would kill
+    // unrelated API requests from other components (C-1).
     disconnect(this);
-    httpClient->cancelAll(false);
 }
 
 void OAuth2Client::setClientId(const QString &clientId)
@@ -232,7 +234,13 @@ void OAuth2Client::refresh()
 
     QUrl url = refreshTokenUrl_.isEmpty() ? tokenUrl_ : refreshTokenUrl_;
 
-    httpClient->post(url, headers, body, [this](HttpResponse response) {
+    QPointer<OAuth2Client> self = this;
+    httpClient->post(url, headers, body, [self](HttpResponse response) {
+        if (!self) {
+            obs_log(LOG_DEBUG, "OAuth2Client: Destroyed before refresh callback, ignoring response");
+            return;
+        }
+
         if (response.error != HttpError::NoError) {
             obs_log(LOG_ERROR, "OAuth2Client: Token refresh failed with error %d", static_cast<int>(response.error));
             // RFC 6749 §5.2: Parse error response fields for diagnostics
@@ -248,21 +256,21 @@ void OAuth2Client::refresh()
                     obs_log(LOG_ERROR, "OAuth2Client: Error description: %s", qUtf8Printable(errDesc));
                 }
             }
-            refreshing_ = false;
+            self->refreshing_ = false;
             // O2 compatibility: O2::onRefreshError() calls unlink() before emitting refreshFinished.
             // This clears stale tokens and triggers the consumer's logout flow,
             // preventing a zombie "linked" state with an invalid token.
-            unlink();
-            emit refreshFinished(HttpError::AuthenticationRequired);
+            self->unlink();
+            emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
         }
 
         QJsonDocument doc = QJsonDocument::fromJson(response.data);
         if (!doc.isObject()) {
             obs_log(LOG_ERROR, "OAuth2Client: Invalid JSON in refresh response");
-            refreshing_ = false;
-            unlink();
-            emit refreshFinished(HttpError::AuthenticationRequired);
+            self->refreshing_ = false;
+            self->unlink();
+            emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
         }
 
@@ -270,31 +278,31 @@ void OAuth2Client::refresh()
         QString accessToken = obj.value("access_token").toString();
         if (accessToken.isEmpty()) {
             obs_log(LOG_ERROR, "OAuth2Client: Server returned empty access_token on refresh");
-            refreshing_ = false;
-            unlink();
-            emit refreshFinished(HttpError::AuthenticationRequired);
+            self->refreshing_ = false;
+            self->unlink();
+            emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
         }
 
-        token_ = accessToken;
+        self->token_ = accessToken;
 
         // Some providers return a new refresh token
         if (obj.contains("refresh_token")) {
-            refreshToken_ = obj.value("refresh_token").toString();
+            self->refreshToken_ = obj.value("refresh_token").toString();
         }
 
         qint64 expiresIn = static_cast<qint64>(obj.value("expires_in").toInt(0));
-        expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
+        self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 
-        saveTokens();
+        self->saveTokens();
 
-        refreshing_ = false;
+        self->refreshing_ = false;
         obs_log(LOG_DEBUG, "OAuth2Client: Token refreshed successfully, expires in %lld seconds", expiresIn);
         // O2 compatibility: O2::onRefreshFinished() emits linkedChanged,
         // linkingSucceeded, then refreshFinished in that order.
-        emit linkedChanged();
-        emit linkingSucceeded();
-        emit refreshFinished(HttpError::NoError);
+        emit self->linkedChanged();
+        emit self->linkingSucceeded();
+        emit self->refreshFinished(HttpError::NoError);
     });
 }
 
@@ -344,11 +352,15 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
     QMap<QByteArray, QByteArray> headers;
     headers.insert("Content-Type", "application/x-www-form-urlencoded");
 
-    httpClient->post(tokenUrl_, headers, body, [this](HttpResponse response) {
+    QPointer<OAuth2Client> self = this;
+    httpClient->post(tokenUrl_, headers, body, [self](HttpResponse response) {
+        if (!self) {
+            obs_log(LOG_DEBUG, "OAuth2Client: Destroyed before token exchange callback, ignoring response");
+            return;
+        }
+
         if (response.error != HttpError::NoError) {
-            obs_log(
-                LOG_ERROR, "OAuth2Client: Token exchange failed with error %d", static_cast<int>(response.error)
-            );
+            obs_log(LOG_ERROR, "OAuth2Client: Token exchange failed with error %d", static_cast<int>(response.error));
             // RFC 6749 §5.2: Parse error response fields for diagnostics
             QJsonDocument errDoc = QJsonDocument::fromJson(response.data);
             if (errDoc.isObject()) {
@@ -362,14 +374,14 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
                     obs_log(LOG_ERROR, "OAuth2Client: Error description: %s", qUtf8Printable(errDesc));
                 }
             }
-            emit linkingFailed();
+            emit self->linkingFailed();
             return;
         }
 
         QJsonDocument doc = QJsonDocument::fromJson(response.data);
         if (!doc.isObject()) {
             obs_log(LOG_ERROR, "OAuth2Client: Invalid JSON in token response");
-            emit linkingFailed();
+            emit self->linkingFailed();
             return;
         }
 
@@ -377,31 +389,31 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
         QString accessToken = obj.value("access_token").toString();
         if (accessToken.isEmpty()) {
             obs_log(LOG_ERROR, "OAuth2Client: Server returned empty access_token");
-            emit linkingFailed();
+            emit self->linkingFailed();
             return;
         }
 
-        token_ = accessToken;
+        self->token_ = accessToken;
 
         // RFC 6749 §4.1.4: refresh_token is OPTIONAL in the token response.
         // Only update if the server returns one; preserve any existing value otherwise.
         QString newRefreshToken = obj.value("refresh_token").toString();
         if (!newRefreshToken.isEmpty()) {
-            refreshToken_ = newRefreshToken;
+            self->refreshToken_ = newRefreshToken;
         }
 
         qint64 expiresIn = static_cast<qint64>(obj.value("expires_in").toInt(0));
-        expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
+        self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 
-        linked_ = true;
+        self->linked_ = true;
 
-        saveTokens();
+        self->saveTokens();
 
         obs_log(LOG_DEBUG, "OAuth2Client: Token exchange successful, expires in %lld seconds", expiresIn);
         // O2 compatibility: O2::onTokenReplyFinished() calls setLinked(true) (emits linkedChanged)
         // then emits linkingSucceeded(). Match that order.
-        emit linkedChanged();
-        emit linkingSucceeded();
+        emit self->linkedChanged();
+        emit self->linkingSucceeded();
     });
 }
 

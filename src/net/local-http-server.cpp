@@ -37,16 +37,18 @@ LocalHttpServer::LocalHttpServer(QObject *parent)
 {
     obs_log(LOG_DEBUG, "LocalHttpServer created");
 
-    pollTimer->setInterval(LOCAL_SERVER_POLL_INTERVAL_MSECS);
+    pollTimer->setInterval(LocalHttpServer::POLL_INTERVAL_MSECS);
     connect(pollTimer, &QTimer::timeout, this, &LocalHttpServer::pollAccept);
 
     timeoutTimer->setSingleShot(true);
-    timeoutTimer->setInterval(LOCAL_SERVER_TIMEOUT_MSECS);
+    timeoutTimer->setInterval(LocalHttpServer::TIMEOUT_MSECS);
     connect(timeoutTimer, &QTimer::timeout, this, [this]() {
         if (!listening) {
             return; // Already closed — avoid double verificationReceived from queued pollTimer signals
         }
-        obs_log(LOG_WARNING, "LocalHttpServer: Auth flow timed out after %d seconds", LOCAL_SERVER_TIMEOUT_MSECS / 1000);
+        obs_log(
+            LOG_WARNING, "LocalHttpServer: Auth flow timed out after %d seconds", LocalHttpServer::TIMEOUT_MSECS / 1000
+        );
         close();
         // Emit empty params to signal timeout — OAuth2Client will detect missing "code" and emit linkingFailed
         emit verificationReceived({});
@@ -165,17 +167,18 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
     static constexpr int MAX_REQUEST_HEADER_SIZE = 8192;
     char buffer[MAX_REQUEST_HEADER_SIZE];
 
-    // Set client socket to blocking with a 5-second receive timeout
-    // to prevent UI thread blocking from slow or malicious clients
+    // Set client socket to blocking with a 1-second receive timeout.
+    // This is localhost-only (OAuth2 callback), so 1 second is sufficient.
+    // Keeps UI thread blocking to a minimum.
 #ifdef _WIN32
     unsigned long blockingMode = 0;
     ioctlsocket(clientSocket, FIONBIO, &blockingMode);
-    DWORD rcvTimeout = 5000;
+    DWORD rcvTimeout = 1000;
     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&rcvTimeout), sizeof(rcvTimeout));
 #else
     int flags = fcntl(clientSocket, F_GETFL, 0);
     fcntl(clientSocket, F_SETFL, flags & ~O_NONBLOCK);
-    struct timeval rcvTimeout = {5, 0};
+    struct timeval rcvTimeout = {1, 0};
     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout));
 #endif
 

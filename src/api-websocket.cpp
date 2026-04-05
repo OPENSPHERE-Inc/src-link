@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <algorithm>
+
 #include <QJsonDocument>
 
 #include "plugin-support.h"
@@ -54,11 +56,12 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
         ERROR_LOG("Error received: %s", qUtf8Printable(reason));
         // Reconnect on connection failure (errorOccurred may fire without closed signal)
         if (started && !client->isValid()) {
+            reconnectCount++;
+            int delay = reconnectDelayMs();
             auto expectedCount = reconnectCount;
-            QTimer::singleShot(5000, this, [this, expectedCount]() {
+            QTimer::singleShot(delay, this, [this, expectedCount]() {
                 if (started && !client->isValid() && reconnectCount == expectedCount) {
                     API_LOG("Reconnecting after error");
-                    reconnectCount++;
                     open();
                     emit reconnecting();
                 }
@@ -90,13 +93,28 @@ void SRCLinkWebSocketClient::onConnected()
     emit connected();
 }
 
+int SRCLinkWebSocketClient::reconnectDelayMs() const
+{
+    // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    static constexpr int BASE_DELAY_MS = 5000;
+    static constexpr int MAX_DELAY_MS = 300000;
+    int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
+    return (std::min)(delay, MAX_DELAY_MS);
+}
+
 void SRCLinkWebSocketClient::onDisconnected()
 {
     if (started) {
-        API_LOG("Reconnecting");
         reconnectCount++;
-        open();
-        emit reconnecting();
+        int delay = reconnectDelayMs();
+        API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
+        auto expectedCount = reconnectCount;
+        QTimer::singleShot(delay, this, [this, expectedCount]() {
+            if (started && !client->isValid() && reconnectCount == expectedCount) {
+                open();
+                emit reconnecting();
+            }
+        });
     } else {
         API_LOG("Disconnected");
         emit disconnected();

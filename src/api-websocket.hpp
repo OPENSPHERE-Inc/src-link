@@ -41,6 +41,7 @@ class SRCLinkWebSocketClient : public QObject {
     QTimer *intervalTimer;
 
     void open();
+    int reconnectDelayMs() const;
 
 signals:
     void ready(bool reconnect);
