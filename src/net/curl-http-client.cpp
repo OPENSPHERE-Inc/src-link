@@ -21,10 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "curl-http-client.hpp"
 #include "../plugin-support.h"
 
-CurlHttpClient::CurlHttpClient(QObject *parent)
-    : QObject(parent),
-      multi(curl_multi_init()),
-      pollTimer(new QTimer(this))
+CurlHttpClient::CurlHttpClient(QObject *parent) : QObject(parent), multi(curl_multi_init()), pollTimer(new QTimer(this))
 {
     obs_log(LOG_DEBUG, "CurlHttpClient created");
 
@@ -32,7 +29,7 @@ CurlHttpClient::CurlHttpClient(QObject *parent)
         obs_log(LOG_ERROR, "CurlHttpClient: curl_multi_init() failed");
     }
 
-    pollTimer->setInterval(CURL_POLL_INTERVAL_MSECS);
+    pollTimer->setInterval(CurlHttpClient::POLL_INTERVAL_MSECS);
     connect(pollTimer, &QTimer::timeout, this, &CurlHttpClient::checkCompleted);
 }
 
@@ -124,8 +121,8 @@ void CurlHttpClient::get(
 }
 
 void CurlHttpClient::post(
-    const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body,
-    ResponseCallback callback, int timeoutMs
+    const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body, ResponseCallback callback,
+    int timeoutMs
 )
 {
     auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, body, std::move(callback)};
@@ -143,8 +140,8 @@ void CurlHttpClient::post(
 }
 
 void CurlHttpClient::put(
-    const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body,
-    ResponseCallback callback, int timeoutMs
+    const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body, ResponseCallback callback,
+    int timeoutMs
 )
 {
     auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, body, std::move(callback)};
@@ -262,8 +259,10 @@ size_t CurlHttpClient::writeCallback(char *ptr, size_t size, size_t nmemb, void 
 {
     auto *ctx = static_cast<RequestContext *>(userdata);
     size_t totalSize = size * nmemb;
-    if (ctx->responseData.size() + static_cast<qsizetype>(totalSize) > CURL_MAX_RESPONSE_SIZE) {
-        obs_log(LOG_WARNING, "CurlHttpClient: Response exceeded %d bytes limit, aborting", CURL_MAX_RESPONSE_SIZE);
+    if (ctx->responseData.size() + static_cast<qsizetype>(totalSize) > CurlHttpClient::MAX_RESPONSE_SIZE) {
+        obs_log(
+            LOG_WARNING, "CurlHttpClient: Response exceeded %d bytes limit, aborting", CurlHttpClient::MAX_RESPONSE_SIZE
+        );
         return 0;
     }
     ctx->responseData.append(ptr, static_cast<qsizetype>(totalSize));

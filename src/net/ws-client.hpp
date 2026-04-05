@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <atomic>
 #include <thread>
 
 #include <QObject>
@@ -75,11 +76,11 @@ private:
     QMap<QByteArray, QByteArray> requestHeaders;
     struct curl_slist *headerList;
     bool connected;
-    bool connecting;
+    std::atomic<bool> connecting;
     unsigned int connectGeneration; // Incremented per connection attempt to detect stale callbacks
     QUrl pendingUrl;
     QByteArray fragmentBuffer;
-    int fragmentType; // CURLWS_TEXT or CURLWS_BINARY
+    int fragmentType;     // CURLWS_TEXT or CURLWS_BINARY
     bool frameInProgress; // True when reading a frame that spans multiple recv calls
     qint64 pingTimestamp;
 

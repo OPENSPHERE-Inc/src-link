@@ -30,14 +30,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "http-response.hpp"
 
-#define CURL_POLL_INTERVAL_MSECS 10
-#define CURL_DEFAULT_TIMEOUT_MS 10000
-#define CURL_MAX_RESPONSE_SIZE (16 * 1024 * 1024) // 16 MB
-
 class CurlHttpClient : public QObject {
     Q_OBJECT
 
 public:
+    static constexpr int POLL_INTERVAL_MSECS = 10;
+    static constexpr int DEFAULT_TIMEOUT_MS = 10000;
+    static constexpr int MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16 MB
+
     using ResponseCallback = std::function<void(HttpResponse)>;
 
     explicit CurlHttpClient(QObject *parent = nullptr);
@@ -46,36 +46,33 @@ public:
     /// @warning The callback may capture `this` of the caller. If the caller can be destroyed
     /// before the request completes, it must either: (a) call cancelAll(false) in its destructor
     /// to prevent dangling callbacks, or (b) use QPointer guards in the callback lambda.
-    /// See OAuth2Client::~OAuth2Client() for pattern (a).
+    /// See OAuth2Client for pattern (b).
 
     /// HTTP GET request
-    void get(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,
-        int timeoutMs = CURL_DEFAULT_TIMEOUT_MS
-    );
+    void
+    get(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,
+        int timeoutMs = DEFAULT_TIMEOUT_MS);
 
     /// HTTP POST request with body
     void post(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body,
-        ResponseCallback callback, int timeoutMs = CURL_DEFAULT_TIMEOUT_MS
+        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body, ResponseCallback callback,
+        int timeoutMs = DEFAULT_TIMEOUT_MS
     );
 
     /// HTTP PUT request with body
-    void put(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body,
-        ResponseCallback callback, int timeoutMs = CURL_DEFAULT_TIMEOUT_MS
-    );
+    void
+    put(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, const QByteArray &body, ResponseCallback callback,
+        int timeoutMs = DEFAULT_TIMEOUT_MS);
 
     /// HTTP DELETE request
-    void del(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,
-        int timeoutMs = CURL_DEFAULT_TIMEOUT_MS
-    );
+    void
+    del(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,
+        int timeoutMs = DEFAULT_TIMEOUT_MS);
 
     /// HTTP HEAD request
     void head(
         const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback,
-        int timeoutMs = CURL_DEFAULT_TIMEOUT_MS
+        int timeoutMs = DEFAULT_TIMEOUT_MS
     );
 
     /// Cancel all pending requests.
@@ -97,9 +94,8 @@ private:
     QTimer *pollTimer;
     QList<RequestContext *> activeRequests;
 
-    CURL *createEasyHandle(
-        const QUrl &url, const QMap<QByteArray, QByteArray> &headers, RequestContext *ctx, int timeoutMs
-    );
+    CURL *
+    createEasyHandle(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, RequestContext *ctx, int timeoutMs);
     void startRequest(CURL *easy, RequestContext *ctx);
     void checkCompleted();
     void cleanupRequest(RequestContext *ctx);

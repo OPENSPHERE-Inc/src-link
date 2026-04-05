@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <algorithm>
+
 #include <obs-module.h>
 #include <obs.hpp>
 #include <util/platform.h>
@@ -107,10 +109,11 @@ void WsPortalClient::createWsSocket()
         auto portalId = apiClient->getSettings()->getWsPortalId();
         if (status != WS_PORTAL_STATUS_INACTIVE && (!client || !client->isValid()) && !portalId.isEmpty() &&
             portalId != "none") {
-            API_LOG("Reconnecting after error");
             reconnectCount++;
+            int delay = reconnectDelayMs();
+            API_LOG("Reconnecting after error in %d ms (attempt %d)", delay, reconnectCount);
             auto expectedCount = reconnectCount;
-            QTimer::singleShot(5000, this, [this, portalId, expectedCount]() {
+            QTimer::singleShot(delay, this, [this, portalId, expectedCount]() {
                 if (status != WS_PORTAL_STATUS_INACTIVE && reconnectCount == expectedCount) {
                     open(portalId);
                     emit reconnecting();
@@ -236,14 +239,29 @@ void WsPortalClient::onConnected()
     emit connected();
 }
 
+int WsPortalClient::reconnectDelayMs() const
+{
+    // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    static constexpr int BASE_DELAY_MS = 5000;
+    static constexpr int MAX_DELAY_MS = 300000;
+    int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
+    return (std::min)(delay, MAX_DELAY_MS);
+}
+
 void WsPortalClient::onDisconnected()
 {
     auto portalId = apiClient->getSettings()->getWsPortalId();
     if (status != WS_PORTAL_STATUS_INACTIVE && !portalId.isEmpty() && portalId != "none") {
-        API_LOG("Reconnecting");
         reconnectCount++;
-        open(portalId);
-        emit reconnecting();
+        int delay = reconnectDelayMs();
+        API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
+        auto expectedCount = reconnectCount;
+        QTimer::singleShot(delay, this, [this, portalId, expectedCount]() {
+            if (status != WS_PORTAL_STATUS_INACTIVE && reconnectCount == expectedCount) {
+                open(portalId);
+                emit reconnecting();
+            }
+        });
     }
 }
 
@@ -398,9 +416,10 @@ void WsPortalClient::sendEvent(uint64_t requiredIntent, const char *eventType, c
 
     // Filter out events with portal's event subscriptions
     // Default subscriptions is "All" (But high volume events are excluded)
-    auto eventSubscriptions = (wsPortal["event_subscriptions"].isUndefined() || wsPortal["event_subscriptions"].isNull())
-                                  ? (int)0x7FF
-                                  : wsPortal.getEventSubscriptions();
+    auto eventSubscriptions =
+        (wsPortal["event_subscriptions"].isUndefined() || wsPortal["event_subscriptions"].isNull())
+            ? (int)0x7FF
+            : wsPortal.getEventSubscriptions();
     if (!(requiredIntent & eventSubscriptions)) {
         return;
     }
