@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
+#include <memory>
+
 #include <QPointer>
 
 #include "http-request-invoker.hpp"
@@ -33,6 +35,26 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #else
 #define TRACE(...)
 #endif
+
+// Equivalent of Qt::SingleShotConnection (Qt 6.6+) for the project's Qt floor (6.2).
+// Disconnects the slot after its first invocation. Holds the connection handle inside the
+// lambda so the disconnect happens before the user-supplied callback runs.
+namespace {
+template<typename Sender, typename Signal, typename Receiver, typename Func>
+QMetaObject::Connection connectQueuedOneShot(Sender *sender, Signal signal, Receiver *receiver, Func &&func)
+{
+    auto handle = std::make_shared<QMetaObject::Connection>();
+    *handle = QObject::connect(
+        sender, signal, receiver,
+        [handle, func = std::forward<Func>(func)](auto &&...args) {
+            QObject::disconnect(*handle);
+            func(std::forward<decltype(args)>(args)...);
+        },
+        Qt::QueuedConnection
+    );
+    return *handle;
+}
+} // namespace
 
 //--- HttpRequestSequencer class ---//
 
@@ -152,7 +174,7 @@ void HttpRequestInvoker::handleResponse(
         // If the invoker is destroyed (e.g., via cancelAll/sequencer dtor) before the
         // queued lambda executes, the QPointer becomes null and we skip the callback.
         QPointer<HttpRequestInvoker> self = this;
-        connect(
+        connectQueuedOneShot(
             sequencer->oauth2Client, &OAuth2Client::refreshFinished, this,
             [self, retryFunc, data](HttpError refreshError) {
                 if (!self) {
@@ -171,8 +193,7 @@ void HttpRequestInvoker::handleResponse(
                     emit self->finished(HttpError::AuthenticationRequired, data);
                     self->deleteLater();
                 }
-            },
-            static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::SingleShotConnection)
+            }
         );
         sequencer->oauth2Client->refresh();
         return;
@@ -197,21 +218,17 @@ void HttpRequestInvoker::refresh()
     // Use QPointer to guard against dangling this in QueuedConnection lambda,
     // consistent with handleResponse() (R3-CPP-7).
     QPointer<HttpRequestInvoker> self = this;
-    connect(
-        sequencer->oauth2Client, &OAuth2Client::refreshFinished, this,
-        [self](HttpError error) {
-            if (!self) {
-                return;
-            }
-            QMutexLocker locker(&self->sequencer->mutex);
-            self->sequencer->requestQueue.removeOne(self);
-            locker.unlock();
+    connectQueuedOneShot(sequencer->oauth2Client, &OAuth2Client::refreshFinished, this, [self](HttpError error) {
+        if (!self) {
+            return;
+        }
+        QMutexLocker locker(&self->sequencer->mutex);
+        self->sequencer->requestQueue.removeOne(self);
+        locker.unlock();
 
-            emit self->finished(error, {});
-            self->deleteLater();
-        },
-        static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::SingleShotConnection)
-    );
+        emit self->finished(error, {});
+        self->deleteLater();
+    });
 
     queue([this]() { sequencer->oauth2Client->refresh(); });
 }
