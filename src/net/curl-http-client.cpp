@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 
 #include "curl-http-client.hpp"
+#include "linux-ca-locations.hpp"
 #include "../plugin-support.h"
 
 CurlHttpClient::CurlHttpClient(QObject *parent) : QObject(parent), multi(curl_multi_init()), pollTimer(new QTimer(this))
@@ -95,11 +96,19 @@ CURL *CurlHttpClient::createEasyHandle(
     // Use OS native CA store (Windows: Schannel, macOS: Secure Transport)
     curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 #elif defined(__linux__)
-    // Linux: libcurl is built against mbedtls in obs-deps, which has no compiled-in CA path.
-    // Point at the standard system CA directory so server certs verify out of the box.
-    // FIXME: switch to a bundled CA file (e.g. cacert.pem under data/) once devops decides
-    // on the bundling layout — replace with CURLOPT_CAINFO at that point.
-    curl_easy_setopt(easy, CURLOPT_CAPATH, "/etc/ssl/certs");
+    // Linux: libcurl is built against mbedtls, which has no compiled-in CA path. The CA path
+    // is supplied at build time via the SRC_LINK_LINUX_CA_PATH CMake cache variable, and the
+    // helper picks CURLOPT_CAPATH or CURLOPT_CAINFO based on whether the path is a directory
+    // or a regular file.
+    if (auto *ca = findLinuxCaLocation()) {
+        if (ca->isDirectory) {
+            curl_easy_setopt(easy, CURLOPT_CAPATH, ca->path);
+        } else {
+            curl_easy_setopt(easy, CURLOPT_CAINFO, ca->path);
+        }
+    } else {
+        obs_log(LOG_WARNING, "CurlHttpClient: No system CA bundle found; TLS verification will likely fail");
+    }
 #endif
 
     curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
