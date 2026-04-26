@@ -195,11 +195,7 @@ jobs:
 
   ubuntu-build:
     name: Build for Ubuntu 🐧
-    # FIXME: Bumped to ubuntu-24.04 because CMakeLists.txt requires Qt >= 6.6 (Qt::SingleShotConnection).
-    # Ubuntu 22.04's APT only ships Qt 6.2.4, which fails the find_package version check. If 24.04's
-    # default Qt is still < 6.6, fall back to either a Qt 6.6+ PPA (e.g. KDE Neon) or a self-rolled
-    # SingleShotConnection helper that lets us drop the Qt floor back to 6.2.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs: check-event
     defaults:
       run:
@@ -260,14 +256,14 @@ jobs:
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-ubuntu-24.04-x86_64-${{ needs.check-event.outputs.commitHash }}
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-ubuntu-22.04-x86_64-${{ needs.check-event.outputs.commitHash }}
           path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*.*
 
       - name: Upload debug symbol artifacts 🪲
         uses: actions/upload-artifact@v4
         if: ${{ fromJSON(needs.check-event.outputs.package) }}
         with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-ubuntu-24.04-x86_64-${{ needs.check-event.outputs.commitHash }}-dbgsym
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-ubuntu-22.04-x86_64-${{ needs.check-event.outputs.commitHash }}-dbgsym
           path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*-dbgsym.ddeb
 
   windows-build:
