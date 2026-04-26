@@ -159,6 +159,9 @@ public slots:
     /// SRCLinkApiClient (parent=this). The pointer is valid until this object is destroyed
     /// or the invoker emits finished() (after which it self-deletes via deleteLater()).
     /// Callers must NOT delete the returned pointer.
+    /// @warning Accessing the returned pointer after finished() has fired is a
+    /// use-after-free. Connect slots before returning to the event loop, or guard
+    /// captures with QPointer.
     const HttpRequestInvoker *refresh();
     void syncOnlineResources();
     void clearOnlineResources();

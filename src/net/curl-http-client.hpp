@@ -30,6 +30,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "http-response.hpp"
 
+/// Asynchronous HTTP client backed by libcurl's multi interface.
+///
+/// All ResponseCallback invocations are delivered on the thread that owns this QObject
+/// (typically the UI / main thread), driven by pollTimer's QTimer::timeout signal.
+/// Callbacks therefore must NOT assume they run on a worker thread.
 class CurlHttpClient : public QObject {
     Q_OBJECT
 
@@ -44,7 +49,7 @@ public:
     ~CurlHttpClient();
 
     /// @warning The callback may capture `this` of the caller. If the caller can be destroyed
-    /// before the request completes, it must either: (a) call cancelAll(false) in its destructor
+    /// before the request completes, it must either: (a) call cancelAllSilently() in its destructor
     /// to prevent dangling callbacks, or (b) use QPointer guards in the callback lambda.
     /// See OAuth2Client for pattern (b).
 
@@ -75,19 +80,24 @@ public:
         int timeoutMs = DEFAULT_TIMEOUT_MS
     );
 
-    /// Cancel all pending requests.
-    /// If invokeCallbacks is true (default), each request's callback is called with OperationCanceled.
-    /// If false, requests are silently cleaned up without callbacks (safe for use in destructors).
-    void cancelAll(bool invokeCallbacks = true);
+    /// Cancel all pending requests and invoke each callback with OperationCanceled.
+    /// @warning Do NOT call from a destructor where callers may already be partially destroyed —
+    /// use cancelAllSilently() in that case.
+    void cancelAll();
+
+    /// Cancel all pending requests without invoking callbacks. Safe for use in destructors.
+    /// @warning Downstream consumers will not be notified; only call when callers are being torn down.
+    void cancelAllSilently();
 
 private:
     struct RequestContext {
-        CURL *easy;
+        CURL *easy = nullptr;
         QByteArray responseData;
         QMap<QByteArray, QByteArray> responseHeaders;
-        struct curl_slist *requestHeaders;
+        struct curl_slist *requestHeaders = nullptr;
         QByteArray requestBody;
         ResponseCallback callback;
+        bool responseTooLarge = false;
     };
 
     CURLM *multi;

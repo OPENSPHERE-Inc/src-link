@@ -36,9 +36,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 //--- HttpRequestSequencer class ---//
 
-HttpRequestSequencer::HttpRequestSequencer(
-    CurlHttpClient *_httpClient, OAuth2Client *_oauth2Client, QObject *parent
-)
+HttpRequestSequencer::HttpRequestSequencer(CurlHttpClient *_httpClient, OAuth2Client *_oauth2Client, QObject *parent)
     : QObject(parent),
       httpClient(_httpClient),
       oauth2Client(_oauth2Client)
@@ -48,18 +46,27 @@ HttpRequestSequencer::HttpRequestSequencer(
 
 HttpRequestSequencer::~HttpRequestSequencer()
 {
-    if (!requestQueue.isEmpty()) {
-        obs_log(LOG_WARNING, "Draining %d remaining requests in queue.", requestQueue.size());
+    // Move the queue to a local under mutex. ~HttpRequestInvoker also removes itself from
+    // requestQueue under the same mutex, so iterating over the live queue while deleting
+    // its elements would mutate the container mid-iteration. Draining a local copy avoids
+    // that and lets each ~HttpRequestInvoker's removeAll() become a no-op safely (C-1).
+    QList<HttpRequestInvoker *> drained;
+    {
+        QMutexLocker locker(&mutex);
+        drained.swap(requestQueue);
+    }
+
+    if (!drained.isEmpty()) {
+        obs_log(LOG_WARNING, "Draining %d remaining requests in queue.", drained.size());
         // Disconnect inter-invoker chain connections first to prevent
         // cascading lambda invocations during the drain loop (R4-2).
-        for (auto *invoker : requestQueue) {
+        for (auto *invoker : drained) {
             invoker->disconnect();
         }
-        for (auto *invoker : requestQueue) {
+        for (auto *invoker : drained) {
             emit invoker->finished(HttpError::OperationCanceled, {});
             delete invoker; // Direct delete: deleteLater() won't run if event loop is stopped (OBS shutdown)
         }
-        requestQueue.clear();
     }
 
     TRACE("HttpRequestSequencer destroyed");
@@ -75,6 +82,9 @@ HttpRequestInvoker::HttpRequestInvoker(HttpRequestSequencer *_sequencer, QObject
     TRACE("HttpRequestInvoker created (Sequential)");
 }
 
+// Parallel-mode invariant: the caller must give this invoker a `parent` whose lifetime exceeds
+// `httpClient` / `oauth2Client`. The owned sequencer borrows both pointers without ownership,
+// so outliving them would leave a dangling reference inside the queued request callback.
 HttpRequestInvoker::HttpRequestInvoker(CurlHttpClient *httpClient, OAuth2Client *oauth2Client, QObject *parent)
     : QObject(parent),
       sequencer(nullptr),
@@ -87,11 +97,21 @@ HttpRequestInvoker::HttpRequestInvoker(CurlHttpClient *httpClient, OAuth2Client 
 HttpRequestInvoker::~HttpRequestInvoker()
 {
     disconnect(this);
+    // Remove self from sequencer's queue under mutex so that ~HttpRequestSequencer's
+    // drain loop never observes a dangling invoker pointer (C-1).
+    if (sequencer) {
+        QMutexLocker locker(&sequencer->mutex);
+        sequencer->requestQueue.removeAll(this);
+    }
     TRACE("HttpRequestInvoker destroyed");
 }
 
 template<class Func> void HttpRequestInvoker::queue(Func invoker)
 {
+    // Chain lifetime invariant: the previous invoker's handleResponse() emits `finished`
+    // and only then schedules its own deleteLater(). The slot connected below runs
+    // synchronously during that emit, so the previous invoker is still alive while this
+    // one's request is dispatched -- the deleteLater() fires on a later event-loop tick.
     QMutexLocker locker(&sequencer->mutex);
     {
         if (sequencer->requestQueue.isEmpty()) {
@@ -142,7 +162,9 @@ void HttpRequestInvoker::handleResponse(
                     // Token refreshed, retry the request
                     retryFunc();
                 } else {
-                    // Refresh failed, propagate the original error
+                    // Refresh failed: clear the stored tokens so the user is forced
+                    // back through the OAuth2 authorization flow on the next request.
+                    self->sequencer->oauth2Client->unlink();
                     QMutexLocker locker(&self->sequencer->mutex);
                     self->sequencer->requestQueue.removeOne(self);
                     locker.unlock();
@@ -194,25 +216,52 @@ void HttpRequestInvoker::refresh()
     queue([this]() { sequencer->oauth2Client->refresh(); });
 }
 
+// FIXME: get/post/put/deleteResource/head share the same QPointer-guarded callback structure.
+// Extract a templated helper (parameterized by the verb closure) so the lifetime guards live in
+// one place. Out of scope for this PR; tracked as a follow-up refactor.
 void HttpRequestInvoker::get(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, int timeout)
 {
     int timeoutMs = timeout;
+    QPointer<HttpRequestInvoker> self = this;
 
-    queue([this, url, headers, timeoutMs]() {
+    queue([this, self, url, headers, timeoutMs]() {
+        if (!self) {
+            return;
+        }
         auto merged = mergeAuthHeaders(headers);
-        sequencer->httpClient->get(url, merged, [this, url, headers, timeoutMs](HttpResponse response) {
-            handleResponse(response.statusCode, response.error, response.data, [this, url, headers, timeoutMs]() {
-                // Retry with refreshed token
-                auto merged = mergeAuthHeaders(headers);
-                sequencer->httpClient->get(url, merged, [this](HttpResponse response) {
-                    QMutexLocker locker(&sequencer->mutex);
-                    sequencer->requestQueue.removeOne(this);
-                    locker.unlock();
-                    emit finished(response.error, response.data);
-                    deleteLater();
-                }, timeoutMs);
-            });
-        }, timeoutMs);
+        sequencer->httpClient->get(
+            url, merged,
+            [self, url, headers, timeoutMs](HttpResponse response) {
+                if (!self) {
+                    return;
+                }
+                self->handleResponse(
+                    response.statusCode, response.error, response.data,
+                    [self, url, headers, timeoutMs]() {
+                        if (!self) {
+                            return;
+                        }
+                        // Retry with refreshed token
+                        auto merged = self->mergeAuthHeaders(headers);
+                        self->sequencer->httpClient->get(
+                            url, merged,
+                            [self](HttpResponse response) {
+                                if (!self) {
+                                    return;
+                                }
+                                QMutexLocker locker(&self->sequencer->mutex);
+                                self->sequencer->requestQueue.removeOne(self);
+                                locker.unlock();
+                                emit self->finished(response.error, response.data);
+                                self->deleteLater();
+                            },
+                            timeoutMs
+                        );
+                    }
+                );
+            },
+            timeoutMs
+        );
     });
 }
 
@@ -221,23 +270,40 @@ void HttpRequestInvoker::post(
 )
 {
     int timeoutMs = timeout;
+    QPointer<HttpRequestInvoker> self = this;
 
-    queue([this, url, headers, data, timeoutMs]() {
+    queue([this, self, url, headers, data, timeoutMs]() {
+        if (!self) {
+            return;
+        }
         auto merged = mergeAuthHeaders(headers);
         sequencer->httpClient->post(
             url, merged, data,
-            [this, url, headers, data, timeoutMs](HttpResponse response) {
-                handleResponse(
+            [self, url, headers, data, timeoutMs](HttpResponse response) {
+                if (!self) {
+                    return;
+                }
+                self->handleResponse(
                     response.statusCode, response.error, response.data,
-                    [this, url, headers, data, timeoutMs]() {
-                        auto merged = mergeAuthHeaders(headers);
-                        sequencer->httpClient->post(url, merged, data, [this](HttpResponse response) {
-                            QMutexLocker locker(&sequencer->mutex);
-                            sequencer->requestQueue.removeOne(this);
-                            locker.unlock();
-                            emit finished(response.error, response.data);
-                            deleteLater();
-                        }, timeoutMs);
+                    [self, url, headers, data, timeoutMs]() {
+                        if (!self) {
+                            return;
+                        }
+                        auto merged = self->mergeAuthHeaders(headers);
+                        self->sequencer->httpClient->post(
+                            url, merged, data,
+                            [self](HttpResponse response) {
+                                if (!self) {
+                                    return;
+                                }
+                                QMutexLocker locker(&self->sequencer->mutex);
+                                self->sequencer->requestQueue.removeOne(self);
+                                locker.unlock();
+                                emit self->finished(response.error, response.data);
+                                self->deleteLater();
+                            },
+                            timeoutMs
+                        );
                     }
                 );
             },
@@ -251,23 +317,40 @@ void HttpRequestInvoker::put(
 )
 {
     int timeoutMs = timeout;
+    QPointer<HttpRequestInvoker> self = this;
 
-    queue([this, url, headers, data, timeoutMs]() {
+    queue([this, self, url, headers, data, timeoutMs]() {
+        if (!self) {
+            return;
+        }
         auto merged = mergeAuthHeaders(headers);
         sequencer->httpClient->put(
             url, merged, data,
-            [this, url, headers, data, timeoutMs](HttpResponse response) {
-                handleResponse(
+            [self, url, headers, data, timeoutMs](HttpResponse response) {
+                if (!self) {
+                    return;
+                }
+                self->handleResponse(
                     response.statusCode, response.error, response.data,
-                    [this, url, headers, data, timeoutMs]() {
-                        auto merged = mergeAuthHeaders(headers);
-                        sequencer->httpClient->put(url, merged, data, [this](HttpResponse response) {
-                            QMutexLocker locker(&sequencer->mutex);
-                            sequencer->requestQueue.removeOne(this);
-                            locker.unlock();
-                            emit finished(response.error, response.data);
-                            deleteLater();
-                        }, timeoutMs);
+                    [self, url, headers, data, timeoutMs]() {
+                        if (!self) {
+                            return;
+                        }
+                        auto merged = self->mergeAuthHeaders(headers);
+                        self->sequencer->httpClient->put(
+                            url, merged, data,
+                            [self](HttpResponse response) {
+                                if (!self) {
+                                    return;
+                                }
+                                QMutexLocker locker(&self->sequencer->mutex);
+                                self->sequencer->requestQueue.removeOne(self);
+                                locker.unlock();
+                                emit self->finished(response.error, response.data);
+                                self->deleteLater();
+                            },
+                            timeoutMs
+                        );
                     }
                 );
             },
@@ -279,41 +362,89 @@ void HttpRequestInvoker::put(
 void HttpRequestInvoker::deleteResource(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, int timeout)
 {
     int timeoutMs = timeout;
+    QPointer<HttpRequestInvoker> self = this;
 
-    queue([this, url, headers, timeoutMs]() {
+    queue([this, self, url, headers, timeoutMs]() {
+        if (!self) {
+            return;
+        }
         auto merged = mergeAuthHeaders(headers);
-        sequencer->httpClient->del(url, merged, [this, url, headers, timeoutMs](HttpResponse response) {
-            handleResponse(response.statusCode, response.error, response.data, [this, url, headers, timeoutMs]() {
-                auto merged = mergeAuthHeaders(headers);
-                sequencer->httpClient->del(url, merged, [this](HttpResponse response) {
-                    QMutexLocker locker(&sequencer->mutex);
-                    sequencer->requestQueue.removeOne(this);
-                    locker.unlock();
-                    emit finished(response.error, response.data);
-                    deleteLater();
-                }, timeoutMs);
-            });
-        }, timeoutMs);
+        sequencer->httpClient->del(
+            url, merged,
+            [self, url, headers, timeoutMs](HttpResponse response) {
+                if (!self) {
+                    return;
+                }
+                self->handleResponse(
+                    response.statusCode, response.error, response.data,
+                    [self, url, headers, timeoutMs]() {
+                        if (!self) {
+                            return;
+                        }
+                        auto merged = self->mergeAuthHeaders(headers);
+                        self->sequencer->httpClient->del(
+                            url, merged,
+                            [self](HttpResponse response) {
+                                if (!self) {
+                                    return;
+                                }
+                                QMutexLocker locker(&self->sequencer->mutex);
+                                self->sequencer->requestQueue.removeOne(self);
+                                locker.unlock();
+                                emit self->finished(response.error, response.data);
+                                self->deleteLater();
+                            },
+                            timeoutMs
+                        );
+                    }
+                );
+            },
+            timeoutMs
+        );
     });
 }
 
 void HttpRequestInvoker::head(const QUrl &url, const QMap<QByteArray, QByteArray> &headers, int timeout)
 {
     int timeoutMs = timeout;
+    QPointer<HttpRequestInvoker> self = this;
 
-    queue([this, url, headers, timeoutMs]() {
+    queue([this, self, url, headers, timeoutMs]() {
+        if (!self) {
+            return;
+        }
         auto merged = mergeAuthHeaders(headers);
-        sequencer->httpClient->head(url, merged, [this, url, headers, timeoutMs](HttpResponse response) {
-            handleResponse(response.statusCode, response.error, response.data, [this, url, headers, timeoutMs]() {
-                auto merged = mergeAuthHeaders(headers);
-                sequencer->httpClient->head(url, merged, [this](HttpResponse response) {
-                    QMutexLocker locker(&sequencer->mutex);
-                    sequencer->requestQueue.removeOne(this);
-                    locker.unlock();
-                    emit finished(response.error, response.data);
-                    deleteLater();
-                }, timeoutMs);
-            });
-        }, timeoutMs);
+        sequencer->httpClient->head(
+            url, merged,
+            [self, url, headers, timeoutMs](HttpResponse response) {
+                if (!self) {
+                    return;
+                }
+                self->handleResponse(
+                    response.statusCode, response.error, response.data,
+                    [self, url, headers, timeoutMs]() {
+                        if (!self) {
+                            return;
+                        }
+                        auto merged = self->mergeAuthHeaders(headers);
+                        self->sequencer->httpClient->head(
+                            url, merged,
+                            [self](HttpResponse response) {
+                                if (!self) {
+                                    return;
+                                }
+                                QMutexLocker locker(&self->sequencer->mutex);
+                                self->sequencer->requestQueue.removeOne(self);
+                                locker.unlock();
+                                emit self->finished(response.error, response.data);
+                                self->deleteLater();
+                            },
+                            timeoutMs
+                        );
+                    }
+                );
+            },
+            timeoutMs
+        );
     });
 }

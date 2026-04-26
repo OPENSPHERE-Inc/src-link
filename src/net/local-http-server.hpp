@@ -27,13 +27,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-typedef SOCKET SocketHandle;
+using SocketHandle = SOCKET;
 #define INVALID_SOCKET_HANDLE INVALID_SOCKET
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-typedef int SocketHandle;
+using SocketHandle = int;
 #define INVALID_SOCKET_HANDLE (-1)
 #endif
 

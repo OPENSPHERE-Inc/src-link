@@ -44,7 +44,8 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
       url(_url),
       apiClient(_apiClient),
       started(false),
-      reconnectCount(0)
+      reconnectCount(0),
+      reconnectPending(false)
 {
     intervalTimer = new QTimer(this);
     client = new WsClient(this);
@@ -54,18 +55,10 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     connect(client, &WsClient::textMessageReceived, this, &SRCLinkWebSocketClient::onTextMessageReceived);
     connect(client, &WsClient::errorOccurred, this, [this](const QString &reason) {
         ERROR_LOG("Error received: %s", qUtf8Printable(reason));
-        // Reconnect on connection failure (errorOccurred may fire without closed signal)
+        // errorOccurred may fire with or without a subsequent closed signal; route both
+        // through scheduleReconnect() to avoid double-scheduling with stale backoff values.
         if (started && !client->isValid()) {
-            reconnectCount++;
-            int delay = reconnectDelayMs();
-            auto expectedCount = reconnectCount;
-            QTimer::singleShot(delay, this, [this, expectedCount]() {
-                if (started && !client->isValid() && reconnectCount == expectedCount) {
-                    API_LOG("Reconnecting after error");
-                    open();
-                    emit reconnecting();
-                }
-            });
+            scheduleReconnect();
         }
     });
 
@@ -102,19 +95,36 @@ int SRCLinkWebSocketClient::reconnectDelayMs() const
     return (std::min)(delay, MAX_DELAY_MS);
 }
 
+// Reconnect signal flow:
+//
+//   WsClient::errorOccurred -> [scheduleReconnect()] -> [reconnectPending] -> QTimer
+//   WsClient::closed        -> onDisconnected -> [scheduleReconnect()]
+//
+// Both paths funnel through scheduleReconnect() which is idempotent
+// via the reconnectPending flag.
+void SRCLinkWebSocketClient::scheduleReconnect()
+{
+    if (!started || reconnectPending) {
+        return;
+    }
+
+    reconnectPending = true;
+    reconnectCount++;
+    int delay = reconnectDelayMs();
+    API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
+    QTimer::singleShot(delay, this, [this]() {
+        reconnectPending = false;
+        if (started && !client->isValid()) {
+            open();
+            emit reconnecting();
+        }
+    });
+}
+
 void SRCLinkWebSocketClient::onDisconnected()
 {
     if (started) {
-        reconnectCount++;
-        int delay = reconnectDelayMs();
-        API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
-        auto expectedCount = reconnectCount;
-        QTimer::singleShot(delay, this, [this, expectedCount]() {
-            if (started && !client->isValid() && reconnectCount == expectedCount) {
-                open();
-                emit reconnecting();
-            }
-        });
+        scheduleReconnect();
     } else {
         API_LOG("Disconnected");
         emit disconnected();
@@ -174,6 +184,7 @@ void SRCLinkWebSocketClient::start()
     API_LOG("Connecting: %s", qUtf8Printable(url.toString()));
     started = true;
     reconnectCount = 0;
+    reconnectPending = false;
     open();
 }
 

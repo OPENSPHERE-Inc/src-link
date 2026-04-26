@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QUrl>
 #include <QMap>
+#include <QPointer>
 #include <QSocketNotifier>
 #include <QTimer>
 
@@ -77,11 +78,15 @@ private:
     struct curl_slist *headerList;
     bool connected;
     std::atomic<bool> connecting;
+    std::atomic<bool> abortConnect; // Set by close()/dtor to make curl_easy_perform() return early
     unsigned int connectGeneration; // Incremented per connection attempt to detect stale callbacks
     QUrl pendingUrl;
     QByteArray fragmentBuffer;
     int fragmentType;     // CURLWS_TEXT or CURLWS_BINARY
     bool frameInProgress; // True when reading a frame that spans multiple recv calls
+    // Only the most recent ping is timed. An unmatched older pong would skew
+    // the measurement, but this is acceptable in practice since pings are
+    // typically issued at intervals far longer than RTT.
     qint64 pingTimestamp;
 
     void performConnect();
@@ -90,7 +95,9 @@ private:
     void pollRecv();
     void cleanup();
     void startRecvNotifier();
-    qint64 sendRaw(const char *data, size_t len, unsigned int flags);
+    qint64 sendRaw(const char *data, size_t len, unsigned int flags, bool shuttingDown = false);
 
     static size_t writeCallback(char *ptr, size_t size, size_t nmemb, void *userdata);
+    static int
+    xferInfoCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);
 };

@@ -16,13 +16,15 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <cstring>
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrlQuery>
-#include <QUuid>
 #include <QRandomGenerator>
 #include <QDateTime>
 #include <QPointer>
+#include <QThread>
 
 #include <obs-module.h>
 
@@ -141,31 +143,33 @@ void OAuth2Client::link()
         return;
     }
 
-    // Choose port — retry with different random ports if bind fails
-    int port = 0;
-    static constexpr int maxRetries = 5;
-    for (int i = 0; i < maxRetries; i++) {
-        port = localPort_ > 0 ? localPort_ : QRandomGenerator::global()->bounded(8000, 9000);
-        if (localServer->listen(port)) {
-            break;
-        }
-        obs_log(LOG_WARNING, "OAuth2Client: Port %d unavailable, retrying (%d/%d)", port, i + 1, maxRetries);
-        port = 0;
-        // If a fixed port was specified, no point retrying
+    // Fixed port (configured) or OS-assigned ephemeral port (port=0). The unpredictable
+    // ephemeral port together with the state-CSRF check forms layered defense against a
+    // local attacker grabbing the redirect endpoint.
+    int requestedPort = localPort_ > 0 ? localPort_ : 0;
+    if (!localServer->listen(requestedPort)) {
         if (localPort_ > 0) {
-            break;
+            obs_log(LOG_ERROR, "OAuth2Client: Configured port %d unavailable", localPort_);
+        } else {
+            obs_log(LOG_ERROR, "OAuth2Client: Failed to bind ephemeral port");
         }
-    }
-    if (port == 0) {
-        obs_log(LOG_ERROR, "OAuth2Client: Failed to start local server after %d attempts", maxRetries);
         emit linkingFailed();
         return;
     }
 
     localServer->setReplyContent(replyContent_);
 
-    // Generate random state for CSRF protection
-    pendingState_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // RFC 6749 §10.12: state must be unguessable. Use the system CSPRNG, not QUuid (which uses
+    // the non-cryptographic global RNG on most platforms).
+    constexpr int stateBytes = 32;
+    static_assert(stateBytes % sizeof(quint32) == 0, "stateBytes must be a multiple of sizeof(quint32)");
+    // Fill into an aligned local buffer, then memcpy — avoids strict-aliasing / alignment UB
+    // from casting QByteArray::data() to quint32*.
+    quint32 buf[stateBytes / sizeof(quint32)];
+    QRandomGenerator::system()->fillRange(buf, stateBytes / sizeof(quint32));
+    QByteArray stateRaw(stateBytes, Qt::Uninitialized);
+    memcpy(stateRaw.data(), buf, stateBytes);
+    pendingState_ = QString::fromLatin1(stateRaw.toHex());
 
     // Build authorization URL
     QUrl authUrl(requestUrl_);
@@ -205,6 +209,11 @@ void OAuth2Client::unlink()
 
 void OAuth2Client::refresh()
 {
+    // FIXME: refresh() relies on the UI-thread reentrancy contract — concurrent callers
+    // hooking refreshFinished before refresh() emits it. If this assert ever fires,
+    // explicitly queue pending callers (separate PR) instead of leaning on signal timing.
+    Q_ASSERT(thread() == QThread::currentThread());
+
     if (refreshToken_.isEmpty()) {
         obs_log(LOG_WARNING, "OAuth2Client: No refresh token available");
         emit refreshFinished(HttpError::AuthenticationRequired);
@@ -257,9 +266,9 @@ void OAuth2Client::refresh()
                 }
             }
             self->refreshing_ = false;
-            // O2 compatibility: O2::onRefreshError() calls unlink() before emitting refreshFinished.
-            // This clears stale tokens and triggers the consumer's logout flow,
-            // preventing a zombie "linked" state with an invalid token.
+            // O2 compatibility: unlink() emits linkedChanged + linkingSucceeded (logout flow),
+            // and refreshFinished is emitted last. HttpRequestInvoker relies on this ordering:
+            // its 401-retry slot only needs the final refreshFinished error to abort the request.
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
@@ -269,6 +278,7 @@ void OAuth2Client::refresh()
         if (!doc.isObject()) {
             obs_log(LOG_ERROR, "OAuth2Client: Invalid JSON in refresh response");
             self->refreshing_ = false;
+            // Same signal order as the error path above (linkedChanged + linkingSucceeded → refreshFinished).
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
@@ -279,6 +289,7 @@ void OAuth2Client::refresh()
         if (accessToken.isEmpty()) {
             obs_log(LOG_ERROR, "OAuth2Client: Server returned empty access_token on refresh");
             self->refreshing_ = false;
+            // Same signal order as the error path above (linkedChanged + linkingSucceeded → refreshFinished).
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
             return;
@@ -292,6 +303,13 @@ void OAuth2Client::refresh()
         }
 
         qint64 expiresIn = static_cast<qint64>(obj.value("expires_in").toInt(0));
+        if (expiresIn <= 0) {
+            if (!obj.contains("expires_in")) {
+                obs_log(LOG_WARNING, "OAuth2Client: Refresh response missing expires_in field");
+            } else {
+                obs_log(LOG_WARNING, "OAuth2Client: Refresh response has non-positive expires_in (%lld)", expiresIn);
+            }
+        }
         self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 
         self->saveTokens();
@@ -403,6 +421,13 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
         }
 
         qint64 expiresIn = static_cast<qint64>(obj.value("expires_in").toInt(0));
+        if (expiresIn <= 0) {
+            if (!obj.contains("expires_in")) {
+                obs_log(LOG_WARNING, "OAuth2Client: Token response missing expires_in field");
+            } else {
+                obs_log(LOG_WARNING, "OAuth2Client: Token response has non-positive expires_in (%lld)", expiresIn);
+            }
+        }
         self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 
         self->linked_ = true;

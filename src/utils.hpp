@@ -198,25 +198,28 @@ inline QList<QString> getPrivateIPv4Addresses()
 #ifdef _WIN32
     ULONG bufferSize = 15000;
     PIP_ADAPTER_ADDRESSES addresses = nullptr;
-    ULONG result;
+    ULONG result = ERROR_BUFFER_OVERFLOW;
+    constexpr int MAX_GAA_RETRIES = 3;
 
-    do {
-        addresses = (PIP_ADAPTER_ADDRESSES)malloc(bufferSize);
+    for (int attempt = 0; attempt < MAX_GAA_RETRIES; ++attempt) {
+        addresses = static_cast<PIP_ADAPTER_ADDRESSES>(malloc(bufferSize));
         if (!addresses) {
             return privateAddresses;
         }
-        result = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, addresses,
-                                      &bufferSize);
-        if (result == ERROR_BUFFER_OVERFLOW) {
-            free(addresses);
-            addresses = nullptr;
+        result = GetAdaptersAddresses(
+            AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, nullptr, addresses, &bufferSize
+        );
+        if (result != ERROR_BUFFER_OVERFLOW) {
+            break;
         }
-    } while (result == ERROR_BUFFER_OVERFLOW);
+        free(addresses);
+        addresses = nullptr;
+    }
 
-    if (result == NO_ERROR) {
+    if (result == NO_ERROR && addresses) {
         for (auto adapter = addresses; adapter; adapter = adapter->Next) {
             for (auto unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next) {
-                auto sockaddr = (struct sockaddr_in *)unicast->Address.lpSockaddr;
+                auto sockaddr = reinterpret_cast<struct sockaddr_in *>(unicast->Address.lpSockaddr);
                 quint32 ip = ntohl(sockaddr->sin_addr.s_addr);
                 if (isPrivateIPv4(ip)) {
                     char addrStr[INET_ADDRSTRLEN];
@@ -235,7 +238,7 @@ inline QList<QString> getPrivateIPv4Addresses()
             if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
                 continue;
             }
-            auto sockaddr = (struct sockaddr_in *)ifa->ifa_addr;
+            auto sockaddr = reinterpret_cast<struct sockaddr_in *>(ifa->ifa_addr);
             quint32 ip = ntohl(sockaddr->sin_addr.s_addr);
             if (isPrivateIPv4(ip)) {
                 char addrStr[INET_ADDRSTRLEN];

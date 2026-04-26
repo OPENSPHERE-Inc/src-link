@@ -45,6 +45,7 @@ class WsPortalClient : public QObject {
     SRCLinkApiClient *apiClient;
     WsPortalStatus status;
     int reconnectCount;
+    bool reconnectPending;
     WsPortal wsPortal;
     QTimer *intervalTimer;
 
@@ -59,6 +60,7 @@ class WsPortalClient : public QObject {
     void destroyWsSocket();
     void open(const QString &portalId);
     int reconnectDelayMs() const;
+    void scheduleReconnect();
 
 signals:
     void connected();
