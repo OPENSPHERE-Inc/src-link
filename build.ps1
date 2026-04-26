@@ -8,11 +8,11 @@ $ProductVersion = $BuildSpec.version
 
 $OutputName = "${ProductName}-${ProductVersion}-windows-x64"
 
-$Env:API_SERVER = "https://replaceYourApiServer"
-$Env:API_WS_SERVER = "wss://replaceYourApiServer"
-$Env:FRONTEND_SERVER = "https://replaceYourFrontendServer"
-$Env:CLIENT_ID = "replaceYourClientId"
-$env:CLIENT_SECRET = "replaceYourClientSecret"
+$Env:API_SERVER = "http://localhost:3000"
+$Env:API_WS_SERVER = "ws://localhost:3000"
+$Env:FRONTEND_SERVER = "http://localhost:3000"
+$Env:CLIENT_ID = "testClientId"
+$env:CLIENT_SECRET = "testClientSecret"
 $env:SCHEMA_DEBUG = "true"
 $env:API_DEBUG = "true"
 

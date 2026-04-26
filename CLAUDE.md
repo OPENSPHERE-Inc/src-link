@@ -24,9 +24,6 @@ src-link/
 ├── CMakePresets.json            # CMake presets (windows-x64, macos, linux-x86_64, linux-aarch64, CI variants)
 ├── buildspec.json               # Build specification (name, version, dependencies, UUIDs)
 ├── build.ps1                    # Local Windows build script (RelWithDebInfo)
-├── build-debug.ps1              # Debug build script
-├── build-staging.ps1            # Staging build script
-├── build-test.ps1               # Test build script
 ├── Frameworks.cmake.in          # macOS framework configuration
 ├── .clang-format                # C++ code style (clang-format ≥ 16)
 ├── .cmake-format.json           # CMake code style
@@ -163,12 +160,6 @@ find . -type f \( -name 'CMakeLists.txt' -o -name '*.cmake' \) -not -path '*/bui
 ```powershell
 # Configure + Build + Install
 .\build.ps1
-
-# Debug build
-.\build-debug.ps1
-
-# Staging build
-.\build-staging.ps1
 ```
 
 Or manually:

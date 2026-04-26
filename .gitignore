@@ -35,7 +35,6 @@
 !/shared
 
 # Except additional project files
-!build-windows-installer.ps1
 !src-link_usage_image.jpg
 !/srtrelay
 !Frameworks.cmake.in
@@ -44,3 +43,4 @@
 !/AGENTS.md
 !/CLAUDE.md
 !/.claude
+!build.ps1
