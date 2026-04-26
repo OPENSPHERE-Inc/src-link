@@ -45,8 +45,10 @@ find_package(libobs REQUIRED)
 # libcurl.dll. TLS backend: platform-native (Schannel on Windows, Secure Transport on macOS, mbedtls on Linux) to use OS
 # CA certificate stores without bundling CA files.
 #
-# Linux note: mbedtls does not load the system trust store automatically. The CA path (e.g. /etc/ssl/certs) is
-# configured in src/net/curl-http-client.cpp via CURLOPT_CAPATH at runtime, not embedded into curl at compile time.
+# Linux note: mbedtls does not load the system trust store automatically. The CA path is supplied at build time via the
+# SRC_LINK_LINUX_CA_PATH CMake cache variable (see the OS_LINUX block below) and consumed at runtime by
+# src/net/linux-ca-locations.cpp; override -DSRC_LINK_LINUX_CA_PATH=<path> at configure time for distros with
+# non-default trust store layouts.
 # =============================================================================
 include(FetchContent)
 
@@ -146,6 +148,18 @@ _src_link_setup_curl()
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE CURL_STATICLIB)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl_static)
 
+if(OS_LINUX)
+  # CA bundle location consumed at runtime by src/net/linux-ca-locations.cpp. Default targets Debian / Ubuntu / Arch.
+  # Override at configure time with -DSRC_LINK_LINUX_CA_PATH=<path> to point at the trust store layout of the build
+  # target (e.g. /etc/pki/tls/certs/ca-bundle.crt for RHEL/Fedora, /etc/ssl/cert.pem for Alpine). The runtime helper
+  # detects whether the path is a directory or a regular file and routes it to CURLOPT_CAPATH / CURLOPT_CAINFO
+  # accordingly.
+  set(SRC_LINK_LINUX_CA_PATH
+      "/etc/ssl/certs"
+      CACHE STRING "CA bundle path for Linux TLS (directory → CURLOPT_CAPATH, file → CURLOPT_CAINFO)")
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SRC_LINK_LINUX_CA_PATH="${SRC_LINK_LINUX_CA_PATH}")
+endif()
+
 if(OS_WINDOWS)
   # ws2_32:    Winsock — used by LocalHttpServer (OAuth callback) and WsClient. iphlpapi:  GetAdaptersAddresses() — see
   # utils.hpp network helpers. crypt32:   Windows crypto API — required by curl's Schannel backend. bcrypt:    Modern
@@ -241,6 +255,7 @@ target_sources(
           src/net/http-error.cpp
           src/net/curl-http-client.cpp
           src/net/ws-client.cpp
+          src/net/linux-ca-locations.cpp
           src/net/local-http-server.cpp
           src/net/oauth2-client.cpp
           src/net/http-request-invoker.cpp)

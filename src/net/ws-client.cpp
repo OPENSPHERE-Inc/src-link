@@ -23,44 +23,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <winsock2.h>
 #endif
 
-#ifdef __linux__
-#include <sys/stat.h>
-#endif
-
 #include "ws-client.hpp"
+#include "linux-ca-locations.hpp"
 #include "../plugin-support.h"
-
-#ifdef __linux__
-namespace {
-struct LinuxCaLocation {
-    const char *path;
-    bool isDirectory; // true → CURLOPT_CAPATH, false → CURLOPT_CAINFO
-};
-
-// Probe a small set of well-known distro CA locations and return the first that exists.
-// FIXME: switch to a bundled cacert.pem once devops decides on the bundling layout.
-const LinuxCaLocation *findLinuxCaLocation()
-{
-    static constexpr LinuxCaLocation candidates[] = {
-        {"/etc/ssl/certs", true},                    // Debian / Ubuntu / Arch (rehashed dir)
-        {"/etc/pki/tls/certs/ca-bundle.crt", false}, // RHEL / Fedora / CentOS
-        {"/etc/ssl/cert.pem", false},                // Alpine / OpenBSD
-    };
-    for (const auto &c : candidates) {
-        struct stat st;
-        if (stat(c.path, &st) == 0) {
-            if (c.isDirectory && S_ISDIR(st.st_mode)) {
-                return &c;
-            }
-            if (!c.isDirectory && S_ISREG(st.st_mode)) {
-                return &c;
-            }
-        }
-    }
-    return nullptr;
-}
-} // namespace
-#endif
 
 WsClient::WsClient(QObject *parent)
     : QObject(parent),
