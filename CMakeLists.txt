@@ -63,6 +63,9 @@ if(OS_LINUX)
   # calls observe these locals. The policy is scoped to this function so it does not leak into other subprojects.
   function(_src_link_setup_mbedtls)
     cmake_policy(SET CMP0077 NEW)
+    # The plugin is a shared object (MODULE), so all static dependencies must be compiled with -fPIC to allow
+    # relocations against them in the final link.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     set(USE_STATIC_MBEDTLS_LIBRARY ON)
     set(USE_SHARED_MBEDTLS_LIBRARY OFF)
     set(ENABLE_TESTING OFF)
@@ -87,6 +90,9 @@ function(_src_link_setup_curl)
   # Scope CMP0077=NEW to this function so curl's option() calls honor the locals below without leaking into the parent
   # project or sibling subprojects.
   cmake_policy(SET CMP0077 NEW)
+  # The plugin is a shared object (MODULE), so libcurl.a must be compiled with -fPIC to allow relocations against it in
+  # the final link (otherwise GNU ld rejects R_X86_64_PC32 against GLIBC symbols on Linux).
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
   # Static library only
   set(BUILD_SHARED_LIBS OFF)
   set(BUILD_CURL_EXE OFF)
