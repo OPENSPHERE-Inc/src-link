@@ -23,7 +23,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 HttpError httpErrorFromStatusCode(int statusCode)
 {
-    if (statusCode >= 200 && statusCode <= 299) {
+    // 1xx informational and 3xx redirect — treat as NoError. CURLOPT_FOLLOWLOCATION is now
+    // disabled (see curl-http-client.cpp) to avoid leaking the Authorization header across
+    // hosts, so 30x responses surface here directly as NoError with the redirect Location
+    // available via response headers.
+    // FIXME: 304 Not Modified arrives as NoError with an empty body. Callers that issue
+    // conditional GETs (If-None-Match / If-Modified-Since) must distinguish 304 from 200
+    // explicitly via HttpResponse::statusCode before treating an empty body as an error.
+    if (statusCode >= 100 && statusCode <= 399) {
         return HttpError::NoError;
     }
     switch (statusCode) {
@@ -36,8 +43,6 @@ HttpError httpErrorFromStatusCode(int statusCode)
     case 409:
         return HttpError::ContentConflict;
     default:
-        // 3xx: Not expected here — CURLOPT_FOLLOWLOCATION handles redirects automatically.
-        // If a 3xx somehow reaches this function, it falls through to NetworkError.
         if (statusCode >= 400 && statusCode <= 499) {
             return HttpError::UnknownContentError;
         }
@@ -47,6 +52,15 @@ HttpError httpErrorFromStatusCode(int statusCode)
         return HttpError::NetworkError;
     }
 }
+
+// CURLE_PEER_FAILED_VERIFICATION historically aliases CURLE_SSL_CACERT (both value 60).
+// If a future libcurl release ever splits them, the switch below would have a duplicate
+// case label removed silently — catch that at compile time so we revisit the mapping.
+static_assert(
+    static_cast<int>(CURLE_PEER_FAILED_VERIFICATION) == static_cast<int>(CURLE_SSL_CACERT),
+    "CURLE_PEER_FAILED_VERIFICATION is expected to alias CURLE_SSL_CACERT; "
+    "update httpErrorFromCurlCode() to handle them separately."
+);
 
 HttpError httpErrorFromCurlCode(int curlCode)
 {
@@ -66,13 +80,14 @@ HttpError httpErrorFromCurlCode(int curlCode)
     case CURLE_SSL_CACERT_BADFILE:
     case CURLE_SSL_CRL_BADFILE:
     case CURLE_SSL_ISSUER_ERROR:
-    // Note: CURLE_PEER_FAILED_VERIFICATION is an alias for CURLE_SSL_CACERT (value 60)
+        // Note: CURLE_PEER_FAILED_VERIFICATION is an alias for CURLE_SSL_CACERT (value 60)
         return HttpError::SslError;
     case CURLE_SEND_ERROR:
     case CURLE_RECV_ERROR:
     case CURLE_GOT_NOTHING:
-    case CURLE_TOO_MANY_REDIRECTS:
         return HttpError::NetworkError;
+    case CURLE_TOO_MANY_REDIRECTS:
+        return HttpError::TooManyRedirects;
     case CURLE_ABORTED_BY_CALLBACK:
         return HttpError::OperationCanceled;
     default:
@@ -107,6 +122,10 @@ QString httpErrorToString(HttpError error)
         return QStringLiteral("Network error");
     case HttpError::OperationCanceled:
         return QStringLiteral("Operation canceled");
+    case HttpError::ResponseTooLarge:
+        return QStringLiteral("Response exceeded size limit");
+    case HttpError::TooManyRedirects:
+        return QStringLiteral("Too many redirects");
     }
     return QStringLiteral("Unknown error");
 }

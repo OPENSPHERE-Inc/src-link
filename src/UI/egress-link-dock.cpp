@@ -69,10 +69,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
     connect(apiClient, SIGNAL(uplinkFailed(const QString &)), this, SLOT(onUplinkFailed(const QString &)));
     connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
-    connect(
-        apiClient, SIGNAL(putUplinkFailed(const QString &, HttpError)), this,
-        SLOT(onPutUplinkFailed(const QString &, HttpError))
-    );
+    connect(apiClient, &SRCLinkApiClient::putUplinkFailed, this, &EgressLinkDock::onPutUplinkFailed);
 
     connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
@@ -405,13 +402,15 @@ void EgressLinkDock::onSignupButtonClicked()
 
 void EgressLinkDock::onRedeemInviteCodeAccepted(const QString &inviteCode)
 {
-    connect(
-        apiClient->redeemInviteCode(inviteCode), &HttpRequestInvoker::finished, this,
-        [this](HttpError error) {
-            if (error != HttpError::NoError) {
-                QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
-                return;
-            }
+    auto *invoker = apiClient->redeemInviteCode(inviteCode);
+    if (!invoker) {
+        QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
+        return;
+    }
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error) {
+        if (error != HttpError::NoError) {
+            QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
+            return;
         }
-    );
+    });
 }

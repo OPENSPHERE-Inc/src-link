@@ -9,7 +9,7 @@ control, and connection management with team operations.
 It is developed and maintained by **OPENSPHERE Inc.** under the GPLv2+ license.
 
 - Repository language: **C++ 17** with **Qt 6** for UI
-- Build system: **CMake** (≥ 3.16, ≤ 3.26)
+- Build system: **CMake** (≥ 3.22, ≤ 3.26)
 - Based on the official [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate)
 - Target OBS Studio version: **≥ 30.1.0** (Qt6, x64 / ARM64 / Apple Silicon)
 - Current version: **0.7.6**
@@ -41,7 +41,7 @@ src-link/
 │   ├── plugin-main.cpp          # Plugin entry point (module load/unload)
 │   ├── api-client.hpp / .cpp    # SRCLinkApiClient: central orchestrator, OAuth, REST API, WebSocket
 │   ├── api-websocket.hpp / .cpp # SRCLinkWebSocketClient: control API WebSocket client
-│   ├── request-invoker.hpp / .cpp # HTTP request sequencing (OAuth2 via o2 library)
+│   ├── request-invoker.hpp / .cpp # HTTP request sequencing (OAuth2 via in-tree src/net/ stack)
 │   ├── settings.hpp / .cpp      # SRCLinkSettingsStore: persistent settings (OBS profile INI)
 │   ├── schema.hpp               # JSON data schemas (Account, Party, Stage, Uplink, Downlink, etc.)
 │   ├── utils.hpp / .cpp         # Utility functions, encoder helpers, network helpers
@@ -68,7 +68,6 @@ src-link/
 │       └── event-handler.hpp / .cpp       # OBS event broadcasting to WebSocket clients
 ├── lib/
 │   ├── json/                    # nlohmann/json (bundled)
-│   ├── o2/                      # OAuth2 client library (bundled)
 │   └── obs-websocket/           # OBS WebSocket library (bundled)
 ├── shared/
 │   ├── properties-view/         # Custom OBS properties UI helpers
@@ -86,9 +85,9 @@ src-link/
 
 | Platform | Toolchain |
 |----------|-----------|
-| Windows  | Visual Studio 17 2022, CMake ≥ 3.16, Qt 6 |
-| macOS    | Xcode ≤ 16.4.0 (macOS SDK ≤ 15.5), CMake ≥ 3.16, Qt 6 |
-| Linux    | GCC / Clang, CMake ≥ 3.16, Qt 6 |
+| Windows  | Visual Studio 17 2022, CMake ≥ 3.22 (≤ 3.26), Qt 6 |
+| macOS    | Xcode ≤ 16.4.0 (macOS SDK ≤ 15.5), CMake ≥ 3.22 (≤ 3.26), Qt 6 |
+| Linux    | GCC / Clang, CMake ≥ 3.22 (≤ 3.26), Qt 6 |
 
 > **Note (macOS):** This project requires **Xcode 16.4.0 (macOS 15.5 SDK) or below**. Xcode 26 / macOS SDK 26 and later are currently unsupported due to compatibility constraints with OBS Studio's build dependencies.
 
@@ -215,7 +214,7 @@ The plugin registers via `obs_module_load()` in `plugin-main.cpp`. It creates:
 | **Event Handler** | `WsPortalEventHandler` | Singleton OBS event broadcaster for WebSocket Portal clients. |
 | **Audio Capture** | `SourceAudioCapture` | Abstract audio buffer with format conversion. Extended by `OutputAudioSource` for OBS audio output binding. |
 | **Image Renderer** | `ImageRenderer` | Renders placeholder images (filler, connecting, error states) for sources. |
-| **Request Invoker** | `RequestInvoker` / `RequestSequencer` | HTTP request pipelining with OAuth2 token management via o2 library. Sequential queuing and parallel invocation support. |
+| **Request Invoker** | `RequestInvoker` / `RequestSequencer` | HTTP request pipelining with OAuth2 token management via the in-tree `src/net/` stack. Sequential queuing and parallel invocation support. |
 | **Settings Store** | `SRCLinkSettingsStore` | Persistent key-value settings stored in OBS profile INI. |
 | **JSON Schemas** | `schema.hpp` | Typed data classes: `AccountInfo`, `PartyArray`, `StageArray`, `UplinkInfo`, `DownlinkInfo`, `WsPortalArray`, `SubscriptionFeatures`, etc. |
 
@@ -235,7 +234,7 @@ The plugin registers via `obs_module_load()` in `plugin-main.cpp`. It creates:
 - **UI Thread**: Qt event loop — main window, dialogs, docks, API client.
 - **OBS Callbacks**: Video render, audio filter, video tick — may run on different threads from the UI thread.
 - **Audio Thread**: `SourceAudioThread` — dedicated thread for source audio processing in `IngressLinkSource`.
-- **Network**: Qt networking runs on the default Qt event loop.
+- **Network**: HTTP / WebSocket I/O is driven by the in-tree `src/net/` stack (libcurl + custom OAuth2 / WebSocket clients) on the Qt event loop. Qt Network is no longer used.
 
 **Synchronization**:
 - `QMutex` protects audio buffers in `SourceAudioCapture`.
@@ -246,7 +245,7 @@ The plugin registers via `obs_module_load()` in `plugin-main.cpp`. It creates:
 ### Network & API Architecture
 
 **Authentication**:
-- OAuth2 flow via the o2 library (browser-based approval).
+- OAuth2 flow implemented in `src/net/oauth2-client.cpp` (browser-based approval; loopback HTTP server for the redirect).
 - Tokens stored in OBS profile settings via `SRCLinkSettingsStore`.
 - Automatic token refresh on expiry.
 - UUID-based client identification.
@@ -432,7 +431,8 @@ Release tags follow semver: `X.Y.Z` for stable, `X.Y.Z-beta`/`X.Y.Z-rc` for pre-
 - **Memory management** — Use OBS RAII wrappers. Raw `bfree()` / `obs_data_release()` calls are error-prone.
 - **`.gitignore` uses allowlist pattern** — New top-level files/directories must be explicitly un-ignored with `!` prefix.
 - **Port management** — Ingress ports must be within the configured range and not conflict with other instances. The API client manages port allocation.
-- **Bundled libraries** (`lib/`) — `nlohmann/json`, `o2`, and `obs-websocket` are vendored. Update with caution.
+- **Bundled libraries** (`lib/`) — `nlohmann/json` and `obs-websocket` are vendored. Update with caution.
+- **Network stack dependencies (FetchContent)** — `libcurl` (static, WebSocket-enabled) is fetched at configure time by `CMakeLists.txt`. On Linux, `mbedtls` is fetched and linked statically as the TLS backend; Windows uses Schannel and macOS uses Secure Transport. Because curl/mbedtls are now built in-tree, `buildspec.json` pins `obs-deps` / `qt6` to upstream `obsproject/obs-deps@2024-03-19` (ships Qt 6.6.2, sufficient for `Qt::SingleShotConnection`) — the OPENSPHERE-Inc fork that previously supplied a WebSocket-enabled curl is no longer required.
 - **Encoder presets** (`data/presets/`) — Hardware encoder presets are platform-specific. Test on target hardware when modifying.
 
 ---

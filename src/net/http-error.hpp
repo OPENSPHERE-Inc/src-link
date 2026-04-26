@@ -21,7 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMetaType>
 #include <QString>
 
-enum class HttpError {
+enum class HttpError : int {
     NoError = 0,
     ConnectionRefused,
     TimeoutError,
@@ -34,6 +34,8 @@ enum class HttpError {
     UnknownServerError,     // 5xx
     NetworkError,           // Connection-level errors
     OperationCanceled,
+    ResponseTooLarge, // Response exceeded size limit (writeCallback aborted)
+    TooManyRedirects, // Redirect storm (CURLE_TOO_MANY_REDIRECTS)
 };
 
 Q_DECLARE_METATYPE(HttpError)

@@ -23,8 +23,44 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <winsock2.h>
 #endif
 
+#ifdef __linux__
+#include <sys/stat.h>
+#endif
+
 #include "ws-client.hpp"
 #include "../plugin-support.h"
+
+#ifdef __linux__
+namespace {
+struct LinuxCaLocation {
+    const char *path;
+    bool isDirectory; // true → CURLOPT_CAPATH, false → CURLOPT_CAINFO
+};
+
+// Probe a small set of well-known distro CA locations and return the first that exists.
+// FIXME: switch to a bundled cacert.pem once devops decides on the bundling layout.
+const LinuxCaLocation *findLinuxCaLocation()
+{
+    static constexpr LinuxCaLocation candidates[] = {
+        {"/etc/ssl/certs", true},                    // Debian / Ubuntu / Arch (rehashed dir)
+        {"/etc/pki/tls/certs/ca-bundle.crt", false}, // RHEL / Fedora / CentOS
+        {"/etc/ssl/cert.pem", false},                // Alpine / OpenBSD
+    };
+    for (const auto &c : candidates) {
+        struct stat st;
+        if (stat(c.path, &st) == 0) {
+            if (c.isDirectory && S_ISDIR(st.st_mode)) {
+                return &c;
+            }
+            if (!c.isDirectory && S_ISREG(st.st_mode)) {
+                return &c;
+            }
+        }
+    }
+    return nullptr;
+}
+} // namespace
+#endif
 
 WsClient::WsClient(QObject *parent)
     : QObject(parent),
@@ -34,6 +70,7 @@ WsClient::WsClient(QObject *parent)
       headerList(nullptr),
       connected(false),
       connecting(false),
+      abortConnect(false),
       connectGeneration(0),
       fragmentType(0),
       frameInProgress(false),
@@ -45,13 +82,16 @@ WsClient::WsClient(QObject *parent)
     // When mbedtls reads a TLS record containing multiple WebSocket messages,
     // the OS socket may not be readable even though curl has buffered data.
     // QSocketNotifier won't fire in that case, so this timer ensures recovery.
-    tlsFallbackTimer->setInterval(100);
+    // 250ms keeps stall recovery well within mbedtls' practical stall window
+    // while reducing UI wakeups by 2.5x compared to 100ms.
+    tlsFallbackTimer->setInterval(250);
     connect(tlsFallbackTimer, &QTimer::timeout, this, &WsClient::pollRecv);
 }
 
 WsClient::~WsClient()
 {
     obs_log(LOG_DEBUG, "WsClient destroying");
+    abortConnect = true;
     close();
     joinConnectThread();
     cleanup(); // Recover resources if close() early-returned during connecting state
@@ -71,6 +111,7 @@ void WsClient::open(const QUrl &url)
     joinConnectThread();
     cleanup(); // Ensure any stale easy handle from a previous aborted connection is freed
 
+    abortConnect = false;
     connecting = true;
     pendingUrl = url;
 
@@ -80,7 +121,7 @@ void WsClient::open(const QUrl &url)
         QByteArray header = it.key() + ": " + it.value();
         slist = curl_slist_append(slist, header.constData());
     }
-    // Add Origin header if not explicitly set (QWebSocket sets this from the origin parameter)
+    // Some servers require an Origin header for the upgrade handshake.
     if (!requestHeaders.contains("Origin")) {
         QByteArray origin = QString("https://%1").arg(url.host()).toUtf8();
         slist = curl_slist_append(slist, QByteArray("Origin: " + origin).constData());
@@ -117,16 +158,47 @@ void WsClient::performConnect()
 #if defined(_WIN32) || defined(__APPLE__)
     // Use OS native CA store (Windows: Schannel, macOS: Secure Transport)
     curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+#elif defined(__linux__)
+    // Linux: libcurl is built against mbedtls in obs-deps, which has no compiled-in CA path.
+    // Probe well-known distro locations and use the first one present so server cert
+    // verification works on Debian, Ubuntu, RHEL, Fedora, Alpine, etc.
+    if (auto *ca = findLinuxCaLocation()) {
+        if (ca->isDirectory) {
+            curl_easy_setopt(easy, CURLOPT_CAPATH, ca->path);
+        } else {
+            curl_easy_setopt(easy, CURLOPT_CAINFO, ca->path);
+        }
+    } else {
+        obs_log(LOG_WARNING, "WsClient: No system CA bundle found; TLS verification will likely fail");
+    }
 #endif
     // Enable WebSocket upgrade (CONNECT_ONLY=2 performs HTTP upgrade handshake only)
     curl_easy_setopt(easy, CURLOPT_CONNECT_ONLY, 2L);
+    // Allow close()/~WsClient() to abort an in-flight curl_easy_perform()
+    // via the abortConnect flag (returns CURLE_ABORTED_BY_CALLBACK).
+    curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(easy, CURLOPT_XFERINFOFUNCTION, xferInfoCallback);
+    curl_easy_setopt(easy, CURLOPT_XFERINFODATA, this);
 
     // Run TLS handshake + HTTP upgrade on background thread to avoid blocking UI.
-    // The destructor calls joinConnectThread() which blocks for at most CURLOPT_CONNECTTIMEOUT (5s).
+    // joinConnectThread() blocks until curl returns; close() sets abortConnect to unwind quickly.
+    // `easy` is value-captured so a UI-thread cleanup() nulling the member cannot race
+    // with curl_easy_perform(). `QPointer` guards the queued lambda against `this` destruction.
     unsigned int gen = ++connectGeneration;
-    connectThread = std::thread([this, gen]() {
-        CURLcode res = curl_easy_perform(easy);
-        QMetaObject::invokeMethod(this, [this, res, gen]() { onConnectFinished(res, gen); }, Qt::QueuedConnection);
+    CURL *easyLocal = easy;
+    QPointer<WsClient> guard(this);
+    connectThread = std::thread([guard, easyLocal, gen]() {
+        CURLcode res = curl_easy_perform(easyLocal);
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, res, gen]() {
+                if (!guard) {
+                    return;
+                }
+                guard->onConnectFinished(res, gen);
+            },
+            Qt::QueuedConnection
+        );
     });
 }
 
@@ -189,26 +261,22 @@ void WsClient::joinConnectThread()
 
 void WsClient::close()
 {
-    tlsFallbackTimer->stop();
-
-    if (recvNotifier) {
-        recvNotifier->setEnabled(false);
-        delete recvNotifier;
-        recvNotifier = nullptr;
-    }
-
     if (connecting) {
         // Signal abort — onConnectFinished will handle cleanup when the thread completes
+        abortConnect = true;
         connecting = false;
         return;
     }
 
     if (connected) {
         obs_log(LOG_DEBUG, "WsClient closing connection");
-        // L-9: Send close frame with status code 1000 (Normal Closure) per RFC 6455
-        size_t sent = 0;
+        // RFC 6455: send close frame with status code 1000 (Normal Closure).
+        // shuttingDown=true => single-shot send, no select() retry — keeps OBS shutdown snappy.
         uint16_t code = htons(1000);
-        curl_ws_send(easy, reinterpret_cast<const char *>(&code), 2, &sent, 0, CURLWS_CLOSE);
+        qint64 sent = sendRaw(reinterpret_cast<const char *>(&code), 2, CURLWS_CLOSE, /*shuttingDown=*/true);
+        if (sent < 0) {
+            obs_log(LOG_DEBUG, "WsClient close frame send failed (best-effort)");
+        }
         connected = false;
         cleanup();
         emit closed();
@@ -220,6 +288,13 @@ void WsClient::close()
 void WsClient::cleanup()
 {
     tlsFallbackTimer->stop();
+    if (recvNotifier) {
+        // Synchronous delete (after setEnabled(false)) so cleanup() during obs_module_unload
+        // does not leak via deleteLater() events that the dying event loop never dispatches.
+        recvNotifier->setEnabled(false);
+        delete recvNotifier;
+        recvNotifier = nullptr;
+    }
     if (easy) {
         curl_easy_cleanup(easy);
         easy = nullptr;
@@ -227,10 +302,6 @@ void WsClient::cleanup()
     if (headerList) {
         curl_slist_free_all(headerList);
         headerList = nullptr;
-    }
-    if (recvNotifier) {
-        delete recvNotifier;
-        recvNotifier = nullptr;
     }
     fragmentBuffer.clear();
     fragmentType = 0;
@@ -251,9 +322,17 @@ qint64 WsClient::sendTextMessage(const QString &message)
     auto utf8 = message.toUtf8();
     qint64 result = sendRaw(utf8.constData(), utf8.size(), CURLWS_TEXT);
     if (result == -1 && connected) {
-        // Connection is likely broken — notify consumers to trigger reconnection
-        emit errorOccurred("WebSocket text send failed");
-        close();
+        // Defer notification + close to the next event-loop iteration so we do not invoke
+        // consumer slots (which may inspect this WsClient's state) while still inside this
+        // method's stack frame.
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                emit errorOccurred("WebSocket text send failed");
+                close();
+            },
+            Qt::QueuedConnection
+        );
     }
     return result;
 }
@@ -266,16 +345,23 @@ qint64 WsClient::sendBinaryMessage(const QByteArray &data)
 
     qint64 result = sendRaw(data.constData(), data.size(), CURLWS_BINARY);
     if (result == -1 && connected) {
-        // Connection is likely broken — notify consumers to trigger reconnection
-        emit errorOccurred("WebSocket binary send failed");
-        close();
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                emit errorOccurred("WebSocket binary send failed");
+                close();
+            },
+            Qt::QueuedConnection
+        );
     }
     return result;
 }
 
-qint64 WsClient::sendRaw(const char *data, size_t len, unsigned int flags)
+qint64 WsClient::sendRaw(const char *data, size_t len, unsigned int flags, bool shuttingDown)
 {
-    static constexpr int MAX_SELECT_RETRIES = 3; // Cap total UI block to ~150ms
+    // shuttingDown == true: best-effort single send; do not block the UI thread on select().
+    // Otherwise: cap total UI block to ~150 ms across retries.
+    const int maxSelectRetries = shuttingDown ? 0 : 3;
 
     size_t totalSent = 0;
     int selectRetries = 0;
@@ -283,8 +369,10 @@ qint64 WsClient::sendRaw(const char *data, size_t len, unsigned int flags)
         size_t sent = 0;
         CURLcode res = curl_ws_send(easy, data + totalSent, len - totalSent, &sent, 0, flags);
         if (res == CURLE_AGAIN) {
-            if (++selectRetries > MAX_SELECT_RETRIES) {
-                obs_log(LOG_WARNING, "WsClient send: exceeded max retries waiting for writable");
+            if (++selectRetries > maxSelectRetries) {
+                if (!shuttingDown) {
+                    obs_log(LOG_WARNING, "WsClient send: exceeded max retries waiting for writable");
+                }
                 return -1;
             }
             // Socket buffer full — wait for writable with brief select() then retry
@@ -327,7 +415,15 @@ void WsClient::ping()
 
     pingTimestamp = QDateTime::currentMSecsSinceEpoch();
     size_t sent = 0;
-    curl_ws_send(easy, "", 0, &sent, 0, CURLWS_PING);
+    CURLcode res = curl_ws_send(easy, "", 0, &sent, 0, CURLWS_PING);
+    // CURLE_AGAIN here just means the socket buffer is briefly full; treat it as best-effort.
+    // Any other error indicates the connection is gone — handle the same way as a recv failure.
+    if (res != CURLE_OK && res != CURLE_AGAIN) {
+        obs_log(LOG_DEBUG, "WsClient ping send failed: %s", curl_easy_strerror(res));
+        connected = false;
+        cleanup();
+        emit closed();
+    }
 }
 
 void WsClient::pollRecv()
@@ -364,7 +460,12 @@ void WsClient::pollRecv()
             obs_log(LOG_DEBUG, "WsClient received close frame");
             // RFC 6455 §5.5.1: respond with a close frame to complete the handshake
             size_t closeSent = 0;
-            curl_ws_send(easy, buffer, received, &closeSent, 0, CURLWS_CLOSE);
+            CURLcode echoRes = curl_ws_send(easy, buffer, received, &closeSent, 0, CURLWS_CLOSE);
+            if (echoRes != CURLE_OK) {
+                obs_log(LOG_DEBUG, "WsClient close echo failed: %s", curl_easy_strerror(echoRes));
+            } else if (closeSent < received) {
+                obs_log(LOG_DEBUG, "WsClient close echo partial send: %zu/%zu", closeSent, received);
+            }
             connected = false;
             cleanup();
             emit closed();
@@ -416,8 +517,7 @@ void WsClient::pollRecv()
 
         fragmentBuffer.append(buffer, static_cast<int>(received));
 
-        bool frameComplete =
-            (static_cast<size_t>(meta->offset) + received >= static_cast<size_t>(meta->len));
+        bool frameComplete = (static_cast<size_t>(meta->offset) + received >= static_cast<size_t>(meta->len));
         frameInProgress = !frameComplete;
 
         if (frameComplete) {
@@ -460,4 +560,16 @@ size_t WsClient::writeCallback(char *ptr, size_t size, size_t nmemb, void *userd
     Q_UNUSED(ptr);
     Q_UNUSED(userdata);
     return size * nmemb;
+}
+
+// libcurl only invokes this callback during the CONNECT_ONLY handshake phase.
+// abortConnect cannot interrupt post-handshake curl_ws_send() / curl_ws_recv().
+int WsClient::xferInfoCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+{
+    Q_UNUSED(dltotal);
+    Q_UNUSED(dlnow);
+    Q_UNUSED(ultotal);
+    Q_UNUSED(ulnow);
+    auto *self = static_cast<WsClient *>(clientp);
+    return self && self->abortConnect.load() ? 1 : 0;
 }

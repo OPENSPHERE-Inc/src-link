@@ -50,7 +50,8 @@ WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
       client(nullptr),
       apiClient(_apiClient),
       status(WS_PORTAL_STATUS_INACTIVE),
-      reconnectCount(0)
+      reconnectCount(0),
+      reconnectPending(false)
 {
     intervalTimer = new QTimer(this);
 
@@ -104,21 +105,10 @@ void WsPortalClient::createWsSocket()
     connect(client, &WsClient::errorOccurred, this, [this](const QString &reason) {
         ERROR_LOG("Error received: %s", qUtf8Printable(reason));
 
-        // WsClient emits errorOccurred but NOT closed on connection failure,
-        // so we need to handle reconnect here as well.
-        auto portalId = apiClient->getSettings()->getWsPortalId();
-        if (status != WS_PORTAL_STATUS_INACTIVE && (!client || !client->isValid()) && !portalId.isEmpty() &&
-            portalId != "none") {
-            reconnectCount++;
-            int delay = reconnectDelayMs();
-            API_LOG("Reconnecting after error in %d ms (attempt %d)", delay, reconnectCount);
-            auto expectedCount = reconnectCount;
-            QTimer::singleShot(delay, this, [this, portalId, expectedCount]() {
-                if (status != WS_PORTAL_STATUS_INACTIVE && reconnectCount == expectedCount) {
-                    open(portalId);
-                    emit reconnecting();
-                }
-            });
+        // WsClient may emit errorOccurred with or without a subsequent closed signal;
+        // route both through scheduleReconnect() to avoid double-scheduling with stale backoff.
+        if (status != WS_PORTAL_STATUS_INACTIVE && (!client || !client->isValid())) {
+            scheduleReconnect();
         }
     });
 
@@ -181,6 +171,7 @@ void WsPortalClient::start()
 
     status = WS_PORTAL_STATUS_ACTIVE;
     reconnectCount = 0;
+    reconnectPending = false;
     open(portalId);
 
     WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
@@ -248,21 +239,40 @@ int WsPortalClient::reconnectDelayMs() const
     return (std::min)(delay, MAX_DELAY_MS);
 }
 
+// Reconnect signal flow:
+//
+//   WsClient::errorOccurred -> [scheduleReconnect()] -> [reconnectPending] -> QTimer
+//   WsClient::closed        -> onDisconnected -> [scheduleReconnect()]
+//
+// Both paths funnel through scheduleReconnect() which is idempotent
+// via the reconnectPending flag.
+void WsPortalClient::scheduleReconnect()
+{
+    if (status == WS_PORTAL_STATUS_INACTIVE || reconnectPending) {
+        return;
+    }
+
+    auto portalId = apiClient->getSettings()->getWsPortalId();
+    if (portalId.isEmpty() || portalId == "none") {
+        return;
+    }
+
+    reconnectPending = true;
+    reconnectCount++;
+    int delay = reconnectDelayMs();
+    API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
+    QTimer::singleShot(delay, this, [this, portalId]() {
+        reconnectPending = false;
+        if (status != WS_PORTAL_STATUS_INACTIVE) {
+            open(portalId);
+            emit reconnecting();
+        }
+    });
+}
+
 void WsPortalClient::onDisconnected()
 {
-    auto portalId = apiClient->getSettings()->getWsPortalId();
-    if (status != WS_PORTAL_STATUS_INACTIVE && !portalId.isEmpty() && portalId != "none") {
-        reconnectCount++;
-        int delay = reconnectDelayMs();
-        API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
-        auto expectedCount = reconnectCount;
-        QTimer::singleShot(delay, this, [this, portalId, expectedCount]() {
-            if (status != WS_PORTAL_STATUS_INACTIVE && reconnectCount == expectedCount) {
-                open(portalId);
-                emit reconnecting();
-            }
-        });
-    }
+    scheduleReconnect();
 }
 
 void WsPortalClient::onTextMessageReceived(const QString &message)

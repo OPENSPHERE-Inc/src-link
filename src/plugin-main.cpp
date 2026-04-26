@@ -117,6 +117,9 @@ bool obs_module_load(void)
     // Initialize the plugin's own statically-linked curl instance.
     // This is separate from OBS Studio's curl (dynamically linked libcurl.dll),
     // so we must call curl_global_init() for our own instance.
+    // FIXME: LocalHttpServer's raw winsock usage relies on the WSAStartup performed by
+    //        CURL_GLOBAL_WIN32 here. Give LocalHttpServer its own WSAStartup/WSACleanup
+    //        so this implicit ordering dependency is removed (separate PR recommended).
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -130,8 +133,10 @@ bool obs_module_load(void)
                 }
             }
         }
-        obs_log(LOG_INFO, "plugin curl: %s (ssl: %s, websocket: %s)", info->version,
-                info->ssl_version ? info->ssl_version : "none", hasWs ? "yes" : "no");
+        obs_log(
+            LOG_INFO, "plugin curl: %s (ssl: %s, websocket: %s)", info->version,
+            info->ssl_version ? info->ssl_version : "none", hasWs ? "yes" : "no"
+        );
     }
 
     qRegisterMetaType<HttpError>("HttpError");

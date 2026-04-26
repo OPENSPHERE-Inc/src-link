@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.26)
+cmake_minimum_required(VERSION 3.22...3.26)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
@@ -40,11 +40,13 @@ find_package(libobs REQUIRED)
 # =============================================================================
 # curl static build (WebSocket support enabled)
 #
-# obs-deps ships curl without WebSocket protocol support (CURL_VERSION_WEBSOCKETS absent).
-# We build curl from source with ENABLE_WEBSOCKETS=ON and statically link it,
-# so the plugin carries its own curl instance independent of OBS's libcurl.dll.
-# TLS backend: platform-native (Schannel on Windows, Secure Transport on macOS,
-# mbedtls on Linux) to use OS CA certificate stores without bundling CA files.
+# obs-deps ships curl without WebSocket protocol support (CURL_VERSION_WEBSOCKETS absent). We build curl from source
+# with ENABLE_WEBSOCKETS=ON and statically link it, so the plugin carries its own curl instance independent of OBS's
+# libcurl.dll. TLS backend: platform-native (Schannel on Windows, Secure Transport on macOS, mbedtls on Linux) to use OS
+# CA certificate stores without bundling CA files.
+#
+# Linux note: mbedtls does not load the system trust store automatically. The CA path (e.g. /etc/ssl/certs) is
+# configured in src/net/curl-http-client.cpp via CURLOPT_CAPATH at runtime, not embedded into curl at compile time.
 # =============================================================================
 include(FetchContent)
 
@@ -54,81 +56,102 @@ if(OS_LINUX)
     mbedtls
     URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
     URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
-  set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
-  set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
-  set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-  set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
-  set(MBEDTLS_AS_SUBPROJECT ON CACHE BOOL "" FORCE)
-  set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
-  FetchContent_GetProperties(mbedtls)
-  if(NOT mbedtls_POPULATED)
-    FetchContent_Populate(mbedtls)
-    add_subdirectory(${mbedtls_SOURCE_DIR} ${mbedtls_BINARY_DIR} EXCLUDE_FROM_ALL)
-  endif()
+
+  # Function scope keeps configuration variables out of the parent project's cache; CMP0077=NEW lets mbedtls' option()
+  # calls observe these locals. The policy is scoped to this function so it does not leak into other subprojects.
+  function(_src_link_setup_mbedtls)
+    cmake_policy(SET CMP0077 NEW)
+    set(USE_STATIC_MBEDTLS_LIBRARY ON)
+    set(USE_SHARED_MBEDTLS_LIBRARY OFF)
+    set(ENABLE_TESTING OFF)
+    set(ENABLE_PROGRAMS OFF)
+    set(MBEDTLS_AS_SUBPROJECT ON)
+    set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON)
+    FetchContent_MakeAvailable(mbedtls)
+  endfunction()
+  _src_link_setup_mbedtls()
 endif()
 
 # --- curl (static, WebSocket enabled) ---
+# FIXME: macOS universal builds (CMAKE_OSX_ARCHITECTURES="arm64;x86_64") combined with CURL_USE_SECTRANSP=ON depend on
+# curl's CMake build handling multi-arch correctly, and SECTRANSP itself is deprecated in curl 8.x. If CI exposes
+# breakage, switch to (a) per-arch builds + lipo merge or (b) OpenSSL on Apple platforms.
 FetchContent_Declare(
   curl
   URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz
   URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
-# Static library only
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(CURL_STATICLIB ON CACHE BOOL "" FORCE)
-# TLS backend: platform-native for OS CA store access
-if(OS_WINDOWS)
-  set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
-  set(CURL_USE_MBEDTLS OFF CACHE BOOL "" FORCE)
-  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-elseif(OS_MACOS)
-  set(CURL_USE_SECTRANSP ON CACHE BOOL "" FORCE)
-  set(CURL_USE_MBEDTLS OFF CACHE BOOL "" FORCE)
-  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-else()
-  set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
-  set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-  set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include" CACHE PATH "" FORCE)
-  set(MBEDTLS_LIBRARY mbedtls CACHE STRING "" FORCE)
-  set(MBEDX509_LIBRARY mbedx509 CACHE STRING "" FORCE)
-  set(MBEDCRYPTO_LIBRARY mbedcrypto CACHE STRING "" FORCE)
-endif()
-# WebSocket support
-set(ENABLE_WEBSOCKETS ON CACHE BOOL "" FORCE)
-# Disable unused protocols (binary size reduction)
-set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_FTP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_FTPS ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_TFTP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_SMTP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_SMTPS ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_POP3 ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_POP3S ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_IMAP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_IMAPS ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_TELNET ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_DICT ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_GOPHER ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_MQTT ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_RTSP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_ALTSVC ON CACHE BOOL "" FORCE)
-set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
-set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
-set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
-set(HTTP_ONLY OFF CACHE BOOL "" FORCE)
-FetchContent_GetProperties(curl)
-if(NOT curl_POPULATED)
-  FetchContent_Populate(curl)
-  add_subdirectory(${curl_SOURCE_DIR} ${curl_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
+
+function(_src_link_setup_curl)
+  # Scope CMP0077=NEW to this function so curl's option() calls honor the locals below without leaking into the parent
+  # project or sibling subprojects.
+  cmake_policy(SET CMP0077 NEW)
+  # Static library only
+  set(BUILD_SHARED_LIBS OFF)
+  set(BUILD_CURL_EXE OFF)
+  set(BUILD_TESTING OFF)
+  set(CURL_STATICLIB ON)
+  # TLS backend: platform-native for OS CA store access
+  if(OS_WINDOWS)
+    set(CURL_USE_SCHANNEL ON)
+    set(CURL_USE_MBEDTLS OFF)
+    set(CURL_USE_OPENSSL OFF)
+  elseif(OS_MACOS)
+    set(CURL_USE_SECTRANSP ON)
+    set(CURL_USE_MBEDTLS OFF)
+    set(CURL_USE_OPENSSL OFF)
+  else()
+    set(CURL_USE_MBEDTLS ON)
+    set(CURL_USE_OPENSSL OFF)
+    # FIXME: curl's bundled FindMbedTLS.cmake expects file paths and may silently fall back to a system mbedtls install
+    # when given target names. Verify on Linux CI and migrate to find_package(MbedTLS CONFIG) / mbedtls' imported
+    # targets in a follow-up PR.
+    set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include")
+    set(MBEDTLS_LIBRARY mbedtls)
+    set(MBEDX509_LIBRARY mbedx509)
+    set(MBEDCRYPTO_LIBRARY mbedcrypto)
+  endif()
+  # WebSocket support
+  set(ENABLE_WEBSOCKETS ON)
+  # Disable unused protocols (binary size reduction)
+  set(CURL_DISABLE_LDAP ON)
+  set(CURL_DISABLE_LDAPS ON)
+  set(CURL_DISABLE_FTP ON)
+  set(CURL_DISABLE_FTPS ON)
+  set(CURL_DISABLE_TFTP ON)
+  set(CURL_DISABLE_SMTP ON)
+  set(CURL_DISABLE_SMTPS ON)
+  set(CURL_DISABLE_POP3 ON)
+  set(CURL_DISABLE_POP3S ON)
+  set(CURL_DISABLE_IMAP ON)
+  set(CURL_DISABLE_IMAPS ON)
+  set(CURL_DISABLE_TELNET ON)
+  set(CURL_DISABLE_DICT ON)
+  set(CURL_DISABLE_GOPHER ON)
+  set(CURL_DISABLE_MQTT ON)
+  set(CURL_DISABLE_RTSP ON)
+  set(CURL_DISABLE_ALTSVC ON)
+  # Pin off optional dependencies for reproducible builds.
+  set(CURL_USE_LIBPSL OFF)
+  set(CURL_BROTLI OFF)
+  set(CURL_ZSTD OFF)
+  set(USE_LIBIDN2 OFF)
+  set(USE_NGHTTP2 OFF)
+  set(CURL_DISABLE_INSTALL ON)
+  set(CURL_ENABLE_EXPORT_TARGET OFF)
+  FetchContent_MakeAvailable(curl)
+endfunction()
+_src_link_setup_curl()
 # =============================================================================
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE CURL_STATICLIB)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl_static)
 
 if(OS_WINDOWS)
+  # ws2_32:    Winsock — used by LocalHttpServer (OAuth callback) and WsClient. iphlpapi:  GetAdaptersAddresses() — see
+  # utils.hpp network helpers. crypt32:   Windows crypto API — required by curl's Schannel backend. bcrypt:    Modern
+  # Windows crypto — required by curl static linkage. FIXME: CURL::libcurl_static may already propagate crypt32/bcrypt
+  # as INTERFACE link libraries on some curl versions; verify on a real build and drop the redundant entries in a
+  # follow-up PR.
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi crypt32 bcrypt)
 endif()
 
@@ -143,7 +166,9 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core)
+  # FIXME: Qt::SingleShotConnection (used in src/net/) is Qt 6.6+. Confirm that obs-deps (pinned via buildspec.json @
+  # 2024-03-19) ships Qt >= 6.6.0 on every platform; revisit the obs-deps pin in a follow-up PR if not.
+  find_package(Qt6 6.6 REQUIRED COMPONENTS Widgets Core)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
@@ -224,8 +249,8 @@ target_sources(
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE ${CMAKE_SOURCE_DIR}/shared/properties-view
-          ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers
-          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
+  PRIVATE ${CMAKE_SOURCE_DIR}/shared/properties-view ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area
+          ${CMAKE_SOURCE_DIR}/shared/qt/wrappers ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib
+          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

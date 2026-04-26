@@ -39,7 +39,9 @@ CurlHttpClient::~CurlHttpClient()
 
     disconnect(pollTimer, nullptr, this, nullptr);
     pollTimer->stop();
-    cancelAll();
+    // Callers (e.g. HttpRequestInvoker) may already be partially destroyed during shutdown,
+    // so dispatching a "canceled" callback here can dereference dangling captures.
+    cancelAllSilently();
     curl_multi_cleanup(multi);
 }
 
@@ -63,7 +65,12 @@ CURL *CurlHttpClient::createEasyHandle(
     struct curl_slist *headerList = nullptr;
     for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
         QByteArray headerLine = it.key() + ": " + it.value();
-        headerList = curl_slist_append(headerList, headerLine.constData());
+        struct curl_slist *next = curl_slist_append(headerList, headerLine.constData());
+        if (!next) {
+            obs_log(LOG_WARNING, "CurlHttpClient: curl_slist_append failed for header '%s'", it.key().constData());
+            break;
+        }
+        headerList = next;
     }
     ctx->requestHeaders = headerList;
     if (headerList) {
@@ -72,13 +79,27 @@ CURL *CurlHttpClient::createEasyHandle(
 
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
-    curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(easy, CURLOPT_MAXREDIRS, 5L);
+    // Do not follow redirects: libcurl would replay the caller-supplied Authorization
+    // header on the redirect target, leaking the OAuth2 Bearer token to a different host.
+    // SRC-Link API endpoints are not expected to return 30x; any future endpoint that
+    // needs redirects must handle them at the caller level with explicit host allowlisting.
+    curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
+    // Cap connect phase separately so a hung TCP SYN-ACK cannot consume the full
+    // CURLOPT_TIMEOUT_MS budget meant for the request.
+    // FIXME: migrate the polling driver to curl_multi_socket_action + QSocketNotifier
+    // so we stop waking the UI thread at POLL_INTERVAL_MSECS while requests are in-flight.
+    curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 5000L);
 
 #if defined(_WIN32) || defined(__APPLE__)
     // Use OS native CA store (Windows: Schannel, macOS: Secure Transport)
     curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+#elif defined(__linux__)
+    // Linux: libcurl is built against mbedtls in obs-deps, which has no compiled-in CA path.
+    // Point at the standard system CA directory so server certs verify out of the box.
+    // FIXME: switch to a bundled CA file (e.g. cacert.pem under data/) once devops decides
+    // on the bundling layout — replace with CURLOPT_CAINFO at that point.
+    curl_easy_setopt(easy, CURLOPT_CAPATH, "/etc/ssl/certs");
 #endif
 
     curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
@@ -109,7 +130,8 @@ void CurlHttpClient::get(
     const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback, int timeoutMs
 )
 {
-    auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, {}, std::move(callback)};
+    auto *ctx = new RequestContext{};
+    ctx->callback = std::move(callback);
     CURL *easy = createEasyHandle(url, headers, ctx, timeoutMs);
     if (!easy) {
         ctx->callback(HttpResponse{0, {}, HttpError::NetworkError});
@@ -125,7 +147,9 @@ void CurlHttpClient::post(
     int timeoutMs
 )
 {
-    auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, body, std::move(callback)};
+    auto *ctx = new RequestContext{};
+    ctx->callback = std::move(callback);
+    ctx->requestBody = body;
     CURL *easy = createEasyHandle(url, headers, ctx, timeoutMs);
     if (!easy) {
         ctx->callback(HttpResponse{0, {}, HttpError::NetworkError});
@@ -133,9 +157,8 @@ void CurlHttpClient::post(
         return;
     }
     ctx->easy = easy;
-    // NOTE: curl does NOT copy POSTFIELDS data — ctx->requestBody must outlive the easy handle
-    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, ctx->requestBody.constData());
     curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(ctx->requestBody.size()));
+    curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, ctx->requestBody.constData());
     startRequest(easy, ctx);
 }
 
@@ -144,7 +167,9 @@ void CurlHttpClient::put(
     int timeoutMs
 )
 {
-    auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, body, std::move(callback)};
+    auto *ctx = new RequestContext{};
+    ctx->callback = std::move(callback);
+    ctx->requestBody = body;
     CURL *easy = createEasyHandle(url, headers, ctx, timeoutMs);
     if (!easy) {
         ctx->callback(HttpResponse{0, {}, HttpError::NetworkError});
@@ -153,9 +178,8 @@ void CurlHttpClient::put(
     }
     ctx->easy = easy;
     curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, "PUT");
-    // NOTE: curl does NOT copy POSTFIELDS data — ctx->requestBody must outlive the easy handle
-    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, ctx->requestBody.constData());
     curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(ctx->requestBody.size()));
+    curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, ctx->requestBody.constData());
     startRequest(easy, ctx);
 }
 
@@ -163,7 +187,8 @@ void CurlHttpClient::del(
     const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback, int timeoutMs
 )
 {
-    auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, {}, std::move(callback)};
+    auto *ctx = new RequestContext{};
+    ctx->callback = std::move(callback);
     CURL *easy = createEasyHandle(url, headers, ctx, timeoutMs);
     if (!easy) {
         ctx->callback(HttpResponse{0, {}, HttpError::NetworkError});
@@ -179,7 +204,8 @@ void CurlHttpClient::head(
     const QUrl &url, const QMap<QByteArray, QByteArray> &headers, ResponseCallback callback, int timeoutMs
 )
 {
-    auto *ctx = new RequestContext{nullptr, {}, {}, nullptr, {}, std::move(callback)};
+    auto *ctx = new RequestContext{};
+    ctx->callback = std::move(callback);
     CURL *easy = createEasyHandle(url, headers, ctx, timeoutMs);
     if (!easy) {
         ctx->callback(HttpResponse{0, {}, HttpError::NetworkError});
@@ -191,18 +217,31 @@ void CurlHttpClient::head(
     startRequest(easy, ctx);
 }
 
-void CurlHttpClient::cancelAll(bool invokeCallbacks)
+void CurlHttpClient::cancelAll()
 {
-    for (auto *ctx : activeRequests) {
+    // Snapshot the list before invoking callbacks: a callback may re-enter and append
+    // a new request to activeRequests, and we must not cancel/cleanup that one here.
+    auto pending = std::move(activeRequests);
+    activeRequests.clear();
+
+    for (auto *ctx : pending) {
         curl_multi_remove_handle(multi, ctx->easy);
-        if (invokeCallbacks) {
-            // Invoke callback with OperationCanceled so downstream consumers
-            // (HttpRequestInvoker) can emit finished and clean up properly.
-            ctx->callback(HttpResponse{0, {}, HttpError::OperationCanceled});
-        }
+        // Invoke callback with OperationCanceled so downstream consumers
+        // (HttpRequestInvoker) can emit finished and clean up properly.
+        ctx->callback(HttpResponse{0, {}, HttpError::OperationCanceled});
         cleanupRequest(ctx);
     }
+}
+
+void CurlHttpClient::cancelAllSilently()
+{
+    auto pending = std::move(activeRequests);
     activeRequests.clear();
+
+    for (auto *ctx : pending) {
+        curl_multi_remove_handle(multi, ctx->easy);
+        cleanupRequest(ctx);
+    }
 }
 
 void CurlHttpClient::checkCompleted()
@@ -227,17 +266,23 @@ void CurlHttpClient::checkCompleted()
         curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &statusCode);
 
         HttpError error;
-        if (result != CURLE_OK) {
+        if (ctx->responseTooLarge) {
+            error = HttpError::ResponseTooLarge;
+        } else if (result != CURLE_OK) {
             error = httpErrorFromCurlCode(static_cast<int>(result));
         } else {
             error = httpErrorFromStatusCode(static_cast<int>(statusCode));
         }
 
         HttpResponse response{static_cast<int>(statusCode), ctx->responseData, error, ctx->responseHeaders};
-        ctx->callback(response);
 
+        // Detach ctx from activeRequests BEFORE invoking the callback so that any
+        // re-entrant call (e.g. callback issuing a new request) cannot observe a stale
+        // entry, and so cleanupRequest never runs against a ctx the user resurrected.
         curl_multi_remove_handle(multi, easy);
         activeRequests.removeOne(ctx);
+
+        ctx->callback(response);
         cleanupRequest(ctx);
     }
 
@@ -258,11 +303,19 @@ void CurlHttpClient::cleanupRequest(RequestContext *ctx)
 size_t CurlHttpClient::writeCallback(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
     auto *ctx = static_cast<RequestContext *>(userdata);
+    if (nmemb && size > SIZE_MAX / nmemb) {
+        ctx->responseTooLarge = true;
+        return 0;
+    }
     size_t totalSize = size * nmemb;
     if (ctx->responseData.size() + static_cast<qsizetype>(totalSize) > CurlHttpClient::MAX_RESPONSE_SIZE) {
         obs_log(
             LOG_WARNING, "CurlHttpClient: Response exceeded %d bytes limit, aborting", CurlHttpClient::MAX_RESPONSE_SIZE
         );
+        // Returning a short count makes libcurl fail the transfer with CURLE_WRITE_ERROR.
+        // Flag it here so checkCompleted() can surface ResponseTooLarge instead of a
+        // generic write/network error.
+        ctx->responseTooLarge = true;
         return 0;
     }
     ctx->responseData.append(ptr, static_cast<qsizetype>(totalSize));

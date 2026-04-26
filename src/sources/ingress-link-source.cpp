@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 
+#include <QPointer>
 #include <QUrlQuery>
 #include <QJsonDocument>
 
@@ -483,6 +484,9 @@ obs_properties_t *IngressLinkSource::getProperties()
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
+                // obs_frontend_open_source_properties() must run on the UI thread.
+                // HttpRequestInvoker::finished is emitted on the UI thread (Qt main loop),
+                // so this slot satisfies that requirement.
                 QObject::connect(
                     invoker, &HttpRequestInvoker::finished, ingressLinkSource,
                     [ingressLinkSource](HttpError, QByteArray) {
@@ -616,20 +620,28 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
 
     captureSettings(settings);
     OBSData settingsRef(settings);
-    connect(
-        putConnection(), &HttpRequestInvoker::finished, this,
-        [this, settingsRef](HttpError error, QByteArray) {
+    // QPointer guards against the source being destroyed before the queued invoker fires.
+    QPointer<IngressLinkSource> guard(this);
+    if (auto *invoker = putConnection()) {
+        connect(invoker, &HttpRequestInvoker::finished, this, [guard, settingsRef](HttpError error, QByteArray) {
+            if (!guard) {
+                return;
+            }
             if (error != HttpError::NoError) {
-                obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
+                obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(guard->name));
                 return;
             }
 
             // Store settings to file as recently settings.
-            saveSettings(settingsRef);
+            guard->saveSettings(settingsRef);
 
-            obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(name));
-        }
-    );
+            obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(guard->name));
+        });
+    } else {
+        // putConnection() returned nullptr (CHECK_CLIENT_TOKEN failed); persist locally
+        // so the source still records the user's intent.
+        saveSettings(settingsRef);
+    }
 }
 
 void IngressLinkSource::resetDecoder(const StageConnection &_connection)
