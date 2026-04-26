@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #ifdef _WIN32
 #include <winsock2.h>
+#else
+#include <arpa/inet.h>
 #endif
 
 #include "ws-client.hpp"
