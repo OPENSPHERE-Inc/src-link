@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <cassert>
+
 #include <QDateTime>
 #include <obs-module.h>
 
@@ -29,6 +31,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "linux-ca-locations.hpp"
 #include "../plugin-support.h"
 
+namespace {
+// Mirrors CurlHttpClient::MAX_RESPONSE_SIZE to bound peer-controlled buffer growth.
+static constexpr qsizetype MAX_WS_MESSAGE_SIZE = 16 * 1024 * 1024;
+} // namespace
+
 WsClient::WsClient(QObject *parent)
     : QObject(parent),
       easy(nullptr),
@@ -38,7 +45,6 @@ WsClient::WsClient(QObject *parent)
       connected(false),
       connecting(false),
       abortConnect(false),
-      connectGeneration(0),
       fragmentType(0),
       frameInProgress(false),
       pingTimestamp(0)
@@ -90,7 +96,13 @@ void WsClient::open(const QUrl &url)
     }
     // Some servers require an Origin header for the upgrade handshake.
     if (!requestHeaders.contains("Origin")) {
-        QByteArray origin = QString("https://%1").arg(url.host()).toUtf8();
+        QString scheme;
+        if (url.scheme().compare("wss", Qt::CaseInsensitive) == 0) {
+            scheme = "https";
+        } else {
+            scheme = "http";
+        }
+        QByteArray origin = QString("%1://%2").arg(scheme, url.host()).toUtf8();
         slist = curl_slist_append(slist, QByteArray("Origin: " + origin).constData());
     }
     headerList = slist;
@@ -116,6 +128,7 @@ void WsClient::performConnect()
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, this);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
     curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
     // TCP keepalive for dead peer detection (NAT timeout, cable unplug)
@@ -151,6 +164,7 @@ void WsClient::performConnect()
     // joinConnectThread() blocks until curl returns; close() sets abortConnect to unwind quickly.
     // `easy` is value-captured so a UI-thread cleanup() nulling the member cannot race
     // with curl_easy_perform(). `QPointer` guards the queued lambda against `this` destruction.
+    // connecting / connectGeneration: UI-thread only. abortConnect: UI -> worker bridge (read in xferInfoCallback).
     unsigned int gen = ++connectGeneration;
     CURL *easyLocal = easy;
     QPointer<WsClient> guard(this);
@@ -256,10 +270,11 @@ void WsClient::cleanup()
 {
     tlsFallbackTimer->stop();
     if (recvNotifier) {
-        // Synchronous delete (after setEnabled(false)) so cleanup() during obs_module_unload
-        // does not leak via deleteLater() events that the dying event loop never dispatches.
+        // Detach via deleteLater() so a cleanup() invoked synchronously from inside pollRecv()
+        // (the recvNotifier's own slot) does not destroy the QObject whose signal stack is active.
         recvNotifier->setEnabled(false);
-        delete recvNotifier;
+        recvNotifier->disconnect();
+        recvNotifier->deleteLater();
         recvNotifier = nullptr;
     }
     if (easy) {
@@ -351,6 +366,10 @@ qint64 WsClient::sendRaw(const char *data, size_t len, unsigned int flags, bool 
             }
             fd_set writefds;
             FD_ZERO(&writefds);
+#ifndef _WIN32
+            // POSIX fd_set is bit-indexed by fd value; FD_SET past FD_SETSIZE is UB.
+            assert(static_cast<int>(sockfd) < FD_SETSIZE);
+#endif
             FD_SET(sockfd, &writefds);
             struct timeval tv = {0, 50000}; // 50ms
 #ifdef _WIN32
@@ -387,9 +406,16 @@ void WsClient::ping()
     // Any other error indicates the connection is gone — handle the same way as a recv failure.
     if (res != CURLE_OK && res != CURLE_AGAIN) {
         obs_log(LOG_DEBUG, "WsClient ping send failed: %s", curl_easy_strerror(res));
+        // Mark disconnected synchronously so subsequent ping ticks short-circuit via isValid().
         connected = false;
-        cleanup();
-        emit closed();
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                cleanup();
+                emit closed();
+            },
+            Qt::QueuedConnection
+        );
     }
 }
 
@@ -472,8 +498,14 @@ void WsClient::pollRecv()
             if (fragmentType != 0 && !fragmentBuffer.isEmpty()) {
                 if (fragmentType == CURLWS_TEXT) {
                     emit textMessageReceived(QString::fromUtf8(fragmentBuffer));
+                    if (!easy || !connected) {
+                        return;
+                    }
                 } else {
                     emit binaryMessageReceived(fragmentBuffer);
+                    if (!easy || !connected) {
+                        return;
+                    }
                 }
             }
             fragmentBuffer.clear();
@@ -481,6 +513,21 @@ void WsClient::pollRecv()
         }
         // CURLWS_CONT without TEXT/BINARY: WebSocket continuation frame.
         // fragmentType carries over from the initial TEXT/BINARY frame.
+
+        // Bound peer-controlled buffer growth (M-2): close with status 1009 (Message Too Big).
+        if (fragmentBuffer.size() + static_cast<qsizetype>(received) > MAX_WS_MESSAGE_SIZE) {
+            obs_log(
+                LOG_WARNING, "WsClient: message exceeds MAX_WS_MESSAGE_SIZE (would be %lld bytes); aborting",
+                static_cast<long long>(fragmentBuffer.size() + static_cast<qsizetype>(received))
+            );
+            const char closePayload[2] = {static_cast<char>(0x03), static_cast<char>(0xF1)}; // 1009 big-endian
+            size_t closeSent = 0;
+            curl_ws_send(easy, closePayload, sizeof(closePayload), &closeSent, 0, CURLWS_CLOSE);
+            connected = false;
+            cleanup();
+            emit closed();
+            return;
+        }
 
         fragmentBuffer.append(buffer, static_cast<int>(received));
 
@@ -494,8 +541,14 @@ void WsClient::pollRecv()
             if (!isCont) {
                 if (fragmentType == CURLWS_TEXT) {
                     emit textMessageReceived(QString::fromUtf8(fragmentBuffer));
+                    if (!easy || !connected) {
+                        return;
+                    }
                 } else if (fragmentType != 0) {
                     emit binaryMessageReceived(fragmentBuffer);
+                    if (!easy || !connected) {
+                        return;
+                    }
                 }
                 fragmentBuffer.clear();
                 fragmentType = 0;
@@ -509,8 +562,14 @@ void WsClient::pollRecv()
     if (!frameInProgress && fragmentType != 0 && !fragmentBuffer.isEmpty()) {
         if (fragmentType == CURLWS_TEXT) {
             emit textMessageReceived(QString::fromUtf8(fragmentBuffer));
+            if (!easy || !connected) {
+                return;
+            }
         } else {
             emit binaryMessageReceived(fragmentBuffer);
+            if (!easy || !connected) {
+                return;
+            }
         }
         fragmentBuffer.clear();
         fragmentType = 0;

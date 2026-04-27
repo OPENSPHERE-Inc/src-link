@@ -123,7 +123,7 @@ bool LocalHttpServer::listen(int port)
         return false;
     }
 
-    if (::listen(serverSocket, 1) != 0) {
+    if (::listen(serverSocket, 5) != 0) {
         obs_log(LOG_ERROR, "LocalHttpServer: Failed to listen on port %d", port);
         closeSocket(serverSocket);
         serverSocket = INVALID_SOCKET_HANDLE;
@@ -219,7 +219,11 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
         return;
     }
     DWORD rcvTimeout = RECV_PER_CALL_TIMEOUT_MSECS;
-    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&rcvTimeout), sizeof(rcvTimeout));
+    if (setsockopt(
+            clientSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&rcvTimeout), sizeof(rcvTimeout)
+        ) != 0) {
+        obs_log(LOG_WARNING, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with error %d", WSAGetLastError());
+    }
 #else
     int flags = fcntl(clientSocket, F_GETFL, 0);
     if (flags == -1 || fcntl(clientSocket, F_SETFL, flags & ~O_NONBLOCK) == -1) {
@@ -228,7 +232,9 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
         return;
     }
     struct timeval rcvTimeout = {RECV_PER_CALL_TIMEOUT_MSECS / 1000, (RECV_PER_CALL_TIMEOUT_MSECS % 1000) * 1000};
-    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout));
+    if (setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout)) != 0) {
+        obs_log(LOG_WARNING, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with errno %d", errno);
+    }
 #endif
 
     // Read until HTTP header terminator (\r\n\r\n) is found, bounded by an
@@ -329,6 +335,11 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
         obs_log(LOG_WARNING, "LocalHttpServer: send() failed with errno %d", errno);
 #endif
     }
+#ifdef _WIN32
+    shutdown(clientSocket, SD_SEND);
+#else
+    shutdown(clientSocket, SHUT_WR);
+#endif
     closeSocket(clientSocket);
 
     if (deadlineExceeded || !methodIsGet) {

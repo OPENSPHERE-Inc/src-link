@@ -12,7 +12,7 @@ It is developed and maintained by **OPENSPHERE Inc.** under the GPLv2+ license.
 - Build system: **CMake** (≥ 3.22, ≤ 3.26)
 - Based on the official [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate)
 - Target OBS Studio version: **≥ 30.1.0** (Qt6, x64 / ARM64 / Apple Silicon)
-- Current version: **0.7.6**
+- Current version: **0.8.0**
 
 ---
 
@@ -86,10 +86,10 @@ src-link/
 | Platform | Toolchain |
 |----------|-----------|
 | Windows  | Visual Studio 17 2022, CMake ≥ 3.22 (≤ 3.26), Qt 6 |
-| macOS    | Xcode ≤ 16.4.0 (macOS SDK ≤ 15.5), CMake ≥ 3.22 (≤ 3.26), Qt 6 |
+| macOS    | Xcode ≤ 16.4.0 (CI pins Xcode 15.2 on macos-14), macOS SDK ≤ 15.5, CMake ≥ 3.22 (≤ 3.26), Qt 6 |
 | Linux    | GCC / Clang, CMake ≥ 3.22 (≤ 3.26), Qt 6 |
 
-> **Note (macOS):** This project requires **Xcode 16.4.0 (macOS 15.5 SDK) or below**. Xcode 26 / macOS SDK 26 and later are currently unsupported due to compatibility constraints with OBS Studio's build dependencies.
+> **Note (macOS):** This project requires **Xcode 16.4.0 (macOS 15.5 SDK) or below**. Xcode 26 / macOS SDK 26 and later are currently unsupported due to compatibility constraints with OBS Studio's build dependencies. CI runs on `macos-14` with Xcode 15.2 explicitly selected; local development should target an Xcode within this supported range to keep parity with CI.
 
 OBS Studio sources and pre-built dependencies are fetched automatically via `buildspec.json`
 (obs-studio 30.1.2, obs-deps, Qt6).

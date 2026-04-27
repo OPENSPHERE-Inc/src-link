@@ -59,10 +59,8 @@ if(OS_LINUX)
     URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
     URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
 
-  # Function scope keeps configuration variables out of the parent project's cache. mbedtls' cmake_minimum_required may
-  # reset post-3.16 policies inside its directory scope; CMAKE_POLICY_DEFAULT_<NNNN> survives that reset because it is
-  # read as an ordinary variable whenever the policy stack lacks an explicit value, and lets mbedtls' option() and
-  # set(... CACHE ...) calls observe our function-local overrides below.
+  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
+  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
   function(_src_link_setup_mbedtls)
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
     set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
@@ -95,18 +93,18 @@ endif()
 # --- curl (static, WebSocket enabled) ---
 # FIXME: macOS universal builds (CMAKE_OSX_ARCHITECTURES="arm64;x86_64") combined with CURL_USE_SECTRANSP=ON depend on
 # curl's CMake build handling multi-arch correctly, and SECTRANSP itself is deprecated in curl 8.x. If CI exposes
-# breakage, switch to (a) per-arch builds + lipo merge or (b) OpenSSL on Apple platforms.
+# breakage, switch to (a) per-arch builds + lipo merge or (b) OpenSSL on Apple platforms. FIXME: curl 8.12.1 pin
+# retained because (a) 8.13+ FIN-bit WS API needed for fragmented message handling, (b) `-Wambiguous-macro` on
+# SIZE_T_MAX (root cause of the per-target -Wno-error block below) was fixed upstream in 8.13. Bump to latest 8.13.x in
+# a separate PR after re-validating the 4 CI targets and revisiting the -Wno-error suppression.
 FetchContent_Declare(
   curl
   URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz
   URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
 
 function(_src_link_setup_curl)
-  # curl 8.12.1's cmake_minimum_required(VERSION 3.7...3.16) resets policies introduced after 3.16 (CMP0126 included)
-  # back to OLD/unset inside its directory scope, undoing any cmake_policy(SET ... NEW) we apply here. We rely on
-  # CMAKE_POLICY_DEFAULT_<NNNN> as function-local variables instead -- those defaults survive the reset because they are
-  # read whenever the policy stack lacks an explicit value, letting curl's option() and set(... CACHE STRING ...) calls
-  # (the latter via curl_dependency_option for Brotli / Zstd / ZLIB) honor our overrides below.
+  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
+  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
   set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
   set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
   # Belt-and-suspenders: refuse find_package() outright for everything we do not ship, so curl cannot accidentally link
@@ -115,14 +113,16 @@ function(_src_link_setup_curl)
   foreach(
     _disabled_pkg IN
     ITEMS Brotli
-          Zstd
-          LibSSH2
-          LibSSH
+          CURL
           GSS
+          LibIDN2
+          LibPSL
+          LibSSH
+          LibSSH2
           NGHTTP2
           NGTCP2
-          LibIDN2
-          LibPSL)
+          ZLIB
+          Zstd)
     set(CMAKE_DISABLE_FIND_PACKAGE_${_disabled_pkg} TRUE)
   endforeach()
   # The plugin is a shared object (MODULE), so libcurl.a must be compiled with -fPIC to allow relocations against it in
@@ -152,9 +152,14 @@ function(_src_link_setup_curl)
   else()
     set(CURL_USE_MBEDTLS ON)
     set(CURL_USE_OPENSSL OFF)
-    # FIXME: curl's bundled FindMbedTLS.cmake expects file paths and may silently fall back to a system mbedtls install
-    # when given target names. Verify on Linux CI and migrate to find_package(MbedTLS CONFIG) / mbedtls' imported
-    # targets in a follow-up PR.
+    if(NOT TARGET mbedtls
+       OR NOT TARGET mbedx509
+       OR NOT TARGET mbedcrypto)
+      message(FATAL_ERROR "mbedtls FetchContent targets missing — _src_link_setup_mbedtls() must run first")
+    endif()
+    # FIXME: passing target names as strings relies on CMake ≥ 3.22 (CMP0125 NEW) so regular variables shadow
+    # find_library cache lookups and prevent system mbedtls fallback. Migrate to find_package(MbedTLS CONFIG) once
+    # mbedtls ships a config package, or feed real file paths via generator-expression-aware curl support.
     set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include")
     set(MBEDTLS_LIBRARY mbedtls)
     set(MBEDX509_LIBRARY mbedx509)
@@ -188,6 +193,7 @@ function(_src_link_setup_curl)
   set(CURL_USE_LIBSSH OFF)
   set(CURL_USE_GSSAPI OFF)
   set(CURL_BROTLI OFF)
+  set(CURL_ZLIB OFF)
   set(CURL_ZSTD OFF)
   set(USE_LIBIDN2 OFF)
   set(USE_NGHTTP2 OFF)
@@ -203,6 +209,9 @@ function(_src_link_setup_curl)
   # Xcode generator reads CMAKE_XCODE_ATTRIBUTE_* from the top-level directory at generate time rather than from this
   # function's scope, so AppleClang still rejects curl 8.12.1's SIZE_T_MAX uses (-Wambiguous-macro) under -Werror. Force
   # the override per target.
+  if(NOT TARGET libcurl_static AND NOT TARGET libcurl_object)
+    message(FATAL_ERROR "curl target names changed — update _src_link_setup_curl() -Werror suppression")
+  endif()
   foreach(_curl_target IN ITEMS libcurl_static libcurl_object)
     if(TARGET ${_curl_target})
       set_target_properties(${_curl_target} PROPERTIES XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS NO
@@ -230,11 +239,8 @@ if(OS_LINUX)
 endif()
 
 if(OS_WINDOWS)
-  # ws2_32:    Winsock — used by LocalHttpServer (OAuth callback) and WsClient. iphlpapi:  GetAdaptersAddresses() — see
-  # utils.hpp network helpers. crypt32:   Windows crypto API — required by curl's Schannel backend. bcrypt:    Modern
-  # Windows crypto — required by curl static linkage. FIXME: CURL::libcurl_static may already propagate crypt32/bcrypt
-  # as INTERFACE link libraries on some curl versions; verify on a real build and drop the redundant entries in a
-  # follow-up PR.
+  # Winsock + Win32 crypto for the curl Schannel backend. FIXME: verify CURL::libcurl_static INTERFACE deps and drop
+  # redundant entries.
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi crypt32 bcrypt)
 endif()
 

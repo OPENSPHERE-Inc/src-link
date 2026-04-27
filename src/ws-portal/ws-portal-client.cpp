@@ -54,6 +54,15 @@ WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
       reconnectPending(false)
 {
     intervalTimer = new QTimer(this);
+    reconnectTimer = new QTimer(this);
+    reconnectTimer->setSingleShot(true);
+    connect(reconnectTimer, &QTimer::timeout, this, [this]() {
+        reconnectPending = false;
+        if (status != WS_PORTAL_STATUS_INACTIVE && !reconnectPortalId.isEmpty()) {
+            open(reconnectPortalId);
+            emit reconnecting();
+        }
+    });
 
     connect(apiClient, &SRCLinkApiClient::ready, this, &WsPortalClient::onApiClientReady);
     connect(apiClient, &SRCLinkApiClient::wsPortalsReady, this, &WsPortalClient::onWsPortalsReady);
@@ -121,6 +130,12 @@ void WsPortalClient::destroyWsSocket()
         return;
     }
 
+    if (reconnectTimer) {
+        reconnectTimer->stop();
+        reconnectPending = false;
+    }
+
+    // Must precede client = nullptr to break any pending errorOccurred lambda dispatch.
     client->disconnect(this);
     client->close();
     client->deleteLater();
@@ -171,7 +186,9 @@ void WsPortalClient::start()
 
     status = WS_PORTAL_STATUS_ACTIVE;
     reconnectCount = 0;
+    reconnectTimer->stop();
     reconnectPending = false;
+    reconnectPortalId = portalId;
     open(portalId);
 
     WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
@@ -184,6 +201,9 @@ void WsPortalClient::stop()
     }
 
     status = WS_PORTAL_STATUS_INACTIVE;
+    reconnectTimer->stop();
+    reconnectPending = false;
+    reconnectPortalId.clear();
     destroyWsSocket();
 
     if (!wsPortal.isEmpty()) {
@@ -232,7 +252,8 @@ void WsPortalClient::onConnected()
 
 int WsPortalClient::reconnectDelayMs() const
 {
-    // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    // Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    // (reconnectCount is incremented before this is called, so the first delay is BASE_DELAY_MS * 2.)
     static constexpr int BASE_DELAY_MS = 5000;
     static constexpr int MAX_DELAY_MS = 300000;
     int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
@@ -259,15 +280,10 @@ void WsPortalClient::scheduleReconnect()
 
     reconnectPending = true;
     reconnectCount++;
+    reconnectPortalId = portalId;
     int delay = reconnectDelayMs();
     API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
-    QTimer::singleShot(delay, this, [this, portalId]() {
-        reconnectPending = false;
-        if (status != WS_PORTAL_STATUS_INACTIVE) {
-            open(portalId);
-            emit reconnecting();
-        }
-    });
+    reconnectTimer->start(delay);
 }
 
 void WsPortalClient::onDisconnected()

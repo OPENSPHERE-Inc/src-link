@@ -484,9 +484,8 @@ obs_properties_t *IngressLinkSource::getProperties()
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
-                // obs_frontend_open_source_properties() must run on the UI thread.
-                // HttpRequestInvoker::finished is emitted on the UI thread (Qt main loop),
-                // so this slot satisfies that requirement.
+                // FIXME: Re-entrancy hazard — opening source properties from within a properties
+                // button callback can re-enter the OBS frontend properties dialog.
                 QObject::connect(
                     invoker, &HttpRequestInvoker::finished, ingressLinkSource,
                     [ingressLinkSource](HttpError, QByteArray) {

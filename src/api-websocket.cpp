@@ -48,6 +48,15 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
       reconnectPending(false)
 {
     intervalTimer = new QTimer(this);
+    reconnectTimer = new QTimer(this);
+    reconnectTimer->setSingleShot(true);
+    connect(reconnectTimer, &QTimer::timeout, this, [this]() {
+        reconnectPending = false;
+        if (started && !client->isValid()) {
+            open();
+            emit reconnecting();
+        }
+    });
     client = new WsClient(this);
 
     connect(client, &WsClient::opened, this, &SRCLinkWebSocketClient::onConnected);
@@ -88,7 +97,8 @@ void SRCLinkWebSocketClient::onConnected()
 
 int SRCLinkWebSocketClient::reconnectDelayMs() const
 {
-    // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    // Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    // (reconnectCount is incremented before this is called, so the first delay is BASE_DELAY_MS * 2.)
     static constexpr int BASE_DELAY_MS = 5000;
     static constexpr int MAX_DELAY_MS = 300000;
     int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
@@ -112,13 +122,7 @@ void SRCLinkWebSocketClient::scheduleReconnect()
     reconnectCount++;
     int delay = reconnectDelayMs();
     API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
-    QTimer::singleShot(delay, this, [this]() {
-        reconnectPending = false;
-        if (started && !client->isValid()) {
-            open();
-            emit reconnecting();
-        }
-    });
+    reconnectTimer->start(delay);
 }
 
 void SRCLinkWebSocketClient::onDisconnected()
@@ -184,6 +188,7 @@ void SRCLinkWebSocketClient::start()
     API_LOG("Connecting: %s", qUtf8Printable(url.toString()));
     started = true;
     reconnectCount = 0;
+    reconnectTimer->stop();
     reconnectPending = false;
     open();
 }
@@ -196,6 +201,8 @@ void SRCLinkWebSocketClient::stop()
 
     API_LOG("Disconnecting");
     started = false;
+    reconnectTimer->stop();
+    reconnectPending = false;
     client->close();
 }
 

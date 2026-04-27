@@ -78,8 +78,8 @@ private:
     struct curl_slist *headerList;
     bool connected;
     std::atomic<bool> connecting;
-    std::atomic<bool> abortConnect; // Set by close()/dtor to make curl_easy_perform() return early
-    unsigned int connectGeneration; // Incremented per connection attempt to detect stale callbacks
+    std::atomic<bool> abortConnect;                 // Set by close()/dtor to make curl_easy_perform() return early
+    std::atomic<unsigned int> connectGeneration{0}; // Incremented per connection attempt to detect stale callbacks
     QUrl pendingUrl;
     QByteArray fragmentBuffer;
     int fragmentType;     // CURLWS_TEXT or CURLWS_BINARY

@@ -212,7 +212,10 @@ void OAuth2Client::refresh()
     // FIXME: refresh() relies on the UI-thread reentrancy contract — concurrent callers
     // hooking refreshFinished before refresh() emits it. If this assert ever fires,
     // explicitly queue pending callers (separate PR) instead of leaning on signal timing.
-    Q_ASSERT(thread() == QThread::currentThread());
+    if (thread() != QThread::currentThread()) {
+        obs_log(LOG_WARNING, "OAuth2Client::refresh() called from non-owner thread; ignoring");
+        return;
+    }
 
     if (refreshToken_.isEmpty()) {
         obs_log(LOG_WARNING, "OAuth2Client: No refresh token available");

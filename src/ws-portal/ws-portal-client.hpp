@@ -48,6 +48,8 @@ class WsPortalClient : public QObject {
     bool reconnectPending;
     WsPortal wsPortal;
     QTimer *intervalTimer;
+    QTimer *reconnectTimer = nullptr;
+    QString reconnectPortalId;
 
     json processRequest(const json &request);
     void sendMessage(const QString &connectionId, int opcode, const json &data);
