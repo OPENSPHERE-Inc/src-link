@@ -59,13 +59,19 @@ if(OS_LINUX)
     URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
     URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
 
-  # Function scope keeps configuration variables out of the parent project's cache; CMP0077=NEW lets mbedtls' option()
-  # calls observe these locals. The policy is scoped to this function so it does not leak into other subprojects.
+  # Function scope keeps configuration variables out of the parent project's cache. mbedtls' cmake_minimum_required may
+  # reset post-3.16 policies inside its directory scope; CMAKE_POLICY_DEFAULT_<NNNN> survives that reset because it is
+  # read as an ordinary variable whenever the policy stack lacks an explicit value, and lets mbedtls' option() and
+  # set(... CACHE ...) calls observe our function-local overrides below.
   function(_src_link_setup_mbedtls)
-    cmake_policy(SET CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
     # The plugin is a shared object (MODULE), so all static dependencies must be compiled with -fPIC to allow
     # relocations against them in the final link.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # The plugin builds with CMAKE_COMPILE_WARNING_AS_ERROR=TRUE; do not propagate that into the vendored mbedtls tree
+    # -- it is upstream code we cannot patch when new compiler diagnostics are introduced.
+    set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
     set(USE_STATIC_MBEDTLS_LIBRARY ON)
     set(USE_SHARED_MBEDTLS_LIBRARY OFF)
     set(ENABLE_TESTING OFF)
@@ -73,6 +79,15 @@ if(OS_LINUX)
     set(MBEDTLS_AS_SUBPROJECT ON)
     set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON)
     FetchContent_MakeAvailable(mbedtls)
+
+    # Mirror the per-target -Werror suppression applied to curl below, in case future compiler diagnostics turn upstream
+    # warnings into hard errors here too.
+    foreach(_mbedtls_target IN ITEMS mbedtls mbedx509 mbedcrypto)
+      if(TARGET ${_mbedtls_target})
+        set_target_properties(${_mbedtls_target} PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+        target_compile_options(${_mbedtls_target} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang,GNU>:-Wno-error>)
+      endif()
+    endforeach()
   endfunction()
   _src_link_setup_mbedtls()
 endif()
@@ -87,12 +102,39 @@ FetchContent_Declare(
   URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
 
 function(_src_link_setup_curl)
-  # Scope CMP0077=NEW to this function so curl's option() calls honor the locals below without leaking into the parent
-  # project or sibling subprojects.
-  cmake_policy(SET CMP0077 NEW)
+  # curl 8.12.1's cmake_minimum_required(VERSION 3.7...3.16) resets policies introduced after 3.16 (CMP0126 included)
+  # back to OLD/unset inside its directory scope, undoing any cmake_policy(SET ... NEW) we apply here. We rely on
+  # CMAKE_POLICY_DEFAULT_<NNNN> as function-local variables instead -- those defaults survive the reset because they are
+  # read whenever the policy stack lacks an explicit value, letting curl's option() and set(... CACHE STRING ...) calls
+  # (the latter via curl_dependency_option for Brotli / Zstd / ZLIB) honor our overrides below.
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
+  # Belt-and-suspenders: refuse find_package() outright for everything we do not ship, so curl cannot accidentally link
+  # against host libraries (Homebrew on the macOS runner, etc.) even if the policy chain still routes around our local
+  # CURL_BROTLI / CURL_ZSTD overrides below.
+  foreach(
+    _disabled_pkg IN
+    ITEMS Brotli
+          Zstd
+          LibSSH2
+          LibSSH
+          GSS
+          NGHTTP2
+          NGTCP2
+          LibIDN2
+          LibPSL)
+    set(CMAKE_DISABLE_FIND_PACKAGE_${_disabled_pkg} TRUE)
+  endforeach()
   # The plugin is a shared object (MODULE), so libcurl.a must be compiled with -fPIC to allow relocations against it in
   # the final link (otherwise GNU ld rejects R_X86_64_PC32 against GLIBC symbols on Linux).
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  # The plugin builds with CMAKE_COMPILE_WARNING_AS_ERROR=TRUE; do not propagate that into the vendored curl tree --
+  # AppleClang's -Wambiguous-macro fires on curl 8.12.1's SIZE_T_MAX uses, and similar diagnostics may surface in other
+  # upstream code we cannot patch. Override both the generic flag and the Xcode-generator-specific attribute, since
+  # cmake/macos/xcode.cmake already translated CMAKE_COMPILE_WARNING_AS_ERROR=TRUE into GCC_TREAT_WARNINGS_AS_ERRORS=YES
+  # on the Xcode side.
+  set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+  set(CMAKE_XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS NO)
   # Static library only
   set(BUILD_SHARED_LIBS OFF)
   set(BUILD_CURL_EXE OFF)
@@ -138,15 +180,36 @@ function(_src_link_setup_curl)
   set(CURL_DISABLE_MQTT ON)
   set(CURL_DISABLE_RTSP ON)
   set(CURL_DISABLE_ALTSVC ON)
-  # Pin off optional dependencies for reproducible builds.
+  # Pin off optional dependencies for reproducible builds. libssh2 in particular triggers macOS link failures ("library
+  # 'ssh2' not found") because curl auto-detects Homebrew's copy and enables scp/sftp without their library path being
+  # available to the final link of osi-src-link.so.
   set(CURL_USE_LIBPSL OFF)
+  set(CURL_USE_LIBSSH2 OFF)
+  set(CURL_USE_LIBSSH OFF)
+  set(CURL_USE_GSSAPI OFF)
   set(CURL_BROTLI OFF)
   set(CURL_ZSTD OFF)
   set(USE_LIBIDN2 OFF)
   set(USE_NGHTTP2 OFF)
+  # Disable SMB/SMBS too, since neither is needed and SMB is the only remaining non-HTTP protocol enabled by default.
+  set(CURL_DISABLE_SMB ON)
+  set(CURL_DISABLE_SMBS ON)
   set(CURL_DISABLE_INSTALL ON)
   set(CURL_ENABLE_EXPORT_TARGET OFF)
   FetchContent_MakeAvailable(curl)
+
+  # Defensively strip -Werror from curl's compile units. The CMAKE_COMPILE_WARNING_AS_ERROR /
+  # CMAKE_XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS variables set above do not reliably reach curl's targets: the
+  # Xcode generator reads CMAKE_XCODE_ATTRIBUTE_* from the top-level directory at generate time rather than from this
+  # function's scope, so AppleClang still rejects curl 8.12.1's SIZE_T_MAX uses (-Wambiguous-macro) under -Werror. Force
+  # the override per target.
+  foreach(_curl_target IN ITEMS libcurl_static libcurl_object)
+    if(TARGET ${_curl_target})
+      set_target_properties(${_curl_target} PROPERTIES XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS NO
+                                                       COMPILE_WARNING_AS_ERROR OFF)
+      target_compile_options(${_curl_target} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang,GNU>:-Wno-error>)
+    endif()
+  endforeach()
 endfunction()
 _src_link_setup_curl()
 # =============================================================================
