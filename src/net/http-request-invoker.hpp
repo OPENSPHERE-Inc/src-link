@@ -61,6 +61,7 @@ private:
 
     QMap<QByteArray, QByteArray> mergeAuthHeaders(const QMap<QByteArray, QByteArray> &headers);
     void handleResponse(int statusCode, HttpError error, const QByteArray &data, std::function<void()> retryFunc);
+    template<class Func> void queue(Func invoker);
 
 signals:
     void finished(HttpError error, QByteArray data);
@@ -73,8 +74,6 @@ public:
     explicit HttpRequestInvoker(CurlHttpClient *httpClient, OAuth2Client *oauth2Client, QObject *parent = nullptr);
 
     ~HttpRequestInvoker();
-
-    template<class Func> void queue(Func invoker);
 
     /// Refresh OAuth2 token
     void refresh();

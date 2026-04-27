@@ -117,6 +117,9 @@ bool obs_module_load(void)
     // Initialize the plugin's own statically-linked curl instance.
     // This is separate from OBS Studio's curl (dynamically linked libcurl.dll),
     // so we must call curl_global_init() for our own instance.
+    // Relies on OBS having already called curl_global_init: by the time obs_module_load
+    // runs, OBS's UI / video / network threads are already up and curl's "init while
+    // no other threads exist" requirement is no longer satisfiable in isolation.
     // FIXME: LocalHttpServer's raw winsock usage relies on the WSAStartup performed by
     //        CURL_GLOBAL_WIN32 here. Give LocalHttpServer its own WSAStartup/WSACleanup
     //        so this implicit ordering dependency is removed (separate PR recommended).
@@ -140,6 +143,7 @@ bool obs_module_load(void)
     }
 
     qRegisterMetaType<HttpError>("HttpError");
+    qRegisterMetaType<obs_data_t *>();
 
     // Initialize the cpu stats
     cpuUsageInfo = os_cpu_usage_info_start();
@@ -183,11 +187,6 @@ bool obs_module_load(void)
 
     obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
     return true;
-}
-
-void obs_module_post_load()
-{
-    qRegisterMetaType<obs_data_t *>();
 }
 
 void obs_module_unload(void)

@@ -80,6 +80,7 @@ CURL *CurlHttpClient::createEasyHandle(
 
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
     // Do not follow redirects: libcurl would replay the caller-supplied Authorization
     // header on the redirect target, leaking the OAuth2 Bearer token to a different host.
     // SRC-Link API endpoints are not expected to return 30x; any future endpoint that
@@ -113,6 +114,7 @@ CURL *CurlHttpClient::createEasyHandle(
 
     curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
     curl_easy_setopt(easy, CURLOPT_PRIVATE, ctx);
+    ctx->easy = easy;
 
     return easy;
 }
@@ -147,7 +149,6 @@ void CurlHttpClient::get(
         delete ctx;
         return;
     }
-    ctx->easy = easy;
     startRequest(easy, ctx);
 }
 
@@ -165,7 +166,6 @@ void CurlHttpClient::post(
         delete ctx;
         return;
     }
-    ctx->easy = easy;
     curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(ctx->requestBody.size()));
     curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, ctx->requestBody.constData());
     startRequest(easy, ctx);
@@ -185,7 +185,6 @@ void CurlHttpClient::put(
         delete ctx;
         return;
     }
-    ctx->easy = easy;
     curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(ctx->requestBody.size()));
     curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, ctx->requestBody.constData());
@@ -204,7 +203,6 @@ void CurlHttpClient::del(
         delete ctx;
         return;
     }
-    ctx->easy = easy;
     curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, "DELETE");
     startRequest(easy, ctx);
 }
@@ -221,7 +219,6 @@ void CurlHttpClient::head(
         delete ctx;
         return;
     }
-    ctx->easy = easy;
     curl_easy_setopt(easy, CURLOPT_NOBODY, 1L);
     startRequest(easy, ctx);
 }
@@ -270,6 +267,9 @@ void CurlHttpClient::checkCompleted()
 
         RequestContext *ctx = nullptr;
         curl_easy_getinfo(easy, CURLINFO_PRIVATE, &ctx);
+        if (!ctx) {
+            continue;
+        }
 
         long statusCode = 0;
         curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &statusCode);
@@ -334,6 +334,9 @@ size_t CurlHttpClient::writeCallback(char *ptr, size_t size, size_t nmemb, void 
 size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
     auto *ctx = static_cast<RequestContext *>(userdata);
+    if (nmemb && size > SIZE_MAX / nmemb) {
+        return 0;
+    }
     size_t totalSize = size * nmemb;
     QByteArray line(ptr, static_cast<qsizetype>(totalSize));
     int colonIndex = line.indexOf(':');
@@ -341,6 +344,7 @@ size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void
         // RFC 7230: HTTP header names are case-insensitive — normalize to lowercase
         QByteArray key = line.left(colonIndex).trimmed().toLower();
         QByteArray value = line.mid(colonIndex + 1).trimmed();
+        // FIXME: duplicate-name headers (e.g. Set-Cookie) are overwritten; switch to QMultiMap if needed.
         ctx->responseHeaders.insert(key, value);
     }
     return totalSize;

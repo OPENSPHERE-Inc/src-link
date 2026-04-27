@@ -80,10 +80,10 @@ HttpRequestSequencer::~HttpRequestSequencer()
 
     if (!drained.isEmpty()) {
         obs_log(LOG_WARNING, "Draining %d remaining requests in queue.", drained.size());
-        // Disconnect inter-invoker chain connections first to prevent
-        // cascading lambda invocations during the drain loop (R4-2).
+        // Sever only incoming connections (the prev->next chain wired in queue()) so the
+        // OperationCanceled emit below still reaches consumer-attached `finished` slots.
         for (auto *invoker : drained) {
-            invoker->disconnect();
+            QObject::disconnect(nullptr, nullptr, invoker, nullptr);
         }
         for (auto *invoker : drained) {
             emit invoker->finished(HttpError::OperationCanceled, {});
@@ -131,9 +131,9 @@ HttpRequestInvoker::~HttpRequestInvoker()
 template<class Func> void HttpRequestInvoker::queue(Func invoker)
 {
     // Chain lifetime invariant: the previous invoker's handleResponse() emits `finished`
-    // and only then schedules its own deleteLater(). The slot connected below runs
-    // synchronously during that emit, so the previous invoker is still alive while this
-    // one's request is dispatched -- the deleteLater() fires on a later event-loop tick.
+    // then posts its own deleteLater(). The QueuedConnection slot below is posted before
+    // that deleteLater(), so the next invoker's lambda runs on a fresh event-loop tick
+    // while the previous invoker is still alive.
     QMutexLocker locker(&sequencer->mutex);
     {
         if (sequencer->requestQueue.isEmpty()) {
@@ -142,9 +142,10 @@ template<class Func> void HttpRequestInvoker::queue(Func invoker)
             invoker();
             return;
         } else {
-            // Reserve next invocation. Use 4-arg connect with `this` as context so that
-            // Qt auto-disconnects if this invoker is destroyed before the previous one finishes.
-            connect(sequencer->requestQueue.last(), &HttpRequestInvoker::finished, this, invoker);
+            // Reserve next invocation. 5-arg connect with `this` as context: Qt auto-disconnects
+            // if this invoker is destroyed before the previous one finishes. QueuedConnection
+            // breaks the synchronous call stack from prev->handleResponse into next->invoker().
+            connect(sequencer->requestQueue.last(), &HttpRequestInvoker::finished, this, invoker, Qt::QueuedConnection);
             sequencer->requestQueue.append(this);
         }
         TRACE("Queue request: size=%d", sequencer->requestQueue.size());
