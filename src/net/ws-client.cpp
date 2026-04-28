@@ -128,7 +128,7 @@ void WsClient::performConnect()
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, this);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
-    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_3);
     curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
     // TCP keepalive for dead peer detection (NAT timeout, cable unplug)
@@ -244,6 +244,8 @@ void WsClient::close()
 {
     if (connecting) {
         // Signal abort — onConnectFinished will handle cleanup when the thread completes
+        // abort flag set; worker is joined later by onConnectFinished (UI-thread queued)
+        // with dtor joinConnectThread() as fallback.
         abortConnect = true;
         connecting = false;
         return;
@@ -451,13 +453,14 @@ void WsClient::pollRecv()
 
         if (meta->flags & CURLWS_CLOSE) {
             obs_log(LOG_DEBUG, "WsClient received close frame");
-            // RFC 6455 §5.5.1: respond with a close frame to complete the handshake
+            // RFC 6455 §5.5.1: respond with a close frame to complete the handshake.
+            // Use status code 1000 (Normal Closure) rather than echoing peer payload.
+            const uint16_t code = htons(1000);
+            const auto *codePayload = reinterpret_cast<const char *>(&code);
             size_t closeSent = 0;
-            CURLcode echoRes = curl_ws_send(easy, buffer, received, &closeSent, 0, CURLWS_CLOSE);
+            CURLcode echoRes = curl_ws_send(easy, codePayload, 2, &closeSent, 0, CURLWS_CLOSE);
             if (echoRes != CURLE_OK) {
                 obs_log(LOG_DEBUG, "WsClient close echo failed: %s", curl_easy_strerror(echoRes));
-            } else if (closeSent < received) {
-                obs_log(LOG_DEBUG, "WsClient close echo partial send: %zu/%zu", closeSent, received);
             }
             connected = false;
             cleanup();
@@ -473,8 +476,13 @@ void WsClient::pollRecv()
 
         if (meta->flags & CURLWS_PING) {
             // Auto-respond with pong
-            size_t sent = 0;
-            curl_ws_send(easy, buffer, received, &sent, 0, CURLWS_PONG);
+            qint64 pongResult = sendRaw(buffer, received, CURLWS_PONG);
+            if (pongResult < 0) {
+                connected = false;
+                cleanup();
+                emit closed();
+                return;
+            }
             continue;
         }
 
@@ -529,7 +537,7 @@ void WsClient::pollRecv()
             return;
         }
 
-        fragmentBuffer.append(buffer, static_cast<int>(received));
+        fragmentBuffer.append(buffer, static_cast<qsizetype>(received));
 
         bool frameComplete = (static_cast<size_t>(meta->offset) + received >= static_cast<size_t>(meta->len));
         frameInProgress = !frameComplete;

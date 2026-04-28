@@ -193,10 +193,14 @@ void obs_module_unload(void)
 {
     obs_frontend_remove_event_callback(frontendEventCallback, nullptr);
 
+    // FIXME: Dock teardown is owned by OBS itself, so WsPortalClient instances
+    // inside docks may outlive apiClient and reference its destroyed members.
+    // Add unregisterEgressLinkDock() / unregisterWsPortalDock() at the top of
+    // this function in a separate PR.
+    WsPortalEventHandler::destroyInstance();
+
     delete apiClient;
     apiClient = nullptr;
-
-    WsPortalEventHandler::destroyInstance();
 
     // Destroy the cpu stats
     os_cpu_usage_info_destroy(cpuUsageInfo);

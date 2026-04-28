@@ -34,6 +34,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "http-response.hpp"
 #include "../plugin-support.h"
 
+namespace {
+// RFC 8252 §7.3: native apps must redirect to a loopback IP literal (or "localhost").
+bool isLoopbackPolicy(const QString &policy)
+{
+    const QUrl url(QString(policy).arg(0));
+    if (!url.isValid() || url.scheme().toLower() != QStringLiteral("http")) {
+        return false;
+    }
+    const QString host = url.host().toLower();
+    return host == QStringLiteral("127.0.0.1") || host == QStringLiteral("[::1]") || host == QStringLiteral("::1") ||
+           host == QStringLiteral("localhost");
+}
+} // namespace
+
 OAuth2Client::OAuth2Client(CurlHttpClient *httpClient, QObject *parent)
     : QObject(parent),
       httpClient(httpClient),
@@ -93,6 +107,13 @@ void OAuth2Client::setRefreshTokenUrl(const QString &url)
 
 void OAuth2Client::setLocalhostPolicy(const QString &policy)
 {
+    if (!isLoopbackPolicy(policy)) {
+        obs_log(
+            LOG_ERROR, "OAuth2 localhost policy must use a loopback host (127.0.0.1, ::1, localhost). Rejected: %s",
+            policy.toUtf8().constData()
+        );
+        return;
+    }
     localhostPolicy_ = policy;
 }
 
@@ -129,6 +150,17 @@ qint64 OAuth2Client::expires() const
 
 void OAuth2Client::link()
 {
+    // Belt-and-suspenders: re-validate the active policy in case it was set before the
+    // setter's validation existed, or via a future code path that bypasses the setter.
+    if (!isLoopbackPolicy(localhostPolicy_)) {
+        obs_log(
+            LOG_ERROR, "OAuth2Client: Refusing to start auth flow with non-loopback policy: %s",
+            localhostPolicy_.toUtf8().constData()
+        );
+        emit linkingFailed();
+        return;
+    }
+
     if (linked_) {
         // O2 compatibility: O2::link() emits linkingSucceeded() when already linked,
         // allowing the consumer to re-trigger the post-login flow (account info, uplink, websocket).
@@ -140,6 +172,7 @@ void OAuth2Client::link()
     // Guard against re-entrant calls while auth flow is in progress
     if (localServer->isListening()) {
         obs_log(LOG_DEBUG, "OAuth2Client: Auth flow already in progress");
+        emit linkingFailed();
         return;
     }
 

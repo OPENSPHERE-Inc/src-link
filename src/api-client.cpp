@@ -922,6 +922,7 @@ void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &im
 
 void SRCLinkApiClient::getPicture(const QString &pictureId)
 {
+    Q_ASSERT(httpClient && httpClient->parent() == this);
     // Uses CurlHttpClient directly (bypasses HttpRequestInvoker) because this is a
     // public endpoint that does not require authentication or 401 retry logic.
     // FIXME: If the server auth model ever requires Bearer tokens for picture URLs,

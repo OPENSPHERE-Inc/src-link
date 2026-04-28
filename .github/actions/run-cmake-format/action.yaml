@@ -51,7 +51,7 @@ runs:
 
         if (( ${changes[(I)*.cmake|*CMakeLists.txt]} )) {
           echo ::group::Install cmakelang
-          pip3 install cmakelang
+          pip3 install 'cmakelang==0.6.13'
           echo ::endgroup::
           echo ::group::Run cmake-format
           ./build-aux/run-cmake-format --fail-${{ inputs.failCondition }} --check

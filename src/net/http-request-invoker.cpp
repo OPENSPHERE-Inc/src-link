@@ -80,6 +80,11 @@ HttpRequestSequencer::~HttpRequestSequencer()
 
     if (!drained.isEmpty()) {
         obs_log(LOG_WARNING, "Draining %d remaining requests in queue.", drained.size());
+        // FIXME: Synchronous emit + delete pair can re-enter HttpRequestSequencer::queue()
+        // via consumer slots that issue follow-up requests. Real fix is to disconnect the
+        // invoker's outgoing connections (`finished -> consumer slot`) before the emit/delete
+        // rather than the incoming ones, so re-entry cannot reach the now half-destroyed
+        // sequencer. Defer to a separate PR.
         // Sever only incoming connections (the prev->next chain wired in queue()) so the
         // OperationCanceled emit below still reaches consumer-attached `finished` slots.
         for (auto *invoker : drained) {
@@ -134,6 +139,11 @@ template<class Func> void HttpRequestInvoker::queue(Func invoker)
     // then posts its own deleteLater(). The QueuedConnection slot below is posted before
     // that deleteLater(), so the next invoker's lambda runs on a fresh event-loop tick
     // while the previous invoker is still alive.
+    // Invariant: invoker() must not synchronously emit `finished`. The empty-queue
+    // branch relies on this — `requestQueue.append(this)` runs before `invoker()`
+    // so a synchronous finished would still find `this` in the queue, but a future
+    // curl_multi_socket_action migration could expose new sync paths that violate
+    // this invariant.
     QMutexLocker locker(&sequencer->mutex);
     {
         if (sequencer->requestQueue.isEmpty()) {

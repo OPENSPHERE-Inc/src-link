@@ -80,7 +80,7 @@ CURL *CurlHttpClient::createEasyHandle(
 
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
-    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+    curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_3);
     // Do not follow redirects: libcurl would replay the caller-supplied Authorization
     // header on the redirect target, leaking the OAuth2 Bearer token to a different host.
     // SRC-Link API endpoints are not expected to return 30x; any future endpoint that
@@ -113,6 +113,9 @@ CURL *CurlHttpClient::createEasyHandle(
 #endif
 
     curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
+    curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(easy, CURLOPT_TCP_KEEPIDLE, 60L);
+    curl_easy_setopt(easy, CURLOPT_TCP_KEEPINTVL, 30L);
     curl_easy_setopt(easy, CURLOPT_PRIVATE, ctx);
     ctx->easy = easy;
 

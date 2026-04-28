@@ -117,14 +117,22 @@ bool LocalHttpServer::listen(int port)
     addr.sin_port = htons(static_cast<uint16_t>(port));
 
     if (bind(serverSocket, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) != 0) {
-        obs_log(LOG_ERROR, "LocalHttpServer: Failed to bind to port %d", port);
+#ifdef _WIN32
+        obs_log(LOG_ERROR, "LocalHttpServer: Failed to bind to port %d (WSAGetLastError=%d)", port, WSAGetLastError());
+#else
+        obs_log(LOG_ERROR, "LocalHttpServer: Failed to bind to port %d (errno=%d)", port, errno);
+#endif
         closeSocket(serverSocket);
         serverSocket = INVALID_SOCKET_HANDLE;
         return false;
     }
 
     if (::listen(serverSocket, 5) != 0) {
-        obs_log(LOG_ERROR, "LocalHttpServer: Failed to listen on port %d", port);
+#ifdef _WIN32
+        obs_log(LOG_ERROR, "LocalHttpServer: Failed to listen on port %d (WSAGetLastError=%d)", port, WSAGetLastError());
+#else
+        obs_log(LOG_ERROR, "LocalHttpServer: Failed to listen on port %d (errno=%d)", port, errno);
+#endif
         closeSocket(serverSocket);
         serverSocket = INVALID_SOCKET_HANDLE;
         return false;
@@ -134,7 +142,11 @@ bool LocalHttpServer::listen(int port)
     struct sockaddr_in boundAddr = {};
     socklen_t boundLen = sizeof(boundAddr);
     if (getsockname(serverSocket, reinterpret_cast<struct sockaddr *>(&boundAddr), &boundLen) != 0) {
-        obs_log(LOG_ERROR, "LocalHttpServer: getsockname() failed");
+#ifdef _WIN32
+        obs_log(LOG_ERROR, "LocalHttpServer: getsockname() failed (WSAGetLastError=%d)", WSAGetLastError());
+#else
+        obs_log(LOG_ERROR, "LocalHttpServer: getsockname() failed (errno=%d)", errno);
+#endif
         closeSocket(serverSocket);
         serverSocket = INVALID_SOCKET_HANDLE;
         return false;
@@ -273,6 +285,10 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
             break;
         }
         requestData.append(buffer, bytesRead);
+    }
+
+    if (requestData.indexOf("\r\n\r\n") == -1 && !deadlineExceeded) {
+        obs_log(LOG_WARNING, "LocalHttpServer: OAuth2 callback request header exceeded %zu bytes", sizeof(buffer) - 1);
     }
 
     // Parse the first line: METHOD /path?query HTTP/1.1

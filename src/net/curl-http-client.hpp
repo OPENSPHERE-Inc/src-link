@@ -39,7 +39,7 @@ class CurlHttpClient : public QObject {
     Q_OBJECT
 
 public:
-    static constexpr int POLL_INTERVAL_MSECS = 10;
+    static constexpr int POLL_INTERVAL_MSECS = 25;
     static constexpr int DEFAULT_TIMEOUT_MS = 10000;
     static constexpr int MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16 MB
 

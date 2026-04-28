@@ -44,6 +44,9 @@ public:
     void setHeaders(const QMap<QByteArray, QByteArray> &headers);
 
     /// Open WebSocket connection
+    // Silent return when already connected or connecting; no signal is emitted.
+    // Callers must guard with isValid() / isConnecting() if they need a follow-up
+    // signal observation.
     void open(const QUrl &url);
 
     /// Close WebSocket connection
@@ -91,6 +94,7 @@ private:
 
     void performConnect();
     void onConnectFinished(CURLcode result, unsigned int generation);
+    // Called from UI thread only.
     void joinConnectThread();
     void pollRecv();
     void cleanup();
