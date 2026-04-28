@@ -91,6 +91,9 @@ SRCLinkWebSocketClient::~SRCLinkWebSocketClient()
 
 void SRCLinkWebSocketClient::onConnected()
 {
+    reconnectCount = 0;
+    reconnectTimer->stop();
+    reconnectPending = false;
     API_LOG("WebSocket connected");
     emit connected();
 }

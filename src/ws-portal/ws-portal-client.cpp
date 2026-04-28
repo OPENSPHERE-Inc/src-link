@@ -246,6 +246,9 @@ void WsPortalClient::onWsPortalsReady(const WsPortalArray &portals)
 
 void WsPortalClient::onConnected()
 {
+    reconnectCount = 0;
+    reconnectTimer->stop();
+    reconnectPending = false;
     API_LOG("WebSocket connected");
     emit connected();
 }

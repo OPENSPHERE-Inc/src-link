@@ -90,6 +90,9 @@ public:
     void cancelAllSilently();
 
 private:
+    // FIXME: Wrap RequestContext in std::unique_ptr and release ownership at
+    // startRequest() to remove the duplicated `delete ctx` cleanup paths in the
+    // 5 verb methods. Defer to a separate refactor PR.
     struct RequestContext {
         CURL *easy = nullptr;
         QByteArray responseData;

@@ -197,10 +197,10 @@ void HttpRequestInvoker::handleResponse(
                 } else {
                     // Refresh failed: clear the stored tokens so the user is forced
                     // back through the OAuth2 authorization flow on the next request.
-                    self->sequencer->oauth2Client->unlink();
                     QMutexLocker locker(&self->sequencer->mutex);
                     self->sequencer->requestQueue.removeOne(self);
                     locker.unlock();
+                    self->sequencer->oauth2Client->unlink();
                     emit self->finished(HttpError::AuthenticationRequired, data);
                     self->deleteLater();
                 }
