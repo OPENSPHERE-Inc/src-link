@@ -96,14 +96,23 @@ void WsClient::open(const QUrl &url)
     }
     // Some servers require an Origin header for the upgrade handshake.
     if (!requestHeaders.contains("Origin")) {
-        QString scheme;
-        if (url.scheme().compare("wss", Qt::CaseInsensitive) == 0) {
-            scheme = "https";
+        const QString urlScheme = url.scheme().toLower();
+        QString originScheme;
+        if (urlScheme == "wss") {
+            originScheme = "https";
         } else {
-            scheme = "http";
+            originScheme = "http";
         }
-        QByteArray origin = QString("%1://%2").arg(scheme, url.host()).toUtf8();
-        slist = curl_slist_append(slist, QByteArray("Origin: " + origin).constData());
+        // RFC 6454 §6.1: omit the port when it matches the scheme default.
+        const int port = url.port();
+        QString origin;
+        if ((port == -1) || (port == 80 && (urlScheme == "ws" || urlScheme == "http")) ||
+            (port == 443 && (urlScheme == "wss" || urlScheme == "https"))) {
+            origin = QString("%1://%2").arg(originScheme, url.host());
+        } else {
+            origin = QString("%1://%2:%3").arg(originScheme, url.host()).arg(port);
+        }
+        slist = curl_slist_append(slist, QByteArray("Origin: " + origin.toUtf8()).constData());
     }
     headerList = slist;
 
@@ -129,7 +138,7 @@ void WsClient::performConnect()
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_3);
-    curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT, 5L);
+    curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
     curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
     // TCP keepalive for dead peer detection (NAT timeout, cable unplug)
     curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -170,6 +179,9 @@ void WsClient::performConnect()
     QPointer<WsClient> guard(this);
     connectThread = std::thread([guard, easyLocal, gen]() {
         CURLcode res = curl_easy_perform(easyLocal);
+        // QPointer contract: guard.data() is the receiver, but its dereference happens
+        // lazily inside the queued lambda on the UI thread, after dtor's joinConnectThread()
+        // ensures the worker has finished.
         QMetaObject::invokeMethod(
             guard.data(),
             [guard, res, gen]() {
@@ -275,6 +287,8 @@ void WsClient::cleanup()
         // Detach via deleteLater() so a cleanup() invoked synchronously from inside pollRecv()
         // (the recvNotifier's own slot) does not destroy the QObject whose signal stack is active.
         recvNotifier->setEnabled(false);
+        // Order: notifier disconnect/deleteLater must precede curl_easy_cleanup so the
+        // socket fd is not torn out from under an active slot.
         recvNotifier->disconnect();
         recvNotifier->deleteLater();
         recvNotifier = nullptr;
@@ -349,6 +363,7 @@ qint64 WsClient::sendRaw(const char *data, size_t len, unsigned int flags, bool 
 
     size_t totalSent = 0;
     int selectRetries = 0;
+    // UI thread only — no `easy` reset can race the loop iteration.
     while (totalSent < len) {
         size_t sent = 0;
         CURLcode res = curl_ws_send(easy, data + totalSent, len - totalSent, &sent, 0, flags);
@@ -401,12 +416,13 @@ void WsClient::ping()
         return;
     }
 
-    pingTimestamp = QDateTime::currentMSecsSinceEpoch();
     size_t sent = 0;
     CURLcode res = curl_ws_send(easy, "", 0, &sent, 0, CURLWS_PING);
     // CURLE_AGAIN here just means the socket buffer is briefly full; treat it as best-effort.
     // Any other error indicates the connection is gone — handle the same way as a recv failure.
-    if (res != CURLE_OK && res != CURLE_AGAIN) {
+    if (res == CURLE_OK) {
+        pingTimestamp = QDateTime::currentMSecsSinceEpoch();
+    } else if (res != CURLE_AGAIN) {
         obs_log(LOG_DEBUG, "WsClient ping send failed: %s", curl_easy_strerror(res));
         // Mark disconnected synchronously so subsequent ping ticks short-circuit via isValid().
         connected = false;
@@ -463,13 +479,24 @@ void WsClient::pollRecv()
                 obs_log(LOG_DEBUG, "WsClient close echo failed: %s", curl_easy_strerror(echoRes));
             }
             connected = false;
+            if (!fragmentBuffer.isEmpty()) {
+                obs_log(
+                    LOG_INFO, "Discarding partial fragmented message (%lld bytes, type=%d) on close",
+                    static_cast<long long>(fragmentBuffer.size()), static_cast<int>(fragmentType)
+                );
+            }
             cleanup();
             emit closed();
             return;
         }
 
         if (meta->flags & CURLWS_PONG) {
-            qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - pingTimestamp;
+            if (pingTimestamp == 0) {
+                // Unsolicited PONG (RFC 6455 §5.5.3) — skip RTT report.
+                continue;
+            }
+            const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - pingTimestamp;
+            pingTimestamp = 0; // reset after consuming
             emit pongReceived(static_cast<quint64>(elapsed >= 0 ? elapsed : 0));
             continue;
         }

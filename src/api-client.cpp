@@ -23,7 +23,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <climits>
 
 #include <QMessageBox>
-#include <QRandomGenerator>
 #include <QDesktopServices>
 #include <QString>
 #include <QJsonDocument>
@@ -152,7 +151,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     oauth2Client->setRefreshTokenUrl(TOKEN_URL);
     oauth2Client->setClientId(CLIENT_ID);
     oauth2Client->setClientSecret(CLIENT_SECRET);
-    oauth2Client->setLocalPort(QRandomGenerator::system()->bounded(8000, 9000));
+    oauth2Client->setLocalPort(0);
     oauth2Client->setScope(QString::fromLatin1(SCOPE));
     oauth2Client->setStore(settings);
 
@@ -220,7 +219,7 @@ SRCLinkApiClient::SRCLinkApiClient(QObject *parent)
     tokenRefreshTimer->setSingleShot(true);
     connect(tokenRefreshTimer, &QTimer::timeout, this, [this]() { refresh(); });
 
-    if (oauth2Client->expires() - 60 <= QDateTime().currentSecsSinceEpoch()) {
+    if (oauth2Client->expires() - 60 <= QDateTime::currentSecsSinceEpoch()) {
         // Refresh token now
         refresh();
     } else {
@@ -330,6 +329,10 @@ void SRCLinkApiClient::terminate()
     API_LOG("Terminating API client.");
     terminating = true;
     uplink = QJsonObject();
+    // FIXME: deleteUplink(true) here is fire-and-forget — the in-flight DELETE is
+    // canceled by ~CurlHttpClient on plugin teardown, leaving the server uplink
+    // entry until its TTL. Replace with a bounded QEventLoop pump (or a sync
+    // curl_easy_perform call) in a separate PR.
     deleteUplink(true);
 }
 

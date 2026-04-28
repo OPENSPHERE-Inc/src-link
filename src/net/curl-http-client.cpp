@@ -22,6 +22,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "linux-ca-locations.hpp"
 #include "../plugin-support.h"
 
+namespace {
+bool containsCrlfOrNul(const QByteArray &data)
+{
+    return data.contains('\r') || data.contains('\n') || data.contains('\0');
+}
+} // namespace
+
 CurlHttpClient::CurlHttpClient(QObject *parent) : QObject(parent), multi(curl_multi_init()), pollTimer(new QTimer(this))
 {
     obs_log(LOG_DEBUG, "CurlHttpClient created");
@@ -65,6 +72,17 @@ CURL *CurlHttpClient::createEasyHandle(
 
     struct curl_slist *headerList = nullptr;
     for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
+        if (containsCrlfOrNul(it.key()) || containsCrlfOrNul(it.value())) {
+            obs_log(
+                LOG_ERROR, "CurlHttpClient: Refusing to send request with CR/LF/NUL in header (key=%s)",
+                it.key().constData()
+            );
+            if (headerList) {
+                curl_slist_free_all(headerList);
+            }
+            curl_easy_cleanup(easy);
+            return nullptr;
+        }
         QByteArray headerLine = it.key() + ": " + it.value();
         struct curl_slist *next = curl_slist_append(headerList, headerLine.constData());
         if (!next) {
@@ -81,6 +99,8 @@ CURL *CurlHttpClient::createEasyHandle(
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_3);
+    curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, "http,https");
+    curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
     // Do not follow redirects: libcurl would replay the caller-supplied Authorization
     // header on the redirect target, leaking the OAuth2 Bearer token to a different host.
     // SRC-Link API endpoints are not expected to return 30x; any future endpoint that
@@ -338,6 +358,7 @@ size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void
 {
     auto *ctx = static_cast<RequestContext *>(userdata);
     if (nmemb && size > SIZE_MAX / nmemb) {
+        ctx->responseTooLarge = true;
         return 0;
     }
     size_t totalSize = size * nmemb;

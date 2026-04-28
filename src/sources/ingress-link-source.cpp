@@ -482,15 +482,21 @@ obs_properties_t *IngressLinkSource::getProperties()
         connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
         [](obs_properties_t *, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            QPointer<IngressLinkSource> guard(ingressLinkSource);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
                 // FIXME: Re-entrancy hazard — opening source properties from within a properties
                 // button callback can re-enter the OBS frontend properties dialog.
                 QObject::connect(
                     invoker, &HttpRequestInvoker::finished, ingressLinkSource,
-                    [ingressLinkSource](HttpError, QByteArray) {
-                        // Reload source properties
-                        OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
+                    [guard](HttpError, QByteArray) {
+                        if (!guard) {
+                            return;
+                        }
+                        OBSSourceAutoRelease source = obs_weak_source_get_source(guard->weakSource);
+                        if (!source) {
+                            return;
+                        }
                         obs_frontend_open_source_properties(source);
                     }
                 );
@@ -638,8 +644,18 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
         });
     } else {
         // putConnection() returned nullptr (CHECK_CLIENT_TOKEN failed); persist locally
-        // so the source still records the user's intent.
-        saveSettings(settingsRef);
+        // so the source still records the user's intent. Defer to mirror the if-branch's
+        // queued semantics and avoid running file I/O on the caller's stack.
+        QMetaObject::invokeMethod(
+            this,
+            [guard, settingsRef]() {
+                if (!guard) {
+                    return;
+                }
+                guard->saveSettings(settingsRef);
+            },
+            Qt::QueuedConnection
+        );
     }
 }
 

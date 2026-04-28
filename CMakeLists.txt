@@ -155,7 +155,8 @@ function(_src_link_setup_curl)
     if(NOT TARGET mbedtls
        OR NOT TARGET mbedx509
        OR NOT TARGET mbedcrypto)
-      message(FATAL_ERROR "mbedtls FetchContent targets missing — _src_link_setup_mbedtls() must run first")
+      message(FATAL_ERROR "SRC-Link does not support this host platform. Only Linux, macOS, and Windows are supported. \
+mbedtls FetchContent targets are missing because _src_link_setup_mbedtls() runs only on Linux.")
     endif()
     # FIXME: passing target names as strings relies on CMake ≥ 3.22 (CMP0125 NEW) so regular variables shadow
     # find_library cache lookups and prevent system mbedtls fallback. Migrate to find_package(MbedTLS CONFIG) once
@@ -236,6 +237,9 @@ if(OS_LINUX)
   set(SRC_LINK_LINUX_CA_PATH
       "/etc/ssl/certs"
       CACHE STRING "CA bundle path for Linux TLS (directory → CURLOPT_CAPATH, file → CURLOPT_CAINFO)")
+  if(SRC_LINK_LINUX_CA_PATH MATCHES "[\"\\\\]")
+    message(FATAL_ERROR "SRC_LINK_LINUX_CA_PATH must not contain '\"' or '\\\\' characters: ${SRC_LINK_LINUX_CA_PATH}")
+  endif()
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SRC_LINK_LINUX_CA_PATH="${SRC_LINK_LINUX_CA_PATH}")
 endif()
 

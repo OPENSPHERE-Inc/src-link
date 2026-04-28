@@ -94,7 +94,14 @@ bool LocalHttpServer::listen(int port)
     if (setsockopt(
             serverSocket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char *>(&optval), sizeof(optval)
         ) != 0) {
-        obs_log(LOG_WARNING, "LocalHttpServer: setsockopt(SO_EXCLUSIVEADDRUSE) failed with error %d", WSAGetLastError());
+        obs_log(
+            LOG_ERROR,
+            "LocalHttpServer: setsockopt(SO_EXCLUSIVEADDRUSE) failed (WSAGetLastError=%d) — refusing to listen for OAuth2 callback on shared port",
+            WSAGetLastError()
+        );
+        closeSocket(serverSocket);
+        serverSocket = INVALID_SOCKET_HANDLE;
+        return false;
     }
 #else
     // Allow address reuse for quick restart after close

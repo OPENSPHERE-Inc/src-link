@@ -24,7 +24,6 @@ src-link/
 ├── CMakePresets.json            # CMake presets (windows-x64, macos, linux-x86_64, linux-aarch64, CI variants)
 ├── buildspec.json               # Build specification (name, version, dependencies, UUIDs)
 ├── build.ps1                    # Local Windows build script (RelWithDebInfo)
-├── Frameworks.cmake.in          # macOS framework configuration
 ├── .clang-format                # C++ code style (clang-format ≥ 16)
 ├── .cmake-format.json           # CMake code style
 ├── .github/
@@ -41,7 +40,15 @@ src-link/
 │   ├── plugin-main.cpp          # Plugin entry point (module load/unload)
 │   ├── api-client.hpp / .cpp    # SRCLinkApiClient: central orchestrator, OAuth, REST API, WebSocket
 │   ├── api-websocket.hpp / .cpp # SRCLinkWebSocketClient: control API WebSocket client
-│   ├── request-invoker.hpp / .cpp # HTTP request sequencing (OAuth2 via in-tree src/net/ stack)
+│   ├── net/
+│   │   ├── http-request-invoker.hpp / .cpp   # OAuth2-aware HTTP request invoker
+│   │   ├── http-response.hpp                 # HTTP response struct
+│   │   ├── http-error.hpp / .cpp             # HTTP error mapping helpers
+│   │   ├── curl-http-client.hpp / .cpp       # libcurl-based HTTP client
+│   │   ├── ws-client.hpp / .cpp              # libcurl-based WebSocket client
+│   │   ├── oauth2-client.hpp / .cpp          # OAuth2 authorization-code flow client
+│   │   ├── local-http-server.hpp / .cpp      # OAuth2 redirect-uri loopback server
+│   │   └── linux-ca-locations.hpp / .cpp     # Linux CA bundle path discovery
 │   ├── settings.hpp / .cpp      # SRCLinkSettingsStore: persistent settings (OBS profile INI)
 │   ├── schema.hpp               # JSON data schemas (Account, Party, Stage, Uplink, Downlink, etc.)
 │   ├── utils.hpp / .cpp         # Utility functions, encoder helpers, network helpers
