@@ -63,6 +63,11 @@ invoke_formatter() {
           log_error "cmake-format is not version 0.6.13 or above (found ${cmake_format_version})."
           exit 2
         fi
+
+        if is-at-least 0.6.14 ${cmake_format_version}; then
+          log_error "cmake-format must be exactly 0.6.13 (CI pinned). Got ${cmake_format_version}."
+          exit 2
+        fi
       } else {
         log_error "No viable cmake-format version found (required 0.6.13)"
         exit 2

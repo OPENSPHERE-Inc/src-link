@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QMessageBox>
 
+#include "../net/http-error.hpp"
+#include "../net/http-request-invoker.hpp"
 #include "../outputs/egress-link-output.hpp"
 #include "egress-link-dock.hpp"
 #include "egress-link-connection-widget.hpp"
@@ -67,10 +69,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(apiClient, SIGNAL(uplinkReady(const UplinkInfo &)), this, SLOT(onUplinkReady(const UplinkInfo &)));
     connect(apiClient, SIGNAL(uplinkFailed(const QString &)), this, SLOT(onUplinkFailed(const QString &)));
     connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
-    connect(
-        apiClient, SIGNAL(putUplinkFailed(const QString &, QNetworkReply::NetworkError)), this,
-        SLOT(onPutUplinkFailed(const QString &, QNetworkReply::NetworkError))
-    );
+    connect(apiClient, &SRCLinkApiClient::putUplinkFailed, this, &EgressLinkDock::onPutUplinkFailed);
 
     connect(ui->participantComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onActiveParticipantChanged(int)));
     connect(ui->interlockTypeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onInterlockTypeChanged(int)));
@@ -78,7 +77,7 @@ EgressLinkDock::EgressLinkDock(SRCLinkApiClient *_apiClient, QWidget *parent)
     connect(ui->controlPanelButton, SIGNAL(clicked()), this, SLOT(onControlPanelButtonClicked()));
     connect(ui->membershipsButton, SIGNAL(clicked()), this, SLOT(onMembershipsButtonClicked()));
     connect(ui->signupButton, SIGNAL(clicked()), this, SLOT(onSignupButtonClicked()));
-    connect(ui->redeemInviteCodeButton, &QPushButton::clicked, this, [&]() { redeemInviteCodeDialog->show(); });
+    connect(ui->redeemInviteCodeButton, &QPushButton::clicked, this, [this]() { redeemInviteCodeDialog->show(); });
 
     connect(
         redeemInviteCodeDialog, SIGNAL(accepted(const QString &)), this,
@@ -294,15 +293,18 @@ void EgressLinkDock::onUplinkFailed(const QString &)
     ui->seatAllocationStatus->setText(QTStr("Error"));
     setThemeID(ui->seatAllocationStatus, "error", "text-danger");
 
-    qDeleteAll(connectionWidgets);
+    for (auto widget : connectionWidgets) {
+        ui->connectionsLayout->removeWidget(widget);
+        widget->deleteLater();
+    }
     connectionWidgets.clear();
 
     updateGuidance();
 }
 
-void EgressLinkDock::onPutUplinkFailed(const QString &, QNetworkReply::NetworkError error)
+void EgressLinkDock::onPutUplinkFailed(const QString &, HttpError error)
 {
-    if (error == QNetworkReply::ContentConflictError) {
+    if (error == HttpError::ContentConflict) {
         errorText = QTStr("UuidConflictErrorDueToSecurity");
     } else {
         errorText = QTStr("PutUplinkFailed");
@@ -346,10 +348,10 @@ void EgressLinkDock::updateConnections(const Stage &stage)
 
 void EgressLinkDock::clearConnections()
 {
-    foreach (const auto widget, connectionWidgets) {
+    while (!connectionWidgets.isEmpty()) {
+        auto widget = connectionWidgets.takeFirst();
         ui->connectionsLayout->removeWidget(widget);
         widget->deleteLater();
-        connectionWidgets.removeOne(widget);
     }
 }
 
@@ -400,13 +402,15 @@ void EgressLinkDock::onSignupButtonClicked()
 
 void EgressLinkDock::onRedeemInviteCodeAccepted(const QString &inviteCode)
 {
-    connect(
-        apiClient->redeemInviteCode(inviteCode), &RequestInvoker::finished, this,
-        [this](QNetworkReply::NetworkError error) {
-            if (error != QNetworkReply::NoError) {
-                QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
-                return;
-            }
+    auto *invoker = apiClient->redeemInviteCode(inviteCode);
+    if (!invoker) {
+        QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
+        return;
+    }
+    connect(invoker, &HttpRequestInvoker::finished, this, [this](HttpError error) {
+        if (error != HttpError::NoError) {
+            QMessageBox::warning(this, QTStr("RedeemInvitationCode"), QTStr("RedeemInvitationCodeFailed"));
+            return;
         }
-    );
+    });
 }

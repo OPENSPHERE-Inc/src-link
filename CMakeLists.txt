@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.26)
+cmake_minimum_required(VERSION 3.22...3.26)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
@@ -37,7 +37,217 @@ add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+# =============================================================================
+# curl static build (WebSocket support enabled)
+#
+# obs-deps ships curl without WebSocket protocol support (CURL_VERSION_WEBSOCKETS absent). We build curl from source
+# with ENABLE_WEBSOCKETS=ON and statically link it, so the plugin carries its own curl instance independent of OBS's
+# libcurl.dll. TLS backend: platform-native (Schannel on Windows, Secure Transport on macOS, mbedtls on Linux) to use OS
+# CA certificate stores without bundling CA files.
+#
+# Linux note: mbedtls does not load the system trust store automatically. The CA path is supplied at build time via the
+# SRC_LINK_LINUX_CA_PATH CMake cache variable (see the OS_LINUX block below) and consumed at runtime by
+# src/net/linux-ca-locations.cpp; override -DSRC_LINK_LINUX_CA_PATH=<path> at configure time for distros with
+# non-default trust store layouts.
+# =============================================================================
+include(FetchContent)
+
+# --- mbedtls (Linux only — Windows/macOS use OS-native TLS) ---
+if(OS_LINUX)
+  FetchContent_Declare(
+    mbedtls
+    URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
+    URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
+
+  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
+  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
+  function(_src_link_setup_mbedtls)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
+    # The plugin is a shared object (MODULE), so all static dependencies must be compiled with -fPIC to allow
+    # relocations against them in the final link.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # The plugin builds with CMAKE_COMPILE_WARNING_AS_ERROR=TRUE; do not propagate that into the vendored mbedtls tree
+    # -- it is upstream code we cannot patch when new compiler diagnostics are introduced.
+    set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+    set(USE_STATIC_MBEDTLS_LIBRARY ON)
+    set(USE_SHARED_MBEDTLS_LIBRARY OFF)
+    set(ENABLE_TESTING OFF)
+    set(ENABLE_PROGRAMS OFF)
+    set(MBEDTLS_AS_SUBPROJECT ON)
+    set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON)
+    FetchContent_MakeAvailable(mbedtls)
+
+    # Mirror the per-target -Werror suppression applied to curl below, in case future compiler diagnostics turn upstream
+    # warnings into hard errors here too.
+    foreach(_mbedtls_target IN ITEMS mbedtls mbedx509 mbedcrypto)
+      if(TARGET ${_mbedtls_target})
+        set_target_properties(${_mbedtls_target} PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+        target_compile_options(${_mbedtls_target} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang,GNU>:-Wno-error>)
+      endif()
+    endforeach()
+  endfunction()
+  _src_link_setup_mbedtls()
+endif()
+
+# --- curl (static, WebSocket enabled) ---
+# FIXME: macOS universal builds (CMAKE_OSX_ARCHITECTURES="arm64;x86_64") combined with CURL_USE_SECTRANSP=ON depend on
+# curl's CMake build handling multi-arch correctly, and SECTRANSP itself is deprecated in curl 8.x. If CI exposes
+# breakage, switch to (a) per-arch builds + lipo merge or (b) OpenSSL on Apple platforms. FIXME: curl 8.12.1 pin
+# retained because (a) 8.13+ FIN-bit WS API needed for fragmented message handling, (b) `-Wambiguous-macro` on
+# SIZE_T_MAX (root cause of the per-target -Wno-error block below) was fixed upstream in 8.13. Bump to latest 8.13.x in
+# a separate PR after re-validating the 4 CI targets and revisiting the -Wno-error suppression.
+FetchContent_Declare(
+  curl
+  URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.gz
+  URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
+
+function(_src_link_setup_curl)
+  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
+  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
+  # Belt-and-suspenders: refuse find_package() outright for everything we do not ship, so curl cannot accidentally link
+  # against host libraries (Homebrew on the macOS runner, etc.) even if the policy chain still routes around our local
+  # CURL_BROTLI / CURL_ZSTD overrides below.
+  foreach(
+    _disabled_pkg IN
+    ITEMS Brotli
+          CURL
+          GSS
+          LibIDN2
+          LibPSL
+          LibSSH
+          LibSSH2
+          NGHTTP2
+          NGTCP2
+          ZLIB
+          Zstd)
+    set(CMAKE_DISABLE_FIND_PACKAGE_${_disabled_pkg} TRUE)
+  endforeach()
+  # The plugin is a shared object (MODULE), so libcurl.a must be compiled with -fPIC to allow relocations against it in
+  # the final link (otherwise GNU ld rejects R_X86_64_PC32 against GLIBC symbols on Linux).
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  # The plugin builds with CMAKE_COMPILE_WARNING_AS_ERROR=TRUE; do not propagate that into the vendored curl tree --
+  # AppleClang's -Wambiguous-macro fires on curl 8.12.1's SIZE_T_MAX uses, and similar diagnostics may surface in other
+  # upstream code we cannot patch. Override both the generic flag and the Xcode-generator-specific attribute, since
+  # cmake/macos/xcode.cmake already translated CMAKE_COMPILE_WARNING_AS_ERROR=TRUE into GCC_TREAT_WARNINGS_AS_ERRORS=YES
+  # on the Xcode side.
+  set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+  set(CMAKE_XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS NO)
+  # Static library only
+  set(BUILD_SHARED_LIBS OFF)
+  set(BUILD_CURL_EXE OFF)
+  set(BUILD_TESTING OFF)
+  set(CURL_STATICLIB ON)
+  # TLS backend: platform-native for OS CA store access
+  if(OS_WINDOWS)
+    set(CURL_USE_SCHANNEL ON)
+    set(CURL_USE_MBEDTLS OFF)
+    set(CURL_USE_OPENSSL OFF)
+  elseif(OS_MACOS)
+    set(CURL_USE_SECTRANSP ON)
+    set(CURL_USE_MBEDTLS OFF)
+    set(CURL_USE_OPENSSL OFF)
+  else()
+    set(CURL_USE_MBEDTLS ON)
+    set(CURL_USE_OPENSSL OFF)
+    if(NOT TARGET mbedtls
+       OR NOT TARGET mbedx509
+       OR NOT TARGET mbedcrypto)
+      message(FATAL_ERROR "SRC-Link does not support this host platform. Only Linux, macOS, and Windows are supported. \
+mbedtls FetchContent targets are missing because _src_link_setup_mbedtls() runs only on Linux.")
+    endif()
+    # FIXME: passing target names as strings relies on CMake ≥ 3.22 (CMP0125 NEW) so regular variables shadow
+    # find_library cache lookups and prevent system mbedtls fallback. Migrate to find_package(MbedTLS CONFIG) once
+    # mbedtls ships a config package, or feed real file paths via generator-expression-aware curl support.
+    FetchContent_GetProperties(mbedtls SOURCE_DIR mbedtls_SOURCE_DIR)
+    set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include")
+    set(MBEDTLS_LIBRARY mbedtls)
+    set(MBEDX509_LIBRARY mbedx509)
+    set(MBEDCRYPTO_LIBRARY mbedcrypto)
+  endif()
+  # WebSocket support
+  set(ENABLE_WEBSOCKETS ON)
+  # Disable unused protocols (binary size reduction)
+  set(CURL_DISABLE_LDAP ON)
+  set(CURL_DISABLE_LDAPS ON)
+  set(CURL_DISABLE_FTP ON)
+  set(CURL_DISABLE_FTPS ON)
+  set(CURL_DISABLE_TFTP ON)
+  set(CURL_DISABLE_SMTP ON)
+  set(CURL_DISABLE_SMTPS ON)
+  set(CURL_DISABLE_POP3 ON)
+  set(CURL_DISABLE_POP3S ON)
+  set(CURL_DISABLE_IMAP ON)
+  set(CURL_DISABLE_IMAPS ON)
+  set(CURL_DISABLE_TELNET ON)
+  set(CURL_DISABLE_DICT ON)
+  set(CURL_DISABLE_GOPHER ON)
+  set(CURL_DISABLE_MQTT ON)
+  set(CURL_DISABLE_RTSP ON)
+  set(CURL_DISABLE_ALTSVC ON)
+  # Pin off optional dependencies for reproducible builds. libssh2 in particular triggers macOS link failures ("library
+  # 'ssh2' not found") because curl auto-detects Homebrew's copy and enables scp/sftp without their library path being
+  # available to the final link of osi-src-link.so.
+  set(CURL_USE_LIBPSL OFF)
+  set(CURL_USE_LIBSSH2 OFF)
+  set(CURL_USE_LIBSSH OFF)
+  set(CURL_USE_GSSAPI OFF)
+  set(CURL_BROTLI OFF)
+  set(CURL_ZLIB OFF)
+  set(CURL_ZSTD OFF)
+  set(USE_LIBIDN2 OFF)
+  set(USE_NGHTTP2 OFF)
+  # Disable SMB/SMBS too, since neither is needed and SMB is the only remaining non-HTTP protocol enabled by default.
+  set(CURL_DISABLE_SMB ON)
+  set(CURL_DISABLE_SMBS ON)
+  set(CURL_DISABLE_INSTALL ON)
+  set(CURL_ENABLE_EXPORT_TARGET OFF)
+  FetchContent_MakeAvailable(curl)
+
+  # Defensively strip -Werror from curl's compile units. The CMAKE_COMPILE_WARNING_AS_ERROR /
+  # CMAKE_XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS variables set above do not reliably reach curl's targets: the
+  # Xcode generator reads CMAKE_XCODE_ATTRIBUTE_* from the top-level directory at generate time rather than from this
+  # function's scope, so AppleClang still rejects curl 8.12.1's SIZE_T_MAX uses (-Wambiguous-macro) under -Werror. Force
+  # the override per target.
+  if(NOT TARGET libcurl_static AND NOT TARGET libcurl_object)
+    message(FATAL_ERROR "curl target names changed — update _src_link_setup_curl() -Werror suppression")
+  endif()
+  foreach(_curl_target IN ITEMS libcurl_static libcurl_object)
+    if(TARGET ${_curl_target})
+      set_target_properties(${_curl_target} PROPERTIES XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS NO
+                                                       COMPILE_WARNING_AS_ERROR OFF)
+      target_compile_options(${_curl_target} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang,GNU>:-Wno-error>)
+    endif()
+  endforeach()
+endfunction()
+_src_link_setup_curl()
+# =============================================================================
+
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE CURL_STATICLIB)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs CURL::libcurl_static)
+
+if(OS_LINUX)
+  # CA bundle location consumed at runtime by src/net/linux-ca-locations.cpp. Default targets Debian / Ubuntu / Arch.
+  # Override at configure time with -DSRC_LINK_LINUX_CA_PATH=<path> to point at the trust store layout of the build
+  # target (e.g. /etc/pki/tls/certs/ca-bundle.crt for RHEL/Fedora, /etc/ssl/cert.pem for Alpine). The runtime helper
+  # detects whether the path is a directory or a regular file and routes it to CURLOPT_CAPATH / CURLOPT_CAINFO
+  # accordingly.
+  set(SRC_LINK_LINUX_CA_PATH
+      "/etc/ssl/certs"
+      CACHE STRING "CA bundle path for Linux TLS (directory → CURLOPT_CAPATH, file → CURLOPT_CAINFO)")
+  if(SRC_LINK_LINUX_CA_PATH MATCHES "[\"\\\\]")
+    message(FATAL_ERROR "SRC_LINK_LINUX_CA_PATH must not contain '\"' or '\\\\' characters: ${SRC_LINK_LINUX_CA_PATH}")
+  endif()
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SRC_LINK_LINUX_CA_PATH="${SRC_LINK_LINUX_CA_PATH}")
+endif()
+
+if(OS_WINDOWS)
+  # Winsock + Win32 crypto for the curl Schannel backend. FIXME: verify CURL::libcurl_static INTERFACE deps and drop
+  # redundant entries.
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi crypt32 bcrypt)
+endif()
 
 target_compile_definitions(
   ${CMAKE_PROJECT_NAME}
@@ -50,8 +260,8 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core Network WebSockets)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::WebSockets)
+  find_package(Qt6 REQUIRED COMPONENTS Widgets Core)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
                                   -Wno-comma>)
@@ -64,19 +274,6 @@ endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/shared/properties-view)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::properties-view)
-
-set(o2_SRCS
-    lib/o2/src/o2.cpp
-    lib/o2/src/o2pollserver.cpp
-    lib/o2/src/o2reply.cpp
-    lib/o2/src/o2replyserver.cpp
-    lib/o2/src/o2requestor.cpp
-    lib/o2/src/o2simplecrypt.cpp
-    lib/o2/src/o0jsonresponse.cpp
-    lib/o2/src/o0settingsstore.cpp
-    lib/o2/src/o0baseauth.cpp)
-
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${o2_SRCS})
 
 configure_file(lib/obs-websocket/src/plugin-macros.h.in plugin-macros.generated.h)
 
@@ -112,7 +309,6 @@ target_sources(
   PRIVATE src/plugin-main.cpp
           src/api-client.cpp
           src/api-websocket.cpp
-          src/request-invoker.cpp
           src/schema.hpp
           src/utils.cpp
           src/settings.cpp
@@ -135,50 +331,19 @@ target_sources(
           src/outputs/egress-link-output.cpp
           src/outputs/audio-source.cpp
           src/ws-portal/ws-portal-client.cpp
-          src/ws-portal/event-handler.cpp)
+          src/ws-portal/event-handler.cpp
+          src/net/http-error.cpp
+          src/net/curl-http-client.cpp
+          src/net/ws-client.cpp
+          src/net/linux-ca-locations.cpp
+          src/net/local-http-server.cpp
+          src/net/oauth2-client.cpp
+          src/net/http-request-invoker.cpp)
 
 target_include_directories(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE ${CMAKE_SOURCE_DIR}/lib/o2/src ${CMAKE_SOURCE_DIR}/shared/properties-view
-          ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area ${CMAKE_SOURCE_DIR}/shared/qt/wrappers
-          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
-
-if(NOT buildspec)
-  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" buildspec)
-endif()
-string(
-  JSON
-  qtversion
-  GET
-  ${buildspec}
-  dependencies
-  qt6
-  version)
-
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/lib/QtWebSockets.framework"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "."
-    REGEX "Headers" EXCLUDE)
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-universal/plugins/tls"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION ".")
-
-  configure_file(Frameworks.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake" @ONLY)
-  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/Frameworks.cmake")
-endif()
+  PRIVATE ${CMAKE_SOURCE_DIR}/shared/properties-view ${CMAKE_SOURCE_DIR}/shared/qt/vertical-scroll-area
+          ${CMAKE_SOURCE_DIR}/shared/qt/wrappers ${CMAKE_SOURCE_DIR}/lib/obs-websocket/lib
+          ${CMAKE_SOURCE_DIR}/lib/obs-websocket/src)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
-
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-  install(
-    FILES "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/bin/Qt6WebSockets.dll"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit)
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/obs-deps-qt6-${qtversion}-x64/plugins/tls"
-    CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION bin/64bit)
-endif()

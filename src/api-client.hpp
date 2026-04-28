@@ -18,17 +18,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include <QNetworkAccessManager>
 #include <QByteArray>
 #include <QException>
 #include <QTimer>
 
-#include <o2.h>
-
 #include "plugin-support.h"
 #include "schema.hpp"
 #include "settings.hpp"
-#include "request-invoker.hpp"
+#include "net/http-error.hpp"
+#include "net/oauth2-client.hpp"
+#include "net/http-request-invoker.hpp"
+#include "net/curl-http-client.hpp"
 #include "api-websocket.hpp"
 
 #define UPLINK_STATUS_INACTIVE "inactive"
@@ -51,10 +51,10 @@ class SRCLinkApiClient : public QObject {
 
     QString uuid;
     SRCLinkSettingsStore *settings;
-    O2 *client;
-    QNetworkAccessManager *networkManager;
+    OAuth2Client *oauth2Client;
+    CurlHttpClient *httpClient;
     QMap<int, bool> usedPorts;
-    RequestSequencer *sequencer;
+    HttpRequestSequencer *sequencer;
     int activeOutputs;
     int standByOutputs;
     SRCLinkWebSocketClient *websocket;
@@ -72,7 +72,7 @@ class SRCLinkApiClient : public QObject {
     QMap<QString, DownlinkInfo> downlinks;
     WsPortalArray wsPortals;
 
-    inline QString getAccessToken() { return client->token(); }
+    inline QString getAccessToken() { return oauth2Client->token(); }
 
 signals:
     void loginSucceeded();
@@ -102,7 +102,7 @@ signals:
     void deleteDownlinkSucceeded(const QString &uuid);
     void deleteDownlinkFailed(const QString &uuid);
     void putUplinkSucceeded(const UplinkInfo &uplink);
-    void putUplinkFailed(const QString &uuid, QNetworkReply::NetworkError error);
+    void putUplinkFailed(const QString &uuid, HttpError error);
     void putUplinkStatusSucceeded(const UplinkInfo &uplink);
     void putUplinkStatusFailed(const QString &uuid);
     void deleteUplinkSucceeded(const QString &uuid);
@@ -126,11 +126,11 @@ signals:
     void webSocketInvokeFailed(const QString &name, const QJsonObject &payload);
 
 private slots:
-    void onO2LinkedChanged();
-    void onO2LinkingSucceeded();
-    void onO2LinkingFailed();
-    void onO2OpenBrowser(const QUrl &url);
-    void onO2RefreshFinished(QNetworkReply::NetworkError);
+    void onOAuth2LinkedChanged();
+    void onOAuth2LinkingSucceeded();
+    void onOAuth2LinkingFailed();
+    void onOAuth2OpenBrowser(const QUrl &url);
+    void onOAuth2RefreshFinished(HttpError);
     void onWebSocketReady(bool reconnect);
     void onWebSocketAborted(const QString &reason);
     void onWebSocketDisconnected();
@@ -142,12 +142,12 @@ public:
     ~SRCLinkApiClient();
 
     inline const QString &getUuid() const { return uuid; }
-    inline const AccountInfo getAccountInfo() const { return accountInfo; }
+    inline AccountInfo getAccountInfo() const { return accountInfo; }
     inline const PartyArray &getParties() const { return parties; }
     inline const PartyEventArray &getPartyEvents() const { return partyEvents; }
     inline const PartyEventParticipantArray &getParticipants() const { return participants; }
     inline const StageArray &getStages() const { return stages; }
-    inline const UplinkInfo getUplink() const { return uplink; }
+    inline UplinkInfo getUplink() const { return uplink; }
     inline SRCLinkSettingsStore *getSettings() const { return settings; }
     inline const WsPortalArray &getWsPortals() const { return wsPortals; }
 
@@ -155,23 +155,30 @@ public slots:
     void login();
     void logout();
     bool isLoggedIn();
-    const RequestInvoker *refresh();
+    /// @note All methods returning HttpRequestInvoker* create invokers owned by this
+    /// SRCLinkApiClient (parent=this). The pointer is valid until this object is destroyed
+    /// or the invoker emits finished() (after which it self-deletes via deleteLater()).
+    /// Callers must NOT delete the returned pointer.
+    /// @warning Accessing the returned pointer after finished() has fired is a
+    /// use-after-free. Connect slots before returning to the event loop, or guard
+    /// captures with QPointer.
+    const HttpRequestInvoker *refresh();
     void syncOnlineResources();
     void clearOnlineResources();
-    const RequestInvoker *requestAccountInfo();
-    const RequestInvoker *requestParties();
-    const RequestInvoker *requestPartyEvents();
-    const RequestInvoker *requestParticipants();
-    const RequestInvoker *requestStages();
-    const RequestInvoker *requestUplink();
-    const RequestInvoker *requestDownlink(const QString &sourceUuid);
-    const RequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
-    const RequestInvoker *putDownlinkStatus(const QString &sourceUuid);
-    const RequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
-    const RequestInvoker *putUplink();
-    const RequestInvoker *putUplinkStatus();
-    const RequestInvoker *deleteUplink(const bool parallel = false);
-    const RequestInvoker *redeemInviteCode(const QString &inviteCode);
+    const HttpRequestInvoker *requestAccountInfo();
+    const HttpRequestInvoker *requestParties();
+    const HttpRequestInvoker *requestPartyEvents();
+    const HttpRequestInvoker *requestParticipants();
+    const HttpRequestInvoker *requestStages();
+    const HttpRequestInvoker *requestUplink();
+    const HttpRequestInvoker *requestDownlink(const QString &sourceUuid);
+    const HttpRequestInvoker *putDownlink(const QString &sourceUuid, const DownlinkRequestBody &requestBody);
+    const HttpRequestInvoker *putDownlinkStatus(const QString &sourceUuid);
+    const HttpRequestInvoker *deleteDownlink(const QString &sourceUuid, const bool parallel = false);
+    const HttpRequestInvoker *putUplink();
+    const HttpRequestInvoker *putUplinkStatus();
+    const HttpRequestInvoker *deleteUplink(const bool parallel = false);
+    const HttpRequestInvoker *redeemInviteCode(const QString &inviteCode);
     void putStatistics(const QString &sourceName, const QString &status, bool recording, const OutputMetric &metric);
     void putScreenshot(const QString &sourceName, const QImage &image);
     void getPicture(const QString &pitureId);

@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
+#include <algorithm>
+
 #include <obs-module.h>
 #include <obs.hpp>
 #include <util/platform.h>
@@ -45,22 +47,30 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 WsPortalClient::WsPortalClient(SRCLinkApiClient *_apiClient, QObject *parent)
     : QObject(parent),
-      apiClient(_apiClient),
       client(nullptr),
+      apiClient(_apiClient),
       status(WS_PORTAL_STATUS_INACTIVE),
-      reconnectCount(0)
+      reconnectCount(0),
+      reconnectPending(false)
 {
     intervalTimer = new QTimer(this);
+    reconnectTimer = new QTimer(this);
+    reconnectTimer->setSingleShot(true);
+    connect(reconnectTimer, &QTimer::timeout, this, [this]() {
+        reconnectPending = false;
+        if (status != WS_PORTAL_STATUS_INACTIVE && !reconnectPortalId.isEmpty()) {
+            open(reconnectPortalId);
+            emit reconnecting();
+        }
+    });
 
-    connect(apiClient, SIGNAL(ready(bool)), this, SLOT(onApiClientReady(bool)));
-    connect(
-        apiClient, SIGNAL(wsPortalsReady(const WsPortalArray &)), this, SLOT(onWsPortalsReady(const WsPortalArray &))
-    );
-    connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
-    connect(apiClient, SIGNAL(loginFailed()), this, SLOT(onLogoutSucceeded()));
+    connect(apiClient, &SRCLinkApiClient::ready, this, &WsPortalClient::onApiClientReady);
+    connect(apiClient, &SRCLinkApiClient::wsPortalsReady, this, &WsPortalClient::onWsPortalsReady);
+    connect(apiClient, &SRCLinkApiClient::logoutSucceeded, this, &WsPortalClient::onLogoutSucceeded);
+    connect(apiClient, &SRCLinkApiClient::loginFailed, this, &WsPortalClient::onLogoutSucceeded);
 
     // Setup interval timer for pinging
-    connect(intervalTimer, &QTimer::timeout, [this]() {
+    connect(intervalTimer, &QTimer::timeout, this, [this]() {
         if (status == WS_PORTAL_STATUS_ACTIVE && client && client->isValid()) {
             client->ping();
         }
@@ -95,16 +105,21 @@ void WsPortalClient::createWsSocket()
     // Ensure previous client is destroyed
     destroyWsSocket();
 
-    client = new QWebSocket("https://" + wsPortal.getFacilityView().getApiHost(), QWebSocketProtocol::Version13, this);
+    client = new WsClient(this);
 
-    connect(client, SIGNAL(connected()), this, SLOT(onConnected()));
-    connect(client, SIGNAL(disconnected()), this, SLOT(onDisconnected()));
-    connect(client, SIGNAL(textMessageReceived(const QString &)), this, SLOT(onTextMessageReceived(const QString &)));
-    connect(
-        client, SIGNAL(binaryMessageReceived(const QByteArray &)), this,
-        SLOT(onBinaryMessageReceived(const QByteArray &))
-    );
-    connect(client, SIGNAL(pong(quint64, const QByteArray &)), this, SLOT(onPong(quint64, const QByteArray &)));
+    connect(client, &WsClient::opened, this, &WsPortalClient::onConnected);
+    connect(client, &WsClient::closed, this, &WsPortalClient::onDisconnected);
+    connect(client, &WsClient::textMessageReceived, this, &WsPortalClient::onTextMessageReceived);
+    connect(client, &WsClient::binaryMessageReceived, this, &WsPortalClient::onBinaryMessageReceived);
+    connect(client, &WsClient::errorOccurred, this, [this](const QString &reason) {
+        ERROR_LOG("Error received: %s", qUtf8Printable(reason));
+
+        // WsClient may emit errorOccurred with or without a subsequent closed signal;
+        // route both through scheduleReconnect() to avoid double-scheduling with stale backoff.
+        if (status != WS_PORTAL_STATUS_INACTIVE && (!client || !client->isValid())) {
+            scheduleReconnect();
+        }
+    });
 
     API_LOG("WebSocket created for the portal: %s", qUtf8Printable(wsPortal.getName()));
 }
@@ -115,6 +130,12 @@ void WsPortalClient::destroyWsSocket()
         return;
     }
 
+    if (reconnectTimer) {
+        reconnectTimer->stop();
+        reconnectPending = false;
+    }
+
+    // Must precede client = nullptr to break any pending errorOccurred lambda dispatch.
     client->disconnect(this);
     client->close();
     client->deleteLater();
@@ -140,10 +161,10 @@ void WsPortalClient::open(const QString &portalId)
     url.setQuery(parameters);
     API_LOG("Opening WebSocket: %s", qUtf8Printable(url.toString()));
 
-    auto req = QNetworkRequest(url);
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
-
-    client->open(req);
+    QMap<QByteArray, QByteArray> headers;
+    headers.insert("Authorization", QString("Bearer %1").arg(apiClient->getAccessToken()).toLatin1());
+    client->setHeaders(headers);
+    client->open(url);
 }
 
 void WsPortalClient::start()
@@ -165,6 +186,9 @@ void WsPortalClient::start()
 
     status = WS_PORTAL_STATUS_ACTIVE;
     reconnectCount = 0;
+    reconnectTimer->stop();
+    reconnectPending = false;
+    reconnectPortalId = portalId;
     open(portalId);
 
     WsPortalEventHandler::getInstance()->subscribe(wsPortal.getEventSubscriptions());
@@ -177,6 +201,9 @@ void WsPortalClient::stop()
     }
 
     status = WS_PORTAL_STATUS_INACTIVE;
+    reconnectTimer->stop();
+    reconnectPending = false;
+    reconnectPortalId.clear();
     destroyWsSocket();
 
     if (!wsPortal.isEmpty()) {
@@ -219,25 +246,52 @@ void WsPortalClient::onWsPortalsReady(const WsPortalArray &portals)
 
 void WsPortalClient::onConnected()
 {
+    reconnectCount = 0;
+    reconnectTimer->stop();
+    reconnectPending = false;
     API_LOG("WebSocket connected");
     emit connected();
 }
 
-void WsPortalClient::onDisconnected()
+int WsPortalClient::reconnectDelayMs() const
 {
-    auto portalId = apiClient->getSettings()->getWsPortalId();
-    if (status != WS_PORTAL_STATUS_INACTIVE && !portalId.isEmpty() && portalId != "none") {
-        API_LOG("Reconnecting");
-        reconnectCount++;
-        open(portalId);
-        emit reconnecting();
-    }
+    // Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s (cap)
+    // (reconnectCount is incremented before this is called, so the first delay is BASE_DELAY_MS * 2.)
+    static constexpr int BASE_DELAY_MS = 5000;
+    static constexpr int MAX_DELAY_MS = 300000;
+    int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
+    return (std::min)(delay, MAX_DELAY_MS);
 }
 
-void WsPortalClient::onPong(quint64 elapsedTime, const QByteArray &)
+// Reconnect signal flow:
+//
+//   WsClient::errorOccurred -> [scheduleReconnect()] -> [reconnectPending] -> QTimer
+//   WsClient::closed        -> onDisconnected -> [scheduleReconnect()]
+//
+// Both paths funnel through scheduleReconnect() which is idempotent
+// via the reconnectPending flag.
+void WsPortalClient::scheduleReconnect()
 {
-    UNUSED_PARAMETER(elapsedTime);
-    API_LOG("Pong received: %llu", elapsedTime);
+    if (status == WS_PORTAL_STATUS_INACTIVE || reconnectPending) {
+        return;
+    }
+
+    auto portalId = apiClient->getSettings()->getWsPortalId();
+    if (portalId.isEmpty() || portalId == "none") {
+        return;
+    }
+
+    reconnectPending = true;
+    reconnectCount++;
+    reconnectPortalId = portalId;
+    int delay = reconnectDelayMs();
+    API_LOG("Reconnecting in %d ms (attempt %d)", delay, reconnectCount);
+    reconnectTimer->start(delay);
+}
+
+void WsPortalClient::onDisconnected()
+{
+    scheduleReconnect();
 }
 
 void WsPortalClient::onTextMessageReceived(const QString &message)
@@ -258,7 +312,15 @@ void WsPortalClient::onBinaryMessageReceived(const QByteArray &message)
 
     auto connectionId = QString::fromStdString(messageObj["connectionId"]);
     // The body is stored in msgpack encoded binary
+    if (!messageObj["body"].is_binary()) {
+        API_LOG("Invalid message body type");
+        return;
+    }
     auto body = json::from_msgpack(messageObj["body"].get_binary(), true, false);
+    if (body.is_discarded()) {
+        API_LOG("Invalid message body data");
+        return;
+    }
 
     int op = body["op"];
     auto data = body["d"];
@@ -316,22 +378,31 @@ json WsPortalClient::processRequest(const json &request)
 
     OBSDataAutoRelease data = requestData.size() ? obs_data_create_from_json(requestData.dump().c_str())
                                                  : obs_data_create();
-    auto response = obs_websocket_call_request(qUtf8Printable(requestType), data);
+    OBSWebSocketRequestResponse response(obs_websocket_call_request(qUtf8Printable(requestType), data));
     if (!response) {
         return responseJson;
     }
 
-    json requestStatus = {{"code", (int)response->status_code}, {"result", response->status_code == 100}};
-    if (response->comment) {
-        requestStatus["comment"] = response->comment;
+    obs_websocket_request_response *raw = response;
+    json requestStatus = {{"code", (int)raw->status_code}, {"result", raw->status_code == 100}};
+    if (raw->comment) {
+        requestStatus["comment"] = raw->comment;
     }
 
     responseJson["requestType"] = qUtf8Printable(requestType);
     responseJson["requestId"] = qUtf8Printable(requestId);
     responseJson["requestStatus"] = requestStatus;
-    responseJson["responseData"] = response->response_data ? json::parse(response->response_data) : nullptr;
-
-    obs_websocket_request_response_free(response);
+    if (raw->response_data) {
+        auto responseData = json::parse(raw->response_data, nullptr, false);
+        if (responseData.is_discarded()) {
+            obs_log(LOG_WARNING, "[WsPortalClient] Failed to parse response data JSON from obs-websocket");
+            responseJson["responseData"] = nullptr;
+        } else {
+            responseJson["responseData"] = std::move(responseData);
+        }
+    } else {
+        responseJson["responseData"] = nullptr;
+    }
 
     return responseJson;
 }
@@ -374,14 +445,28 @@ void WsPortalClient::sendEvent(uint64_t requiredIntent, const char *eventType, c
 
     // Filter out events with portal's event subscriptions
     // Default subscriptions is "All" (But high volume events are excluded)
-    auto eventSubscriptions = (wsPortal["event_subscription"].isUndefined() || wsPortal["event_subscriptions"].isNull())
-                                  ? (int)0x7FF
-                                  : wsPortal.getEventSubscriptions();
+    auto eventSubscriptions =
+        (wsPortal["event_subscriptions"].isUndefined() || wsPortal["event_subscriptions"].isNull())
+            ? (int)0x7FF
+            : wsPortal.getEventSubscriptions();
     if (!(requiredIntent & eventSubscriptions)) {
         return;
     }
 
-    json data = {{"eventType", eventType}, {"eventIntent", (int)requiredIntent}, {"eventData", json::parse(eventData)}};
+    json parsedEventData = nullptr;
+    if (eventData) {
+        parsedEventData = json::parse(eventData, nullptr, false);
+        if (parsedEventData.is_discarded()) {
+            obs_log(LOG_WARNING, "[WsPortalClient] Failed to parse event data JSON for event: %s", eventType);
+            return;
+        }
+    }
+
+    json data = {
+        {"eventType", eventType},
+        {"eventIntent", static_cast<int64_t>(requiredIntent)},
+        {"eventData", std::move(parsedEventData)},
+    };
     json body = {{"op", 5}, {"d", data}};
     // The body is stored in msgpack encoded binary
     json message = {{"body", json::to_msgpack(body)}};

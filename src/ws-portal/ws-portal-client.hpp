@@ -21,7 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-websocket-api.h>
 
 #include <QObject>
-#include <QWebSocket>
+#include "../net/ws-client.hpp"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -41,12 +41,15 @@ class SRCLinkApiClient;
 class WsPortalClient : public QObject {
     Q_OBJECT
 
-    QWebSocket *client;
+    WsClient *client;
     SRCLinkApiClient *apiClient;
     WsPortalStatus status;
     int reconnectCount;
+    bool reconnectPending;
     WsPortal wsPortal;
     QTimer *intervalTimer;
+    QTimer *reconnectTimer = nullptr;
+    QString reconnectPortalId;
 
     json processRequest(const json &request);
     void sendMessage(const QString &connectionId, int opcode, const json &data);
@@ -58,10 +61,12 @@ class WsPortalClient : public QObject {
     void createWsSocket();
     void destroyWsSocket();
     void open(const QString &portalId);
+    int reconnectDelayMs() const;
+    void scheduleReconnect();
 
 signals:
     void connected();
-    void ready(bool reconect);
+    void ready(bool reconnect);
     void disconnected();
     void reconnecting();
 
@@ -71,7 +76,6 @@ private slots:
     void onLogoutSucceeded();
     void onConnected();
     void onDisconnected();
-    void onPong(quint64 elapsedTime, const QByteArray &payload);
     void onTextMessageReceived(const QString &message);
     void onBinaryMessageReceived(const QByteArray &message);
     void send(const QByteArray &message);
@@ -81,7 +85,7 @@ public:
     ~WsPortalClient();
 
 public slots:
-    inline bool getStatus() const { return status; }
+    inline WsPortalStatus getStatus() const { return status; }
     void start();
     void stop();
     void restart();

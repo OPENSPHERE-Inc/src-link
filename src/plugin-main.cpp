@@ -27,6 +27,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDir>
 #include <QAction>
 
+#include <curl/curl.h>
+
+#include "net/http-error.hpp"
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
@@ -111,6 +114,37 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
+    // Initialize the plugin's own statically-linked curl instance.
+    // This is separate from OBS Studio's curl (dynamically linked libcurl.dll),
+    // so we must call curl_global_init() for our own instance.
+    // Relies on OBS having already called curl_global_init: by the time obs_module_load
+    // runs, OBS's UI / video / network threads are already up and curl's "init while
+    // no other threads exist" requirement is no longer satisfiable in isolation.
+    // FIXME: LocalHttpServer's raw winsock usage relies on the WSAStartup performed by
+    //        CURL_GLOBAL_WIN32 here. Give LocalHttpServer its own WSAStartup/WSACleanup
+    //        so this implicit ordering dependency is removed (separate PR recommended).
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+        auto *info = curl_version_info(CURLVERSION_NOW);
+        bool hasWs = false;
+        if (info->protocols) {
+            for (int i = 0; info->protocols[i]; i++) {
+                if (strcmp(info->protocols[i], "wss") == 0) {
+                    hasWs = true;
+                    break;
+                }
+            }
+        }
+        obs_log(
+            LOG_INFO, "plugin curl: %s (ssl: %s, websocket: %s)", info->version,
+            info->ssl_version ? info->ssl_version : "none", hasWs ? "yes" : "no"
+        );
+    }
+
+    qRegisterMetaType<HttpError>("HttpError");
+    qRegisterMetaType<obs_data_t *>();
+
     // Initialize the cpu stats
     cpuUsageInfo = os_cpu_usage_info_start();
 
@@ -155,20 +189,25 @@ bool obs_module_load(void)
     return true;
 }
 
-void obs_module_post_load()
-{
-    qRegisterMetaType<obs_data_t *>();
-}
-
 void obs_module_unload(void)
 {
-    delete apiClient;
-    apiClient = nullptr;
+    obs_frontend_remove_event_callback(frontendEventCallback, nullptr);
+
+    // Tear down docks synchronously while apiClient is still alive — obs_frontend_remove_dock
+    // is synchronous, so dock-owned WsPortalClient instances finish their teardown here.
+    unregisterEgressLinkDock();
+    unregisterWsPortalDock();
 
     WsPortalEventHandler::destroyInstance();
 
+    delete apiClient;
+    apiClient = nullptr;
+
     // Destroy the cpu stats
     os_cpu_usage_info_destroy(cpuUsageInfo);
+
+    // Clean up the plugin's own statically-linked curl instance.
+    curl_global_cleanup();
 
     obs_log(LOG_INFO, "plugin unloaded");
 }

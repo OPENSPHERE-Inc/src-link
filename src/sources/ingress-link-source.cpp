@@ -19,11 +19,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 
+#include <QPointer>
 #include <QUrlQuery>
 #include <QJsonDocument>
 
 #include "../plugin-support.h"
 #include "../utils.hpp"
+#include "../net/http-error.hpp"
+#include "../net/http-request-invoker.hpp"
 #include "ingress-link-source.hpp"
 
 #define SETTINGS_JSON_NAME "ingress-link-source.json"
@@ -101,12 +104,12 @@ IngressLinkSource::IngressLinkSource(
         SLOT(onDeleteDownlinkSucceeded(const QString &))
     );
     connect(apiClient, SIGNAL(stagesReady(const StageArray &)), this, SLOT(onStagesReady(const StageArray &)));
-    connect(apiClient, &SRCLinkApiClient::licenseChanged, [this](const SubscriptionLicense &license) {
+    connect(apiClient, &SRCLinkApiClient::licenseChanged, this, [this](const SubscriptionLicense &license) {
         if (license.getLicenseValid()) {
             reactivate();
         }
     });
-    connect(apiClient, &SRCLinkApiClient::ingressRefreshNeeded, [this]() { reactivate(); });
+    connect(apiClient, &SRCLinkApiClient::ingressRefreshNeeded, this, [this]() { reactivate(); });
     connect(apiClient, SIGNAL(loginSucceeded()), this, SLOT(onLoginSucceeded()));
     connect(apiClient, SIGNAL(logoutSucceeded()), this, SLOT(onLogoutSucceeded()));
     connect(this, SIGNAL(settingsUpdate(obs_data_t *)), this, SLOT(onSettingsUpdate(obs_data_t *)));
@@ -357,7 +360,7 @@ obs_data_t *IngressLinkSource::createDecoderSettings()
 
 // Passphrase will be generated in the server
 // The connection will be activated on onDownlinkReady()
-const RequestInvoker *IngressLinkSource::putConnection()
+const HttpRequestInvoker *IngressLinkSource::putConnection()
 {
     auto port = connRequest.getPort();
     auto relay = connRequest.getRelay();
@@ -479,13 +482,21 @@ obs_properties_t *IngressLinkSource::getProperties()
         connectionGroup, "reload_stages", obs_module_text("ReloadReceivers"),
         [](obs_properties_t *, obs_property_t *, void *param) {
             auto ingressLinkSource = static_cast<IngressLinkSource *>(param);
+            QPointer<IngressLinkSource> guard(ingressLinkSource);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
+                // FIXME: Re-entrancy hazard — opening source properties from within a properties
+                // button callback can re-enter the OBS frontend properties dialog.
                 QObject::connect(
-                    invoker, &RequestInvoker::finished,
-                    [ingressLinkSource](QNetworkReply::NetworkError, QByteArray) {
-                        // Reload source properties
-                        OBSSourceAutoRelease source = obs_weak_source_get_source(ingressLinkSource->weakSource);
+                    invoker, &HttpRequestInvoker::finished, ingressLinkSource,
+                    [guard](HttpError, QByteArray) {
+                        if (!guard) {
+                            return;
+                        }
+                        OBSSourceAutoRelease source = obs_weak_source_get_source(guard->weakSource);
+                        if (!source) {
+                            return;
+                        }
                         obs_frontend_open_source_properties(source);
                     }
                 );
@@ -613,17 +624,39 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
     obs_log(LOG_DEBUG, "%s: Source updating", qUtf8Printable(name));
 
     captureSettings(settings);
-    connect(putConnection(), &RequestInvoker::finished, [this, settings](QNetworkReply::NetworkError error, QByteArray) {
-        if (error != QNetworkReply::NoError) {
-            obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(name));
-            return;
-        }
+    OBSData settingsRef(settings);
+    // QPointer guards against the source being destroyed before the queued invoker fires.
+    QPointer<IngressLinkSource> guard(this);
+    if (auto *invoker = putConnection()) {
+        connect(invoker, &HttpRequestInvoker::finished, this, [guard, settingsRef](HttpError error, QByteArray) {
+            if (!guard) {
+                return;
+            }
+            if (error != HttpError::NoError) {
+                obs_log(LOG_ERROR, "%s: Source update failed", qUtf8Printable(guard->name));
+                return;
+            }
 
-        // Store settings to file as recently settings.
-        saveSettings(settings);
+            // Store settings to file as recently settings.
+            guard->saveSettings(settingsRef);
 
-        obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(name));
-    });
+            obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(guard->name));
+        });
+    } else {
+        // putConnection() returned nullptr (CHECK_CLIENT_TOKEN failed); persist locally
+        // so the source still records the user's intent. Defer to mirror the if-branch's
+        // queued semantics and avoid running file I/O on the caller's stack.
+        QMetaObject::invokeMethod(
+            this,
+            [guard, settingsRef]() {
+                if (!guard) {
+                    return;
+                }
+                guard->saveSettings(settingsRef);
+            },
+            Qt::QueuedConnection
+        );
+    }
 }
 
 void IngressLinkSource::resetDecoder(const StageConnection &_connection)
