@@ -160,6 +160,7 @@ function(_src_link_setup_curl)
     # FIXME: passing target names as strings relies on CMake ≥ 3.22 (CMP0125 NEW) so regular variables shadow
     # find_library cache lookups and prevent system mbedtls fallback. Migrate to find_package(MbedTLS CONFIG) once
     # mbedtls ships a config package, or feed real file paths via generator-expression-aware curl support.
+    FetchContent_GetProperties(mbedtls SOURCE_DIR mbedtls_SOURCE_DIR)
     set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include")
     set(MBEDTLS_LIBRARY mbedtls)
     set(MBEDX509_LIBRARY mbedx509)

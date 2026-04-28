@@ -29,6 +29,10 @@ struct LinuxCaLocation {
 // and report whether it is a rehashed CA directory or a single bundle file. Returns nullptr if
 // the configured path is missing or refers to neither a directory nor a regular file. The returned
 // pointer references function-local static storage and remains valid for the process lifetime.
+//
+// Single-threaded use only (UI / Qt event-loop thread). Returns a pointer
+// to a function-static record whose isDirectory field is rewritten on each
+// call; concurrent invocation produces benign tearing but should be avoided.
 const LinuxCaLocation *findLinuxCaLocation();
 
 #endif // __linux__
