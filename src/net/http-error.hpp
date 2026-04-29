@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 enum class HttpError : int {
     NoError = 0,
+    Redirect, // HTTP 3xx — surfaced because CURLOPT_FOLLOWLOCATION is disabled
     ConnectionRefused,
     TimeoutError,
     SslError,

@@ -20,19 +20,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #ifdef __linux__
 
+#include <optional>
+
 struct LinuxCaLocation {
     const char *path;
     bool isDirectory; // true → CURLOPT_CAPATH, false → CURLOPT_CAINFO
 };
 
 // Resolve the configured CA path (SRC_LINK_LINUX_CA_PATH compile definition; see CMakeLists.txt)
-// and report whether it is a rehashed CA directory or a single bundle file. Returns nullptr if
-// the configured path is missing or refers to neither a directory nor a regular file. The returned
-// pointer references function-local static storage and remains valid for the process lifetime.
-//
-// Single-threaded use only (UI / Qt event-loop thread). Returns a pointer
-// to a function-static record whose isDirectory field is rewritten on each
-// call; concurrent invocation produces benign tearing but should be avoided.
-const LinuxCaLocation *findLinuxCaLocation();
+// and report whether it is a rehashed CA directory or a single bundle file. Returns std::nullopt
+// if the configured path is missing or refers to neither a directory nor a regular file. The
+// returned LinuxCaLocation::path points to a process-lifetime string literal, so it remains valid
+// after the optional is destroyed. Safe to call from multiple threads.
+std::optional<LinuxCaLocation> findLinuxCaLocation();
 
 #endif // __linux__

@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <memory>
 
+#include <QCoreApplication>
 #include <QPointer>
 
 #include "http-request-invoker.hpp"
@@ -92,6 +93,10 @@ HttpRequestSequencer::~HttpRequestSequencer()
         }
         for (auto *invoker : drained) {
             emit invoker->finished(HttpError::OperationCanceled, {});
+            // Evict any QueuedConnection slot invocations targeting this invoker before
+            // deleting it. Otherwise the next event-loop tick may dispatch a queued slot
+            // to a freed object.
+            QCoreApplication::removePostedEvents(invoker);
             delete invoker; // Direct delete: deleteLater() won't run if event loop is stopped (OBS shutdown)
         }
     }
@@ -163,15 +168,30 @@ template<class Func> void HttpRequestInvoker::queue(Func invoker)
     locker.unlock();
 }
 
-QMap<QByteArray, QByteArray> HttpRequestInvoker::mergeAuthHeaders(const QMap<QByteArray, QByteArray> &headers)
+std::optional<QMap<QByteArray, QByteArray>>
+HttpRequestInvoker::mergeAuthHeaders(const QMap<QByteArray, QByteArray> &headers)
 {
     QMap<QByteArray, QByteArray> merged = headers;
-    // Only inject Bearer token if the caller did not explicitly provide an Authorization header
-    if (!merged.contains("Authorization") && sequencer->oauth2Client &&
-        !sequencer->oauth2Client->accessToken().isEmpty()) {
-        merged["Authorization"] = QString("Bearer %1").arg(sequencer->oauth2Client->accessToken()).toUtf8();
+    // Only inject Bearer token if the caller did not explicitly provide an Authorization header.
+    if (!merged.contains("Authorization") && sequencer->oauth2Client) {
+        const QString token = sequencer->oauth2Client->accessToken();
+        if (token.isEmpty()) {
+            // api-client's CHECK_CLIENT_TOKEN gates only on refreshToken, so access token may
+            // still be empty here. Caller short-circuits with AuthenticationRequired.
+            return std::nullopt;
+        }
+        merged["Authorization"] = QString("Bearer %1").arg(token).toUtf8();
     }
     return merged;
+}
+
+void HttpRequestInvoker::emitAuthRequiredAndCleanup()
+{
+    QMutexLocker locker(&sequencer->mutex);
+    sequencer->requestQueue.removeOne(this);
+    locker.unlock();
+    emit finished(HttpError::AuthenticationRequired, QByteArray());
+    deleteLater();
 }
 
 void HttpRequestInvoker::handleResponse(
@@ -257,8 +277,12 @@ void HttpRequestInvoker::get(const QUrl &url, const QMap<QByteArray, QByteArray>
             return;
         }
         auto merged = mergeAuthHeaders(headers);
+        if (!merged) {
+            emitAuthRequiredAndCleanup();
+            return;
+        }
         sequencer->httpClient->get(
-            url, merged,
+            url, *merged,
             [self, url, headers, timeoutMs](HttpResponse response) {
                 if (!self) {
                     return;
@@ -271,8 +295,12 @@ void HttpRequestInvoker::get(const QUrl &url, const QMap<QByteArray, QByteArray>
                         }
                         // Retry with refreshed token
                         auto merged = self->mergeAuthHeaders(headers);
+                        if (!merged) {
+                            self->emitAuthRequiredAndCleanup();
+                            return;
+                        }
                         self->sequencer->httpClient->get(
-                            url, merged,
+                            url, *merged,
                             [self](HttpResponse response) {
                                 if (!self) {
                                     return;
@@ -305,8 +333,12 @@ void HttpRequestInvoker::post(
             return;
         }
         auto merged = mergeAuthHeaders(headers);
+        if (!merged) {
+            emitAuthRequiredAndCleanup();
+            return;
+        }
         sequencer->httpClient->post(
-            url, merged, data,
+            url, *merged, data,
             [self, url, headers, data, timeoutMs](HttpResponse response) {
                 if (!self) {
                     return;
@@ -318,8 +350,12 @@ void HttpRequestInvoker::post(
                             return;
                         }
                         auto merged = self->mergeAuthHeaders(headers);
+                        if (!merged) {
+                            self->emitAuthRequiredAndCleanup();
+                            return;
+                        }
                         self->sequencer->httpClient->post(
-                            url, merged, data,
+                            url, *merged, data,
                             [self](HttpResponse response) {
                                 if (!self) {
                                     return;
@@ -352,8 +388,12 @@ void HttpRequestInvoker::put(
             return;
         }
         auto merged = mergeAuthHeaders(headers);
+        if (!merged) {
+            emitAuthRequiredAndCleanup();
+            return;
+        }
         sequencer->httpClient->put(
-            url, merged, data,
+            url, *merged, data,
             [self, url, headers, data, timeoutMs](HttpResponse response) {
                 if (!self) {
                     return;
@@ -365,8 +405,12 @@ void HttpRequestInvoker::put(
                             return;
                         }
                         auto merged = self->mergeAuthHeaders(headers);
+                        if (!merged) {
+                            self->emitAuthRequiredAndCleanup();
+                            return;
+                        }
                         self->sequencer->httpClient->put(
-                            url, merged, data,
+                            url, *merged, data,
                             [self](HttpResponse response) {
                                 if (!self) {
                                     return;
@@ -397,8 +441,12 @@ void HttpRequestInvoker::deleteResource(const QUrl &url, const QMap<QByteArray, 
             return;
         }
         auto merged = mergeAuthHeaders(headers);
+        if (!merged) {
+            emitAuthRequiredAndCleanup();
+            return;
+        }
         sequencer->httpClient->del(
-            url, merged,
+            url, *merged,
             [self, url, headers, timeoutMs](HttpResponse response) {
                 if (!self) {
                     return;
@@ -410,8 +458,12 @@ void HttpRequestInvoker::deleteResource(const QUrl &url, const QMap<QByteArray, 
                             return;
                         }
                         auto merged = self->mergeAuthHeaders(headers);
+                        if (!merged) {
+                            self->emitAuthRequiredAndCleanup();
+                            return;
+                        }
                         self->sequencer->httpClient->del(
-                            url, merged,
+                            url, *merged,
                             [self](HttpResponse response) {
                                 if (!self) {
                                     return;
@@ -442,8 +494,12 @@ void HttpRequestInvoker::head(const QUrl &url, const QMap<QByteArray, QByteArray
             return;
         }
         auto merged = mergeAuthHeaders(headers);
+        if (!merged) {
+            emitAuthRequiredAndCleanup();
+            return;
+        }
         sequencer->httpClient->head(
-            url, merged,
+            url, *merged,
             [self, url, headers, timeoutMs](HttpResponse response) {
                 if (!self) {
                     return;
@@ -455,8 +511,12 @@ void HttpRequestInvoker::head(const QUrl &url, const QMap<QByteArray, QByteArray
                             return;
                         }
                         auto merged = self->mergeAuthHeaders(headers);
+                        if (!merged) {
+                            self->emitAuthRequiredAndCleanup();
+                            return;
+                        }
                         self->sequencer->httpClient->head(
-                            url, merged,
+                            url, *merged,
                             [self](HttpResponse response) {
                                 if (!self) {
                                     return;

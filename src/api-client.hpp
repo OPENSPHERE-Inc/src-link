@@ -51,8 +51,8 @@ class SRCLinkApiClient : public QObject {
 
     QString uuid;
     SRCLinkSettingsStore *settings;
-    OAuth2Client *oauth2Client;
     CurlHttpClient *httpClient;
+    OAuth2Client *oauth2Client;
     QMap<int, bool> usedPorts;
     HttpRequestSequencer *sequencer;
     int activeOutputs;

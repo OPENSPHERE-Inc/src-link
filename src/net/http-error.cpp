@@ -23,15 +23,18 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 HttpError httpErrorFromStatusCode(int statusCode)
 {
-    // 1xx informational and 3xx redirect — treat as NoError. CURLOPT_FOLLOWLOCATION is now
-    // disabled (see curl-http-client.cpp) to avoid leaking the Authorization header across
-    // hosts, so 30x responses surface here directly as NoError with the redirect Location
-    // available via response headers.
-    // FIXME: 304 Not Modified arrives as NoError with an empty body. Callers that issue
-    // conditional GETs (If-None-Match / If-Modified-Since) must distinguish 304 from 200
-    // explicitly via HttpResponse::statusCode before treating an empty body as an error.
-    if (statusCode >= 100 && statusCode <= 399) {
+    // Success: 2xx only. 1xx informational responses are not expected here (curl handles
+    // them transparently); if seen, fall through to the catch-all below.
+    if (statusCode >= 200 && statusCode <= 299) {
         return HttpError::NoError;
+    }
+    // FIXME: 304 Not Modified is reported as Redirect. Callers issuing conditional GETs
+    // (If-None-Match / If-Modified-Since) should special-case 304 by HttpResponse::statusCode
+    // rather than relying on the HttpError mapping.
+    if (statusCode >= 300 && statusCode <= 399) {
+        // CURLOPT_FOLLOWLOCATION is disabled to avoid Authorization-header leakage on cross-host
+        // redirects; callers may inspect statusCode and headers to handle redirects explicitly.
+        return HttpError::Redirect;
     }
     switch (statusCode) {
     case 401:
@@ -100,6 +103,8 @@ QString httpErrorToString(HttpError error)
     switch (error) {
     case HttpError::NoError:
         return QStringLiteral("No error");
+    case HttpError::Redirect:
+        return QStringLiteral("Redirect (HTTP 3xx)");
     case HttpError::ConnectionRefused:
         return QStringLiteral("Connection refused");
     case HttpError::TimeoutError:

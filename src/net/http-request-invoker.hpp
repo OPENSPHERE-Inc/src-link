@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <functional>
+#include <optional>
 
 #include <QObject>
 #include <QMutex>
@@ -59,7 +60,14 @@ private:
     HttpRequestSequencer *sequencer;
     bool retried;
 
-    QMap<QByteArray, QByteArray> mergeAuthHeaders(const QMap<QByteArray, QByteArray> &headers);
+    /// Build the request headers with a Bearer Authorization injected when applicable.
+    /// Returns std::nullopt when the caller did not supply Authorization, an OAuth2 client is
+    /// configured, but its access token is empty — i.e. authentication is required but not
+    /// available. Callers must short-circuit via emitAuthRequiredAndCleanup() in that case
+    /// instead of dispatching the request unauthenticated.
+    std::optional<QMap<QByteArray, QByteArray>> mergeAuthHeaders(const QMap<QByteArray, QByteArray> &headers);
+    /// Remove self from sequencer queue, emit finished(AuthenticationRequired, {}), deleteLater().
+    void emitAuthRequiredAndCleanup();
     void handleResponse(int statusCode, HttpError error, const QByteArray &data, std::function<void()> retryFunc);
     template<class Func> void queue(Func invoker);
 

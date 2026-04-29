@@ -42,6 +42,7 @@ public:
     static constexpr int POLL_INTERVAL_MSECS = 25;
     static constexpr int DEFAULT_TIMEOUT_MS = 10000;
     static constexpr int MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16 MB
+    static constexpr qsizetype MAX_HEADER_BYTES = 64 * 1024;   // 64 KiB aggregate header cap
 
     using ResponseCallback = std::function<void(HttpResponse)>;
 
@@ -101,6 +102,7 @@ private:
         QByteArray requestBody;
         ResponseCallback callback;
         bool responseTooLarge = false;
+        qsizetype headerBytesTotal = 0;
     };
 
     CURLM *multi;

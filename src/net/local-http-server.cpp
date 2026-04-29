@@ -30,9 +30,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #endif
 
 namespace {
-// FIXME: handleClient() still blocks the UI thread up to RECV_DEADLINE_MSECS.
-// Move recv() loop off the UI thread (QtConcurrent::run) or convert to fully
-// non-blocking incremental reads driven by pollAccept(). Tracked for a follow-up PR.
+// FIXME: handleClient() recv() loop blocks the UI thread up to RECV_DEADLINE_MSECS;
+// a slow-loris peer dripping 1 byte / ~249 ms can hold the OBS main window for the full
+// budget. Move off-thread or to incremental non-blocking reads driven by pollAccept(). Defer to a separate PR.
 //
 // Absolute deadline for the recv() loop in handleClient(). Localhost-only OAuth2
 // callback, so the wall-clock budget is intentionally tight.

@@ -121,7 +121,7 @@ CURL *CurlHttpClient::createEasyHandle(
     // is supplied at build time via the SRC_LINK_LINUX_CA_PATH CMake cache variable, and the
     // helper picks CURLOPT_CAPATH or CURLOPT_CAINFO based on whether the path is a directory
     // or a regular file.
-    if (auto *ca = findLinuxCaLocation()) {
+    if (auto ca = findLinuxCaLocation()) {
         if (ca->isDirectory) {
             curl_easy_setopt(easy, CURLOPT_CAPATH, ca->path);
         } else {
@@ -362,6 +362,17 @@ size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void
         return 0;
     }
     size_t totalSize = size * nmemb;
+    // Aggregate header byte cap: abort when cumulative header bytes (including this chunk)
+    // exceed MAX_HEADER_BYTES. Mirrors the response-body cap in writeCallback.
+    ctx->headerBytesTotal += static_cast<qsizetype>(totalSize);
+    if (ctx->headerBytesTotal > CurlHttpClient::MAX_HEADER_BYTES) {
+        obs_log(
+            LOG_WARNING, "CurlHttpClient: Response headers exceeded %lld bytes limit, aborting",
+            static_cast<long long>(CurlHttpClient::MAX_HEADER_BYTES)
+        );
+        ctx->responseTooLarge = true;
+        return 0;
+    }
     QByteArray line(ptr, static_cast<qsizetype>(totalSize));
     int colonIndex = line.indexOf(':');
     if (colonIndex > 0) {

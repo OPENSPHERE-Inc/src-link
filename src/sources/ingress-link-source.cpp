@@ -485,8 +485,6 @@ obs_properties_t *IngressLinkSource::getProperties()
             QPointer<IngressLinkSource> guard(ingressLinkSource);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
-                // FIXME: Re-entrancy hazard — opening source properties from within a properties
-                // button callback can re-enter the OBS frontend properties dialog.
                 QObject::connect(
                     invoker, &HttpRequestInvoker::finished, ingressLinkSource,
                     [guard](HttpError, QByteArray) {

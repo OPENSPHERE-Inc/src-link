@@ -50,6 +50,8 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     intervalTimer = new QTimer(this);
     reconnectTimer = new QTimer(this);
     reconnectTimer->setSingleShot(true);
+    client = new WsClient(this);
+
     connect(reconnectTimer, &QTimer::timeout, this, [this]() {
         reconnectPending = false;
         if (started && !client->isValid()) {
@@ -57,7 +59,6 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
             emit reconnecting();
         }
     });
-    client = new WsClient(this);
 
     connect(client, &WsClient::opened, this, &SRCLinkWebSocketClient::onConnected);
     connect(client, &WsClient::closed, this, &SRCLinkWebSocketClient::onDisconnected);

@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include <cassert>
+#include <cstring>
 
 #include <QDateTime>
 #include <obs-module.h>
@@ -88,6 +89,12 @@ void WsClient::open(const QUrl &url)
     connecting = true;
     pendingUrl = url;
 
+    // Defensive: ensure no stale slist leaks if cleanup() ever stops being the prerequisite.
+    if (headerList) {
+        curl_slist_free_all(headerList);
+        headerList = nullptr;
+    }
+
     // Build curl_slist from requestHeaders
     struct curl_slist *slist = nullptr;
     for (auto it = requestHeaders.constBegin(); it != requestHeaders.constEnd(); ++it) {
@@ -151,7 +158,7 @@ void WsClient::performConnect()
     // Linux: libcurl is built against mbedtls in obs-deps, which has no compiled-in CA path.
     // Probe well-known distro locations and use the first one present so server cert
     // verification works on Debian, Ubuntu, RHEL, Fedora, Alpine, etc.
-    if (auto *ca = findLinuxCaLocation()) {
+    if (auto ca = findLinuxCaLocation()) {
         if (ca->isDirectory) {
             curl_easy_setopt(easy, CURLOPT_CAPATH, ca->path);
         } else {
@@ -284,11 +291,12 @@ void WsClient::cleanup()
 {
     tlsFallbackTimer->stop();
     if (recvNotifier) {
-        // Detach via deleteLater() so a cleanup() invoked synchronously from inside pollRecv()
-        // (the recvNotifier's own slot) does not destroy the QObject whose signal stack is active.
+        // FIXME: deleteLater() defers destruction to the next event-loop turn, but
+        // curl_easy_cleanup() below closes the underlying fd immediately, leaving
+        // QSocketNotifier holding a deregistered-but-still-attached reference to a
+        // potentially recycled fd. Add an is-reentrant flag so non-pollRecv callers
+        // can use synchronous `delete` while in-slot callers keep deleteLater().
         recvNotifier->setEnabled(false);
-        // Order: notifier disconnect/deleteLater must precede curl_easy_cleanup so the
-        // socket fd is not torn out from under an active slot.
         recvNotifier->disconnect();
         recvNotifier->deleteLater();
         recvNotifier = nullptr;
@@ -451,6 +459,9 @@ void WsClient::pollRecv()
     char buffer[65536];
     size_t received = 0;
     const struct curl_ws_frame *meta = nullptr;
+    // Tail-flush gate: only true after a final-fragment frame fully drained (bytesleft == 0,
+    // no CURLWS_CONT). Prevents emitting a fragment chain that straddles poll cycles.
+    bool lastFrameFinalAndComplete = false;
 
     while (true) {
         CURLcode res = curl_ws_recv(easy, buffer, sizeof(buffer), &received, &meta);
@@ -470,9 +481,19 @@ void WsClient::pollRecv()
         if (meta->flags & CURLWS_CLOSE) {
             obs_log(LOG_DEBUG, "WsClient received close frame");
             // RFC 6455 §5.5.1: respond with a close frame to complete the handshake.
-            // Use status code 1000 (Normal Closure) rather than echoing peer payload.
-            const uint16_t code = htons(1000);
-            const auto *codePayload = reinterpret_cast<const char *>(&code);
+            // Echo the peer's status code when present and valid; otherwise use 1000
+            // (Normal Closure). Valid range is 1000-4999 (RFC 6455 §7.4).
+            uint16_t echoCode = 1000;
+            if (received >= 2) {
+                uint16_t peerCodeBE;
+                std::memcpy(&peerCodeBE, buffer, 2);
+                const uint16_t peerCode = ntohs(peerCodeBE);
+                if (peerCode >= 1000 && peerCode <= 4999) {
+                    echoCode = peerCode;
+                }
+            }
+            const uint16_t codeBE = htons(echoCode);
+            const auto *codePayload = reinterpret_cast<const char *>(&codeBE);
             size_t closeSent = 0;
             CURLcode echoRes = curl_ws_send(easy, codePayload, 2, &closeSent, 0, CURLWS_CLOSE);
             if (echoRes != CURLE_OK) {
@@ -520,9 +541,9 @@ void WsClient::pollRecv()
         //     curl returns CURLWS_TEXT/BINARY with meta->offset > 0 on subsequent reads.
         // (2) Multi-frame (WebSocket protocol fragmentation): First frame has TEXT/BINARY
         //     with CURLWS_CONT flag (FIN=0), continuation frames have CURLWS_CONT only.
-        //     curl does not expose the FIN bit separately, so we emit accumulated
-        //     multi-frame data after the recv loop when no more data is available.
-        //     This works correctly when all frames arrive within the same poll cycle.
+        //     The accumulator is emitted in-loop on the final fragment (frameComplete &&
+        //     !isCont). Tail-flush below is guarded by lastFrameFinalAndComplete so that
+        //     a chain straddling poll cycles is preserved instead of emitted prematurely.
         bool isText = (meta->flags & CURLWS_TEXT) != 0;
         bool isBinary = (meta->flags & CURLWS_BINARY) != 0;
         bool isCont = (meta->flags & CURLWS_CONT) != 0;
@@ -569,6 +590,8 @@ void WsClient::pollRecv()
         bool frameComplete = (static_cast<size_t>(meta->offset) + received >= static_cast<size_t>(meta->len));
         frameInProgress = !frameComplete;
 
+        lastFrameFinalAndComplete = frameComplete && !isCont && meta->bytesleft == 0;
+
         if (frameComplete) {
             // For single-frame messages (no CONT flag), emit immediately.
             // For multi-frame messages (CONT flag set on first or continuation frame),
@@ -587,14 +610,15 @@ void WsClient::pollRecv()
                 }
                 fragmentBuffer.clear();
                 fragmentType = 0;
+                lastFrameFinalAndComplete = false;
             }
         }
     }
 
     // Emit accumulated multi-frame WebSocket message after draining all available data.
-    // Guard with frameInProgress to avoid emitting partial data from a large single frame
-    // that spans multiple poll cycles.
-    if (!frameInProgress && fragmentType != 0 && !fragmentBuffer.isEmpty()) {
+    // Only safe to emit when the most recent frame was final (no CONT) and fully drained;
+    // otherwise the chain is still in progress and may resume on the next poll cycle.
+    if (lastFrameFinalAndComplete && fragmentType != 0 && !fragmentBuffer.isEmpty()) {
         if (fragmentType == CURLWS_TEXT) {
             emit textMessageReceived(QString::fromUtf8(fragmentBuffer));
             if (!easy || !connected) {

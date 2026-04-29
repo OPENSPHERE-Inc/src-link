@@ -29,22 +29,21 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #define SRC_LINK_LINUX_CA_PATH "/etc/ssl/certs"
 #endif
 
-const LinuxCaLocation *findLinuxCaLocation()
+std::optional<LinuxCaLocation> findLinuxCaLocation()
 {
-    static LinuxCaLocation result = {SRC_LINK_LINUX_CA_PATH, false};
+    // Path is a string literal from the SRC_LINK_LINUX_CA_PATH macro; safe to embed by pointer.
+    constexpr const char *path = SRC_LINK_LINUX_CA_PATH;
     struct stat st;
-    if (stat(result.path, &st) != 0) {
-        return nullptr;
+    if (stat(path, &st) != 0) {
+        return std::nullopt;
     }
     if (S_ISDIR(st.st_mode)) {
-        result.isDirectory = true;
-        return &result;
+        return LinuxCaLocation{path, true};
     }
     if (S_ISREG(st.st_mode)) {
-        result.isDirectory = false;
-        return &result;
+        return LinuxCaLocation{path, false};
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 #endif // __linux__

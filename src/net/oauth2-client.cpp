@@ -229,6 +229,7 @@ void OAuth2Client::unlink()
     refreshToken_.clear();
     expires_ = 0;
     linked_ = false;
+    pendingState_.clear();
 
     saveTokens();
     // O2 compatibility: O2::unlink() emits linkedChanged (only if value changed)
@@ -252,7 +253,11 @@ void OAuth2Client::refresh()
 
     if (refreshToken_.isEmpty()) {
         obs_log(LOG_WARNING, "OAuth2Client: No refresh token available");
-        emit refreshFinished(HttpError::AuthenticationRequired);
+        // Defer the emit to the next event-loop tick so all refreshFinished signals fire
+        // asynchronously, keeping observer slots out of the caller's stack frame.
+        QMetaObject::invokeMethod(
+            this, [this]() { emit refreshFinished(HttpError::AuthenticationRequired); }, Qt::QueuedConnection
+        );
         return;
     }
 
@@ -346,17 +351,24 @@ void OAuth2Client::refresh()
                 obs_log(LOG_WARNING, "OAuth2Client: Refresh response has non-positive expires_in (%lld)", expiresIn);
             }
         }
+        // Clamp to a minimum sane TTL so a misbehaving IdP cannot drive a 1 Hz refresh loop.
+        constexpr qint64 MIN_TOKEN_TTL_SECS = 60;
+        if (expiresIn < MIN_TOKEN_TTL_SECS) {
+            expiresIn = MIN_TOKEN_TTL_SECS;
+        }
         self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 
         self->saveTokens();
 
-        self->refreshing_ = false;
         obs_log(LOG_DEBUG, "OAuth2Client: Token refreshed successfully, expires in %lld seconds", expiresIn);
         // O2 compatibility: O2::onRefreshFinished() emits linkedChanged,
         // linkingSucceeded, then refreshFinished in that order.
         emit self->linkedChanged();
         emit self->linkingSucceeded();
         emit self->refreshFinished(HttpError::NoError);
+        // Reset refreshing_ AFTER all emits so re-entrant callers observe a consistent
+        // (non-refreshing, fresh-token) state when their slot fires.
+        self->refreshing_ = false;
     });
 }
 
@@ -368,6 +380,7 @@ void OAuth2Client::onVerificationReceived(const QMap<QString, QString> &params)
     // Verify state for CSRF protection
     if (params.value("state") != pendingState_) {
         obs_log(LOG_ERROR, "OAuth2Client: State mismatch in OAuth2 callback");
+        pendingState_.clear();
         emit linkingFailed();
         return;
     }
@@ -376,6 +389,7 @@ void OAuth2Client::onVerificationReceived(const QMap<QString, QString> &params)
     // Check for error response
     if (params.contains("error")) {
         obs_log(LOG_ERROR, "OAuth2Client: OAuth2 error: %s", qUtf8Printable(params.value("error")));
+        pendingState_.clear();
         emit linkingFailed();
         return;
     }
@@ -383,6 +397,7 @@ void OAuth2Client::onVerificationReceived(const QMap<QString, QString> &params)
     QString code = params.value("code");
     if (code.isEmpty()) {
         obs_log(LOG_ERROR, "OAuth2Client: No authorization code in callback");
+        pendingState_.clear();
         emit linkingFailed();
         return;
     }
@@ -463,6 +478,11 @@ void OAuth2Client::exchangeCodeForToken(const QString &code)
             } else {
                 obs_log(LOG_WARNING, "OAuth2Client: Token response has non-positive expires_in (%lld)", expiresIn);
             }
+        }
+        // Clamp to a minimum sane TTL so a misbehaving IdP cannot drive a 1 Hz refresh loop.
+        constexpr qint64 MIN_TOKEN_TTL_SECS = 60;
+        if (expiresIn < MIN_TOKEN_TTL_SECS) {
+            expiresIn = MIN_TOKEN_TTL_SECS;
         }
         self->expires_ = QDateTime::currentSecsSinceEpoch() + expiresIn;
 

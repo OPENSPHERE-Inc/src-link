@@ -33,6 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QBuffer>
 #include <QFile>
 #include <QPointer>
+#include <QRegularExpression>
 
 #include "plugin-support.h"
 #include "api-client.hpp"
@@ -329,10 +330,8 @@ void SRCLinkApiClient::terminate()
     API_LOG("Terminating API client.");
     terminating = true;
     uplink = QJsonObject();
-    // FIXME: deleteUplink(true) here is fire-and-forget — the in-flight DELETE is
-    // canceled by ~CurlHttpClient on plugin teardown, leaving the server uplink
-    // entry until its TTL. Replace with a bounded QEventLoop pump (or a sync
-    // curl_easy_perform call) in a separate PR.
+    // FIXME: fire-and-forget DELETE is canceled by ~CurlHttpClient on shutdown; replace with
+    // a sync curl_easy_perform or a bounded QEventLoop pump in a separate PR.
     deleteUplink(true);
 }
 
@@ -926,6 +925,14 @@ void SRCLinkApiClient::putScreenshot(const QString &sourceName, const QImage &im
 void SRCLinkApiClient::getPicture(const QString &pictureId)
 {
     Q_ASSERT(httpClient && httpClient->parent() == this);
+    // Allowlist guards the URL substitution against path traversal / injection: only hex
+    // chars and dashes (UUID-shaped ids) are permitted into PICTURES_URL.
+    static const QRegularExpression idAllowlist(QStringLiteral("^[A-Fa-f0-9-]{1,64}$"));
+    if (!idAllowlist.match(pictureId).hasMatch()) {
+        WARNING_LOG("getPicture: rejecting pictureId with disallowed characters");
+        emit getPictureFailed(pictureId);
+        return;
+    }
     // Uses CurlHttpClient directly (bypasses HttpRequestInvoker) because this is a
     // public endpoint that does not require authentication or 401 retry logic.
     // FIXME: If the server auth model ever requires Bearer tokens for picture URLs,
