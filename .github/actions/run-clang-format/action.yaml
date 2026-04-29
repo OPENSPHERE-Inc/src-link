@@ -28,7 +28,6 @@ runs:
         echo ::group::Install Dependencies
         eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
-        echo "/home/linuxbrew/.linuxbrew/opt/clang-format@17/bin" >> $GITHUB_PATH
         brew install --quiet zsh
         echo ::endgroup::
 
@@ -52,7 +51,15 @@ runs:
 
         if (( ${changes[(I)(*.c|*.h|*.cpp|*.hpp|*.m|*.mm)]} )) {
           echo ::group::Install clang-format-17
-          brew install --quiet obsproject/tools/clang-format@17
+          # PyPI `clang-format` (ssciwr/clang-format-wheel) ships the upstream
+          # LLVM 17.0.3 binary, so pinning the version here pins the tool exactly.
+          python3 -m pip install --quiet --user 'clang-format==17.0.3'
+          echo "$(python3 -m site --user-base)/bin" >> $GITHUB_PATH
+          export PATH="$(python3 -m site --user-base)/bin:${PATH}"
+          clang-format --version
+          clang-format --version | grep -q 'version 17\.0\.3' || {
+            echo "::error::clang-format is not pinned to 17.0.3"; exit 1;
+          }
           echo ::endgroup::
 
           echo ::group::Run clang-format-17

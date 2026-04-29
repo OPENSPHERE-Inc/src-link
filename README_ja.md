@@ -67,7 +67,7 @@ SRC-Link はウェブサービスの [SRC-Link Control Panel](https://src-link.l
 
 次のページよりインストラーパッケージをダウンロードしてください: [Release](https://github.com/OPENSPHERE-Inc/src-link/releases)
 
-> 注意: Windows インストーラーは必要なライブラリとして `Qt6WebSockets.dll` と Qt6 の `tls` プラグインフォルダを `obs-studio/bin/64bit` 配下にコピーします。
+> 注意: SRC-Link は libcurl（Linux では加えて mbedtls）を同梱するようになったため、Windows インストーラーは `Qt6WebSockets.dll` や Qt6 の `tls` プラグインフォルダを `obs-studio/bin/64bit` にコピーしなくなりました。
 
 # User manual
 

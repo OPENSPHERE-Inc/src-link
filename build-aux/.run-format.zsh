@@ -36,12 +36,12 @@ invoke_formatter() {
         local -a formatter_version=($(clang-format --version))
 
         if ! is-at-least 17.0.3 ${formatter_version[-1]}; then
-          log_error "clang-format is not version 17.0.3 or above (found ${formatter_version[-1]}."
+          log_error "clang-format must be exactly 17.0.3 (CI pinned). Got ${formatter_version[-1]}."
           exit 2
         fi
 
         if ! is-at-least ${formatter_version[-1]} 17.0.3; then
-          log_error "clang-format is more recent than version 17.0.3 (found ${formatter_version[-1]})."
+          log_error "clang-format must be exactly 17.0.3 (CI pinned). Got ${formatter_version[-1]}."
           exit 2
         fi
       } else {

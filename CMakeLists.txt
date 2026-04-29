@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.22...3.26)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
+# Fail fast on unsupported hosts (FreeBSD/OpenBSD/etc.) before reaching the curl/mbedtls FetchContent block, which would
+# otherwise produce a confusing TLS-backend error instead of a clear platform-support message.
+if(NOT
+   (OS_WINDOWS
+    OR OS_MACOS
+    OR OS_LINUX))
+  message(FATAL_ERROR "src-link does not support this host platform. Only Windows, macOS, and Linux are supported.")
+endif()
+
 project(${_name} VERSION ${_version})
 
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" ON)
@@ -51,6 +60,9 @@ find_package(libobs REQUIRED)
 # non-default trust store layouts.
 # =============================================================================
 include(FetchContent)
+
+# FIXME: CI re-downloads and re-builds curl/mbedtls on every clean configure. Add `actions/cache` keyed on the URL +
+# SHA256 hashes below in `.github/workflows/build-project.yaml` (separate PR).
 
 # --- mbedtls (Linux only — Windows/macOS use OS-native TLS) ---
 if(OS_LINUX)
@@ -211,8 +223,11 @@ mbedtls FetchContent targets are missing because _src_link_setup_mbedtls() runs 
   # Xcode generator reads CMAKE_XCODE_ATTRIBUTE_* from the top-level directory at generate time rather than from this
   # function's scope, so AppleClang still rejects curl 8.12.1's SIZE_T_MAX uses (-Wambiguous-macro) under -Werror. Force
   # the override per target.
-  if(NOT TARGET libcurl_static AND NOT TARGET libcurl_object)
-    message(FATAL_ERROR "curl target names changed — update _src_link_setup_curl() -Werror suppression")
+  if(NOT TARGET libcurl_static OR NOT TARGET libcurl_object)
+    message(
+      FATAL_ERROR
+        "curl target names changed — both libcurl_static and libcurl_object are expected; update _src_link_setup_curl() -Werror suppression"
+    )
   endif()
   foreach(_curl_target IN ITEMS libcurl_static libcurl_object)
     if(TARGET ${_curl_target})
@@ -237,8 +252,11 @@ if(OS_LINUX)
   set(SRC_LINK_LINUX_CA_PATH
       "/etc/ssl/certs"
       CACHE STRING "CA bundle path for Linux TLS (directory → CURLOPT_CAPATH, file → CURLOPT_CAINFO)")
-  if(SRC_LINK_LINUX_CA_PATH MATCHES "[\"\\\\]")
-    message(FATAL_ERROR "SRC_LINK_LINUX_CA_PATH must not contain '\"' or '\\\\' characters: ${SRC_LINK_LINUX_CA_PATH}")
+  if(NOT SRC_LINK_LINUX_CA_PATH MATCHES "^/[A-Za-z0-9._/-]+$")
+    message(
+      FATAL_ERROR
+        "SRC_LINK_LINUX_CA_PATH must be an absolute path matching the allowlist '^/[A-Za-z0-9._/-]+$' (letters, digits, '.', '_', '/', '-'): ${SRC_LINK_LINUX_CA_PATH}"
+    )
   endif()
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SRC_LINK_LINUX_CA_PATH="${SRC_LINK_LINUX_CA_PATH}")
 endif()

@@ -69,7 +69,7 @@ Separate [paid subscription plans](https://src-link.live/subscriptions/plans) ar
 
 Please download latest install package from [Release](https://github.com/OPENSPHERE-Inc/src-link/releases)
 
-> NOTE: The windows installer copies `Qt6WebSockets.dll` and Qt6's `tls` plugins folder under your `obs-studio/bin/64bit` as required library.
+> NOTE: SRC-Link now ships its own networking stack (libcurl, plus mbedtls on Linux), so the Windows installer no longer needs to copy `Qt6WebSockets.dll` or Qt6's `tls` plugins folder into `obs-studio/bin/64bit`.
 
 # User manual
 
