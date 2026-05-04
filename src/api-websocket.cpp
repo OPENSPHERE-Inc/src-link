@@ -53,10 +53,18 @@ SRCLinkWebSocketClient::SRCLinkWebSocketClient(QUrl _url, SRCLinkApiClient *_api
     client = new WsClient(this);
 
     connect(reconnectTimer, &QTimer::timeout, this, [this]() {
-        reconnectPending = false;
         if (started && !client->isValid()) {
+            // FIXME: WsClient::open() can synchronously emit errorOccurred (e.g. curl_easy_init
+            // failure). Because reconnectPending is cleared after open() returns, that synchronous
+            // error path is suppressed (scheduleReconnect early-returns while pending=true) and the
+            // attempt is not retried. Resolve in a separate PR by routing WsClient::performConnect
+            // failures through Qt::QueuedConnection or splitting reconnectPending into
+            // "scheduled" vs "in-flight" flags.
             open();
+            reconnectPending = false;
             emit reconnecting();
+        } else {
+            reconnectPending = false;
         }
     });
 
@@ -103,10 +111,12 @@ int SRCLinkWebSocketClient::reconnectDelayMs() const
 {
     // Exponential backoff: 10s, 20s, 40s, 80s, 160s, 300s (cap)
     // (reconnectCount is incremented before this is called, so the first delay is BASE_DELAY_MS * 2.)
-    static constexpr int BASE_DELAY_MS = 5000;
-    static constexpr int MAX_DELAY_MS = 300000;
-    int delay = BASE_DELAY_MS * (1 << (std::min)(reconnectCount, 6));
-    return (std::min)(delay, MAX_DELAY_MS);
+    static constexpr qint64 BASE_DELAY_MS = 5000;
+    static constexpr qint64 MAX_DELAY_MS = 300000;
+    // Shift on qint64 to avoid signed-int UB if the shift amount or product ever grows.
+    const qint64 shift = (std::min)(reconnectCount, 6);
+    const qint64 delay = BASE_DELAY_MS * (qint64{1} << shift);
+    return static_cast<int>(std::clamp<qint64>(delay, 0, MAX_DELAY_MS));
 }
 
 // Reconnect signal flow:

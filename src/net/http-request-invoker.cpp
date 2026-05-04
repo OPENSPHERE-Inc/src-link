@@ -38,8 +38,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #endif
 
 // Equivalent of Qt::SingleShotConnection (Qt 6.6+) for the project's Qt floor (6.2).
-// Disconnects the slot after its first invocation. Holds the connection handle inside the
-// lambda so the disconnect happens before the user-supplied callback runs.
+// On the first invocation the lambda calls disconnect() before the user-supplied callback,
+// so subsequent emissions of `signal` no longer reach this slot. disconnect() does not cancel
+// slot calls already posted to the receiver's event queue; any in-flight queued events still
+// run in order, but each runs at most once because only the first reaches this lambda.
+// Requires Qt::QueuedConnection: the disconnect()-before-callback pattern relies on the slot
+// running on the receiver's thread via the event loop, not synchronously inside emit.
 namespace {
 template<typename Sender, typename Signal, typename Receiver, typename Func>
 QMetaObject::Connection connectQueuedOneShot(Sender *sender, Signal signal, Receiver *receiver, Func &&func)
@@ -81,11 +85,11 @@ HttpRequestSequencer::~HttpRequestSequencer()
 
     if (!drained.isEmpty()) {
         obs_log(LOG_WARNING, "Draining %d remaining requests in queue.", drained.size());
-        // FIXME: Synchronous emit + delete pair can re-enter HttpRequestSequencer::queue()
-        // via consumer slots that issue follow-up requests. Real fix is to disconnect the
-        // invoker's outgoing connections (`finished -> consumer slot`) before the emit/delete
-        // rather than the incoming ones, so re-entry cannot reach the now half-destroyed
-        // sequencer. Defer to a separate PR.
+        // FIXME: Direct emit of finished() can dispatch to consumer slots that touch
+        // already-destructed apiClient state on the standalone-sequencer-destruction path
+        // (OBS shutdown is covered by removePostedEvents below). Resolve in a separate PR by
+        // either routing finished through Qt::QueuedConnection at construction or disconnecting
+        // outgoing finished connections before the emit.
         // Sever only incoming connections (the prev->next chain wired in queue()) so the
         // OperationCanceled emit below still reaches consumer-attached `finished` slots.
         for (auto *invoker : drained) {
@@ -128,9 +132,12 @@ HttpRequestInvoker::HttpRequestInvoker(CurlHttpClient *httpClient, OAuth2Client 
 
 HttpRequestInvoker::~HttpRequestInvoker()
 {
+    // Sever connections in both directions and evict already-posted QueuedConnection events
+    // targeting this invoker so the prev->next chain wired in queue() cannot dispatch into
+    // a freed slot.
     disconnect(this);
-    // Remove self from sequencer's queue under mutex so that ~HttpRequestSequencer's
-    // drain loop never observes a dangling invoker pointer (C-1).
+    QObject::disconnect(nullptr, nullptr, this, nullptr);
+    QCoreApplication::removePostedEvents(this);
     if (sequencer) {
         QMutexLocker locker(&sequencer->mutex);
         sequencer->requestQueue.removeAll(this);
@@ -157,9 +164,11 @@ template<class Func> void HttpRequestInvoker::queue(Func invoker)
             invoker();
             return;
         } else {
-            // Reserve next invocation. 5-arg connect with `this` as context: Qt auto-disconnects
-            // if this invoker is destroyed before the previous one finishes. QueuedConnection
-            // breaks the synchronous call stack from prev->handleResponse into next->invoker().
+            // Reserve next invocation. 5-arg connect with `this` as context: Qt severs the
+            // connection if this invoker is destroyed, but already-posted QueuedConnection
+            // events are evicted by ~HttpRequestInvoker via removePostedEvents(this).
+            // QueuedConnection breaks the synchronous call stack from prev->handleResponse
+            // into next->invoker().
             connect(sequencer->requestQueue.last(), &HttpRequestInvoker::finished, this, invoker, Qt::QueuedConnection);
             sequencer->requestQueue.append(this);
         }
@@ -190,6 +199,9 @@ void HttpRequestInvoker::emitAuthRequiredAndCleanup()
     QMutexLocker locker(&sequencer->mutex);
     sequencer->requestQueue.removeOne(this);
     locker.unlock();
+    // FIXME: Synchronous `emit finished` from a callback path can re-enter this invoker via a
+    // direct-connected slot after deleteLater() is posted. Defer the emit to the next event-loop
+    // tick (or QueuedConnection-only finished signal) in a follow-up PR to break the re-entry.
     emit finished(HttpError::AuthenticationRequired, QByteArray());
     deleteLater();
 }
@@ -220,6 +232,10 @@ void HttpRequestInvoker::handleResponse(
                     QMutexLocker locker(&self->sequencer->mutex);
                     self->sequencer->requestQueue.removeOne(self);
                     locker.unlock();
+                    // FIXME: unlink() emits synchronously and can re-enter request scheduling
+                    // before this invoker's `finished`/deleteLater pair runs, breaking the
+                    // queue ordering. Defer unlink() to after deleteLater (or post via
+                    // QueuedConnection) in a follow-up PR.
                     self->sequencer->oauth2Client->unlink();
                     emit self->finished(HttpError::AuthenticationRequired, data);
                     self->deleteLater();

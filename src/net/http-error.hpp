@@ -23,6 +23,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 enum class HttpError : int {
     NoError = 0,
+    // FIXME: All 3xx codes are mapped to Redirect on the assumption that the SRC-Link API
+    // never returns 3xx. If endpoints that require redirect following are added later,
+    // implement caller-side handling with a host allowlist and split 304 Not Modified out
+    // as a separate NotModified value so conditional GET can be supported. Tracked for a
+    // follow-up PR.
     Redirect, // HTTP 3xx — surfaced because CURLOPT_FOLLOWLOCATION is disabled
     ConnectionRefused,
     TimeoutError,

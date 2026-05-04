@@ -132,6 +132,12 @@ IngressLinkSource::~IngressLinkSource()
 {
     disconnect(this);
 
+    // FIXME: fire-and-forget DELETE is canceled by ~CurlHttpClient on shutdown; replace with
+    // a sync curl_easy_perform or a bounded QEventLoop pump in a separate PR.
+    obs_log(
+        LOG_INFO, "%s: synchronous shutdown not yet implemented; downlink may remain on server until session timeout",
+        qUtf8Printable(name)
+    );
     apiClient->deleteDownlink(uuid, true);
     if (connRequest.getPort()) {
         apiClient->releasePort(connRequest.getPort());
@@ -485,19 +491,16 @@ obs_properties_t *IngressLinkSource::getProperties()
             QPointer<IngressLinkSource> guard(ingressLinkSource);
             auto invoker = ingressLinkSource->apiClient->requestStages();
             if (invoker) {
-                QObject::connect(
-                    invoker, &HttpRequestInvoker::finished, ingressLinkSource,
-                    [guard](HttpError, QByteArray) {
-                        if (!guard) {
-                            return;
-                        }
-                        OBSSourceAutoRelease source = obs_weak_source_get_source(guard->weakSource);
-                        if (!source) {
-                            return;
-                        }
-                        obs_frontend_open_source_properties(source);
+                QObject::connect(invoker, &HttpRequestInvoker::finished, guard.data(), [guard](HttpError, QByteArray) {
+                    if (!guard) {
+                        return;
                     }
-                );
+                    OBSSourceAutoRelease source = obs_weak_source_get_source(guard->weakSource);
+                    if (!source) {
+                        return;
+                    }
+                    obs_frontend_open_source_properties(source);
+                });
             }
 
             return true;
@@ -641,9 +644,10 @@ void IngressLinkSource::onSettingsUpdate(obs_data_t *settings)
             obs_log(LOG_INFO, "%s: Source updated", qUtf8Printable(guard->name));
         });
     } else {
-        // putConnection() returned nullptr (CHECK_CLIENT_TOKEN failed); persist locally
-        // so the source still records the user's intent. Defer to mirror the if-branch's
-        // queued semantics and avoid running file I/O on the caller's stack.
+        // No invoker available: persist locally via the event loop to avoid file I/O on the
+        // properties callback stack.
+        // FIXME: serialize concurrent saveSettings via revision compare to avoid out-of-order
+        // writes when properties UI triggers rapid successive updates.
         QMetaObject::invokeMethod(
             this,
             [guard, settingsRef]() {

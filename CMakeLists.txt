@@ -4,6 +4,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCO
 
 # Fail fast on unsupported hosts (FreeBSD/OpenBSD/etc.) before reaching the curl/mbedtls FetchContent block, which would
 # otherwise produce a confusing TLS-backend error instead of a clear platform-support message.
+# OS_WINDOWS / OS_MACOS / OS_LINUX are set by cmake/common/osconfig.cmake (included via bootstrap.cmake).
 if(NOT
    (OS_WINDOWS
     OR OS_MACOS
@@ -71,8 +72,9 @@ if(OS_LINUX)
     URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2
     URL_HASH SHA256=64cd73842cdc05e101172f7b437c65e7312e476206e1dbfd644433d11bc56327)
 
-  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
-  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
+  # Use CMAKE_POLICY_DEFAULT_<NNNN> (a variable, scoped to this function and inherited by add_subdirectory) so the OLD-
+  # vs-NEW choice survives the nested cmake_minimum_required(VERSION ...) inside the curl/mbedtls subprojects.
+  # cmake_policy(SET) is stack-pushed and cleared by that reset.
   function(_src_link_setup_mbedtls)
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
     set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
@@ -115,8 +117,9 @@ FetchContent_Declare(
   URL_HASH SHA256=7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf)
 
 function(_src_link_setup_curl)
-  # CMAKE_POLICY_DEFAULT_<NNNN> survives the nested cmake_minimum_required reset done by curl/mbedtls (cmake_policy(SET)
-  # does not), letting upstream option() / set(... CACHE) honor our function-local overrides.
+  # Use CMAKE_POLICY_DEFAULT_<NNNN> (a variable, scoped to this function and inherited by add_subdirectory) so the OLD-
+  # vs-NEW choice survives the nested cmake_minimum_required(VERSION ...) inside the curl subproject.
+  # cmake_policy(SET) is stack-pushed and cleared by that reset.
   set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
   set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
   # Belt-and-suspenders: refuse find_package() outright for everything we do not ship, so curl cannot accidentally link
@@ -223,10 +226,10 @@ mbedtls FetchContent targets are missing because _src_link_setup_mbedtls() runs 
   # Xcode generator reads CMAKE_XCODE_ATTRIBUTE_* from the top-level directory at generate time rather than from this
   # function's scope, so AppleClang still rejects curl 8.12.1's SIZE_T_MAX uses (-Wambiguous-macro) under -Werror. Force
   # the override per target.
-  if(NOT TARGET libcurl_static OR NOT TARGET libcurl_object)
+  if(NOT TARGET libcurl_static AND NOT TARGET libcurl_object)
     message(
       FATAL_ERROR
-        "curl target names changed — both libcurl_static and libcurl_object are expected; update _src_link_setup_curl() -Werror suppression"
+        "curl target names changed — at least one of libcurl_static or libcurl_object must be defined; update _src_link_setup_curl() -Werror suppression"
     )
   endif()
   foreach(_curl_target IN ITEMS libcurl_static libcurl_object)
@@ -252,6 +255,7 @@ if(OS_LINUX)
   set(SRC_LINK_LINUX_CA_PATH
       "/etc/ssl/certs"
       CACHE STRING "CA bundle path for Linux TLS (directory → CURLOPT_CAPATH, file → CURLOPT_CAINFO)")
+  # Allowlist absolute paths to suppress path traversal and shell metacharacter injection into the embedded macro value.
   if(NOT SRC_LINK_LINUX_CA_PATH MATCHES "^/[A-Za-z0-9._/-]+$")
     message(
       FATAL_ERROR
@@ -262,8 +266,10 @@ if(OS_LINUX)
 endif()
 
 if(OS_WINDOWS)
-  # Winsock + Win32 crypto for the curl Schannel backend. FIXME: verify CURL::libcurl_static INTERFACE deps and drop
-  # redundant entries.
+  # Winsock + Win32 crypto for the curl Schannel backend. ws2_32 / iphlpapi are also required by plugin code itself
+  # (utils.hpp uses winsock2 / iphlpapi for GetAdaptersAddresses; local-http-server.hpp uses winsock2 for the OAuth
+  # loopback server), so they remain mandatory regardless of curl interface deps. FIXME: verify CURL::libcurl_static
+  # INTERFACE deps and drop redundant crypt32 / bcrypt entries.
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 iphlpapi crypt32 bcrypt)
 endif()
 
@@ -278,7 +284,7 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 REQUIRED COMPONENTS Widgets Core)
+  find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Core)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header

@@ -199,7 +199,9 @@ inline QList<QString> getPrivateIPv4Addresses()
     ULONG bufferSize = 15000;
     PIP_ADAPTER_ADDRESSES addresses = nullptr;
     ULONG result = ERROR_BUFFER_OVERFLOW;
-    constexpr int MAX_GAA_RETRIES = 3;
+    // MSDN GetAdaptersAddresses recommends up to 5 retries to absorb adapter-state churn
+    // (adapters appearing/disappearing between the size probe and the data fetch).
+    constexpr int MAX_GAA_RETRIES = 5;
 
     for (int attempt = 0; attempt < MAX_GAA_RETRIES; ++attempt) {
         addresses = static_cast<PIP_ADAPTER_ADDRESSES>(malloc(bufferSize));

@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
+#include <QPointer>
+
 #include "curl-http-client.hpp"
 #include "linux-ca-locations.hpp"
 #include "../plugin-support.h"
@@ -86,8 +88,12 @@ CURL *CurlHttpClient::createEasyHandle(
         QByteArray headerLine = it.key() + ": " + it.value();
         struct curl_slist *next = curl_slist_append(headerList, headerLine.constData());
         if (!next) {
-            obs_log(LOG_WARNING, "CurlHttpClient: curl_slist_append failed for header '%s'", it.key().constData());
-            break;
+            obs_log(LOG_ERROR, "CurlHttpClient: curl_slist_append failed for header '%s'", it.key().constData());
+            if (headerList) {
+                curl_slist_free_all(headerList);
+            }
+            curl_easy_cleanup(easy);
+            return nullptr;
         }
         headerList = next;
     }
@@ -98,6 +104,8 @@ CURL *CurlHttpClient::createEasyHandle(
 
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(easy, CURLOPT_SSL_VERIFYHOST, 2L);
+    // FIXME: Schannel on older Windows 10 builds may negotiate TLS 1.2 only even when MAX_TLSv1_3
+    // is requested. If the server ever mandates TLS 1.3, revisit the Windows support matrix.
     curl_easy_setopt(easy, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_3);
     curl_easy_setopt(easy, CURLOPT_PROTOCOLS_STR, "http,https");
     curl_easy_setopt(easy, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
@@ -132,10 +140,9 @@ CURL *CurlHttpClient::createEasyHandle(
     }
 #endif
 
+    // Total request timeout (includes connect, TLS handshake, and the full transfer).
     curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
-    curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1L);
-    curl_easy_setopt(easy, CURLOPT_TCP_KEEPIDLE, 60L);
-    curl_easy_setopt(easy, CURLOPT_TCP_KEEPINTVL, 30L);
+    // TCP keepalive is unnecessary: easy handles are not reused across requests.
     curl_easy_setopt(easy, CURLOPT_PRIVATE, ctx);
     ctx->easy = easy;
 
@@ -278,6 +285,10 @@ void CurlHttpClient::checkCompleted()
     int stillRunning = 0;
     curl_multi_perform(multi, &stillRunning);
 
+    // Guard against the callback synchronously destroying this CurlHttpClient.
+    // After invoking ctx->callback, accessing any member is unsafe unless the guard is alive.
+    QPointer<CurlHttpClient> guard(this);
+
     int msgsInQueue = 0;
     CURLMsg *msg = nullptr;
     while ((msg = curl_multi_info_read(multi, &msgsInQueue)) != nullptr) {
@@ -308,13 +319,19 @@ void CurlHttpClient::checkCompleted()
 
         HttpResponse response{static_cast<int>(statusCode), ctx->responseData, error, ctx->responseHeaders};
 
-        // Detach ctx from activeRequests BEFORE invoking the callback so that any
-        // re-entrant call (e.g. callback issuing a new request) cannot observe a stale
-        // entry, and so cleanupRequest never runs against a ctx the user resurrected.
+        // Detach ctx before the callback so a re-entrant cancelAll() / cancelAllSilently()
+        // cannot double-cleanup this ctx (cancelAllSilently drains via std::move, and both
+        // paths only iterate the ctxs still in activeRequests at the time of the call).
         curl_multi_remove_handle(multi, easy);
         activeRequests.removeOne(ctx);
 
         ctx->callback(response);
+        if (!guard) {
+            // `this` was destroyed during the callback; ctx was already detached from
+            // activeRequests/multi above, so release it and exit without touching members.
+            cleanupRequest(ctx);
+            return;
+        }
         cleanupRequest(ctx);
     }
 
@@ -340,7 +357,12 @@ size_t CurlHttpClient::writeCallback(char *ptr, size_t size, size_t nmemb, void 
         return 0;
     }
     size_t totalSize = size * nmemb;
-    if (ctx->responseData.size() + static_cast<qsizetype>(totalSize) > CurlHttpClient::MAX_RESPONSE_SIZE) {
+    // Compare in size_t against the remaining headroom so a huge totalSize cannot
+    // wrap when narrowed to qsizetype before the bound check.
+    const size_t alreadyBuffered = static_cast<size_t>(ctx->responseData.size());
+    // short-circuit: underflow guarded by leading "alreadyBuffered > MAX_RESPONSE_SIZE" check
+    const size_t remainingBudget = static_cast<size_t>(CurlHttpClient::MAX_RESPONSE_SIZE) - alreadyBuffered;
+    if (alreadyBuffered > static_cast<size_t>(CurlHttpClient::MAX_RESPONSE_SIZE) || totalSize > remainingBudget) {
         obs_log(
             LOG_WARNING, "CurlHttpClient: Response exceeded %d bytes limit, aborting", CurlHttpClient::MAX_RESPONSE_SIZE
         );
@@ -362,10 +384,12 @@ size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void
         return 0;
     }
     size_t totalSize = size * nmemb;
-    // Aggregate header byte cap: abort when cumulative header bytes (including this chunk)
-    // exceed MAX_HEADER_BYTES. Mirrors the response-body cap in writeCallback.
-    ctx->headerBytesTotal += static_cast<qsizetype>(totalSize);
-    if (ctx->headerBytesTotal > CurlHttpClient::MAX_HEADER_BYTES) {
+    // Aggregate header byte cap. Compare in size_t against remaining headroom so an
+    // oversize totalSize cannot wrap when narrowed to qsizetype before the bound check.
+    const size_t headersSoFar = static_cast<size_t>(ctx->headerBytesTotal);
+    // short-circuit: underflow guarded by leading "headersSoFar > MAX_HEADER_BYTES" check
+    const size_t headerBudget = static_cast<size_t>(CurlHttpClient::MAX_HEADER_BYTES) - headersSoFar;
+    if (headersSoFar > static_cast<size_t>(CurlHttpClient::MAX_HEADER_BYTES) || totalSize > headerBudget) {
         obs_log(
             LOG_WARNING, "CurlHttpClient: Response headers exceeded %lld bytes limit, aborting",
             static_cast<long long>(CurlHttpClient::MAX_HEADER_BYTES)
@@ -373,6 +397,7 @@ size_t CurlHttpClient::headerCallback(char *ptr, size_t size, size_t nmemb, void
         ctx->responseTooLarge = true;
         return 0;
     }
+    ctx->headerBytesTotal += static_cast<qsizetype>(totalSize);
     QByteArray line(ptr, static_cast<qsizetype>(totalSize));
     int colonIndex = line.indexOf(':');
     if (colonIndex > 0) {

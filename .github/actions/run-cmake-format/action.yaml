@@ -51,7 +51,13 @@ runs:
 
         if (( ${changes[(I)*.cmake|*CMakeLists.txt]} )) {
           echo ::group::Install cmakelang
-          pip3 install 'cmakelang==0.6.13'
+          python3 -m pip install --quiet --user --break-system-packages 'cmakelang==0.6.13'
+          export PATH="$(python3 -m site --user-base)/bin:${PATH}"
+          echo "Resolved cmake-format: $(command -v cmake-format)"
+          cmake-format --version
+          cmake-format --version | grep -qE '^0\.6\.13$' || {
+            echo "::error::cmake-format is not pinned to 0.6.13"; exit 1;
+          }
           echo ::endgroup::
           echo ::group::Run cmake-format
           ./build-aux/run-cmake-format --fail-${{ inputs.failCondition }} --check

@@ -19,6 +19,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QElapsedTimer>
 #include <QUrl>
 
+#include <cassert>
+#include <climits>
+
 #include <obs-module.h>
 
 #include "local-http-server.hpp"
@@ -27,6 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #ifndef _WIN32
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/types.h>
 #endif
 
 namespace {
@@ -225,8 +229,8 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
     static constexpr int MAX_REQUEST_HEADER_SIZE = 8192;
     char buffer[MAX_REQUEST_HEADER_SIZE];
 
-    // Switch to blocking mode with a per-recv() timeout. The absolute deadline
-    // below bounds total wall-clock time spent in this function.
+    // Switch to blocking mode with per-recv()/per-send() timeouts. The absolute
+    // deadline below bounds total wall-clock time spent reading the request.
 #ifdef _WIN32
     unsigned long blockingMode = 0;
     if (ioctlsocket(clientSocket, FIONBIO, &blockingMode) != 0) {
@@ -241,7 +245,23 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
     if (setsockopt(
             clientSocket, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&rcvTimeout), sizeof(rcvTimeout)
         ) != 0) {
-        obs_log(LOG_WARNING, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with error %d", WSAGetLastError());
+        obs_log(
+            LOG_ERROR, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with error %d; aborting client",
+            WSAGetLastError()
+        );
+        closeSocket(clientSocket);
+        return;
+    }
+    DWORD sndTimeout = RECV_PER_CALL_TIMEOUT_MSECS;
+    if (setsockopt(
+            clientSocket, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char *>(&sndTimeout), sizeof(sndTimeout)
+        ) != 0) {
+        obs_log(
+            LOG_ERROR, "LocalHttpServer: setsockopt(SO_SNDTIMEO) failed with error %d; aborting client",
+            WSAGetLastError()
+        );
+        closeSocket(clientSocket);
+        return;
     }
 #else
     int flags = fcntl(clientSocket, F_GETFL, 0);
@@ -252,7 +272,15 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
     }
     struct timeval rcvTimeout = {RECV_PER_CALL_TIMEOUT_MSECS / 1000, (RECV_PER_CALL_TIMEOUT_MSECS % 1000) * 1000};
     if (setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout)) != 0) {
-        obs_log(LOG_WARNING, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with errno %d", errno);
+        obs_log(LOG_ERROR, "LocalHttpServer: setsockopt(SO_RCVTIMEO) failed with errno %d; aborting client", errno);
+        closeSocket(clientSocket);
+        return;
+    }
+    struct timeval sndTimeout = {RECV_PER_CALL_TIMEOUT_MSECS / 1000, (RECV_PER_CALL_TIMEOUT_MSECS % 1000) * 1000};
+    if (setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, &sndTimeout, sizeof(sndTimeout)) != 0) {
+        obs_log(LOG_ERROR, "LocalHttpServer: setsockopt(SO_SNDTIMEO) failed with errno %d; aborting client", errno);
+        closeSocket(clientSocket);
+        return;
     }
 #endif
 
@@ -268,7 +296,19 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
             break;
         }
         const size_t remaining = sizeof(buffer) - 1 - static_cast<size_t>(requestData.size());
+        // Independent guard: prevent a zero-length recv() if the loop condition
+        // ever drifts out of sync with the buffer-size calculation above.
+        if (remaining == 0) {
+            break;
+        }
+        // MAX_REQUEST_HEADER_SIZE (8192) bounds `remaining`, but assert defensively
+        // to avoid silent narrowing if the buffer ever grows past INT_MAX.
+        assert(remaining <= static_cast<size_t>(INT_MAX));
+#ifdef _WIN32
         int bytesRead = recv(clientSocket, buffer, static_cast<int>(remaining), 0);
+#else
+        int bytesRead = static_cast<int>(recv(clientSocket, buffer, remaining, 0));
+#endif
         if (bytesRead < 0) {
 #ifdef _WIN32
             int err = WSAGetLastError();
@@ -350,13 +390,57 @@ void LocalHttpServer::handleClient(SocketHandle clientSocket)
                    responseBody;
     }
 
-    int sendResult = send(clientSocket, response.constData(), static_cast<int>(response.size()), 0);
-    if (sendResult < 0) {
+    // send() may return short writes; loop until the full response is delivered
+    // or a fatal error occurs. Per-call SO_SNDTIMEO bounds blocking time.
+    // Runtime check (not assert): release builds strip asserts and would invoke UB on narrowing.
+    if (response.size() < 0 || static_cast<size_t>(response.size()) > static_cast<size_t>(INT_MAX)) {
+        obs_log(
+            LOG_ERROR, "LocalHttpServer: response size %lld out of range; aborting client",
+            static_cast<long long>(response.size())
+        );
 #ifdef _WIN32
-        obs_log(LOG_WARNING, "LocalHttpServer: send() failed with error %d", WSAGetLastError());
+        shutdown(clientSocket, SD_SEND);
 #else
-        obs_log(LOG_WARNING, "LocalHttpServer: send() failed with errno %d", errno);
+        shutdown(clientSocket, SHUT_WR);
 #endif
+        closeSocket(clientSocket);
+        return;
+    }
+    const int totalToSend = static_cast<int>(response.size());
+    int totalSent = 0;
+    while (totalSent < totalToSend) {
+        const int remaining = totalToSend - totalSent;
+#ifdef _WIN32
+        int sendResult = send(clientSocket, response.constData() + totalSent, remaining, 0);
+#else
+        int sendResult = static_cast<int>(send(clientSocket, response.constData() + totalSent, remaining, 0));
+#endif
+        if (sendResult < 0) {
+#ifdef _WIN32
+            int err = WSAGetLastError();
+            if (err == WSAEINTR) {
+                continue;
+            }
+            obs_log(
+                LOG_ERROR, "LocalHttpServer: send() failed with error %d after %d/%d bytes", err, totalSent, totalToSend
+            );
+#else
+            int err = errno;
+            if (err == EINTR) {
+                continue;
+            }
+            obs_log(
+                LOG_ERROR, "LocalHttpServer: send() failed with errno %d after %d/%d bytes", err, totalSent, totalToSend
+            );
+#endif
+            break;
+        }
+        if (sendResult == 0) {
+            // Peer closed; nothing more we can do.
+            obs_log(LOG_WARNING, "LocalHttpServer: send() returned 0 after %d/%d bytes", totalSent, totalToSend);
+            break;
+        }
+        totalSent += sendResult;
     }
 #ifdef _WIN32
     shutdown(clientSocket, SD_SEND);

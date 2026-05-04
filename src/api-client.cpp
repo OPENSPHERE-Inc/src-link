@@ -332,6 +332,7 @@ void SRCLinkApiClient::terminate()
     uplink = QJsonObject();
     // FIXME: fire-and-forget DELETE is canceled by ~CurlHttpClient on shutdown; replace with
     // a sync curl_easy_perform or a bounded QEventLoop pump in a separate PR.
+    INFO_LOG("synchronous shutdown not yet implemented; uplink may remain on server until session timeout");
     deleteUplink(true);
 }
 

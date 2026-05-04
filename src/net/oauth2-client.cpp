@@ -38,6 +38,11 @@ namespace {
 // RFC 8252 §7.3: native apps must redirect to a loopback IP literal (or "localhost").
 bool isLoopbackPolicy(const QString &policy)
 {
+    // The policy is a format string; the "%1" placeholder is substituted with the bound port
+    // at request time. Without it, port substitution silently no-ops and IdP rejects the URI.
+    if (!policy.contains(QStringLiteral("%1"))) {
+        return false;
+    }
     const QUrl url(QString(policy).arg(0));
     if (!url.isValid() || url.scheme().toLower() != QStringLiteral("http")) {
         return false;
@@ -169,10 +174,11 @@ void OAuth2Client::link()
         return;
     }
 
-    // Guard against re-entrant calls while auth flow is in progress
+    // Guard against re-entrant calls while auth flow is in progress.
+    // Do not emit linkingFailed() here: the original auth flow is still pending and will emit
+    // its own terminal signal. Emitting failure now would race that signal and confuse the UI.
     if (localServer->isListening()) {
         obs_log(LOG_DEBUG, "OAuth2Client: Auth flow already in progress");
-        emit linkingFailed();
         return;
     }
 
@@ -191,6 +197,9 @@ void OAuth2Client::link()
     }
 
     localServer->setReplyContent(replyContent_);
+
+    // Invalidate any stale state from a prior aborted flow before generating a new one.
+    pendingState_.clear();
 
     // RFC 6749 §10.12: state must be unguessable. Use the system CSPRNG, not QUuid (which uses
     // the non-cryptographic global RNG on most platforms).
@@ -247,7 +256,13 @@ void OAuth2Client::refresh()
     // hooking refreshFinished before refresh() emits it. If this assert ever fires,
     // explicitly queue pending callers (separate PR) instead of leaning on signal timing.
     if (thread() != QThread::currentThread()) {
-        obs_log(LOG_WARNING, "OAuth2Client::refresh() called from non-owner thread; ignoring");
+        // A silent return here would strand callers that wait on refreshFinished via a
+        // queued one-shot connection (e.g. HttpRequestInvoker). Defer the emit to the
+        // owner thread so they always observe a terminal signal.
+        obs_log(LOG_WARNING, "OAuth2Client::refresh() called from non-owner thread; deferring failure emit");
+        QMetaObject::invokeMethod(
+            this, [this]() { emit refreshFinished(HttpError::AuthenticationRequired); }, Qt::QueuedConnection
+        );
         return;
     }
 
@@ -261,6 +276,8 @@ void OAuth2Client::refresh()
         return;
     }
 
+    // FIXME: caller must connect to refreshFinished BEFORE calling refresh(); a second caller
+    // arriving while refreshing_ is true will not receive a notification.
     if (refreshing_) {
         // Already refreshing — callers will be notified via the in-progress refreshFinished signal.
         // This prevents token rotation race when multiple 401 responses trigger concurrent refreshes.
@@ -306,22 +323,25 @@ void OAuth2Client::refresh()
                     obs_log(LOG_ERROR, "OAuth2Client: Error description: %s", qUtf8Printable(errDesc));
                 }
             }
-            self->refreshing_ = false;
             // O2 compatibility: unlink() emits linkedChanged + linkingSucceeded (logout flow),
             // and refreshFinished is emitted last. HttpRequestInvoker relies on this ordering:
             // its 401-retry slot only needs the final refreshFinished error to abort the request.
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
+            // FIXME: re-entrant refresh() invoked from a slot connected to unlink()'s emits
+            // (linkedChanged / linkingSucceeded) is silently dropped because refreshing_ stays
+            // true until this line. Revisit if a future refreshFinished consumer re-enters
+            // refresh() (e.g., split refreshFinished into a queued-only signal).
+            self->refreshing_ = false;
             return;
         }
 
         QJsonDocument doc = QJsonDocument::fromJson(response.data);
         if (!doc.isObject()) {
             obs_log(LOG_ERROR, "OAuth2Client: Invalid JSON in refresh response");
-            self->refreshing_ = false;
-            // Same signal order as the error path above (linkedChanged + linkingSucceeded → refreshFinished).
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
+            self->refreshing_ = false;
             return;
         }
 
@@ -329,10 +349,9 @@ void OAuth2Client::refresh()
         QString accessToken = obj.value("access_token").toString();
         if (accessToken.isEmpty()) {
             obs_log(LOG_ERROR, "OAuth2Client: Server returned empty access_token on refresh");
-            self->refreshing_ = false;
-            // Same signal order as the error path above (linkedChanged + linkingSucceeded → refreshFinished).
             self->unlink();
             emit self->refreshFinished(HttpError::AuthenticationRequired);
+            self->refreshing_ = false;
             return;
         }
 

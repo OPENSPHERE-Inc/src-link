@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "UI/output-dialog.hpp"
 #include "UI/egress-link-dock.hpp"
 #include "UI/ws-portal-dock.hpp"
+#include "utils.hpp"
 #include "ws-portal/event-handler.hpp"
 
 OBS_DECLARE_MODULE()
@@ -114,16 +115,17 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
-    // Initialize the plugin's own statically-linked curl instance.
-    // This is separate from OBS Studio's curl (dynamically linked libcurl.dll),
-    // so we must call curl_global_init() for our own instance.
-    // Relies on OBS having already called curl_global_init: by the time obs_module_load
-    // runs, OBS's UI / video / network threads are already up and curl's "init while
-    // no other threads exist" requirement is no longer satisfiable in isolation.
+    // Initialize the plugin's own statically-linked curl instance, separate from OBS's
+    // dynamically-linked libcurl. libcurl 7.84+ makes curl_global_init refcounted and
+    // safe to call multiple times, paired 1:1 with curl_global_cleanup.
     // FIXME: LocalHttpServer's raw winsock usage relies on the WSAStartup performed by
     //        CURL_GLOBAL_WIN32 here. Give LocalHttpServer its own WSAStartup/WSACleanup
     //        so this implicit ordering dependency is removed (separate PR recommended).
-    curl_global_init(CURL_GLOBAL_ALL);
+    CURLcode curlInitRc = curl_global_init(CURL_GLOBAL_ALL);
+    if (curlInitRc != CURLE_OK) {
+        obs_log(LOG_ERROR, "curl_global_init failed: %s", curl_easy_strerror(curlInitRc));
+        return false;
+    }
 
     {
         auto *info = curl_version_info(CURLVERSION_NOW);
@@ -163,7 +165,11 @@ bool obs_module_load(void)
         settingsDialog = new SettingsDialog(apiClient, mainWindow);
         QAction *settingsMenuAction =
             (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("SourceLinkSettings"));
-        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] { settingsDialog->show(); });
+        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
+            if (settingsDialog) {
+                settingsDialog->show();
+            }
+        });
 
         // Dock
         registerEgressLinkDock();
@@ -197,6 +203,9 @@ void obs_module_unload(void)
     // is synchronous, so dock-owned WsPortalClient instances finish their teardown here.
     unregisterEgressLinkDock();
     unregisterWsPortalDock();
+
+    delete settingsDialog;
+    settingsDialog = nullptr;
 
     WsPortalEventHandler::destroyInstance();
 

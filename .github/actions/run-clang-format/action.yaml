@@ -53,11 +53,11 @@ runs:
           echo ::group::Install clang-format-17
           # PyPI `clang-format` (ssciwr/clang-format-wheel) ships the upstream
           # LLVM 17.0.3 binary, so pinning the version here pins the tool exactly.
-          python3 -m pip install --quiet --user 'clang-format==17.0.3'
-          echo "$(python3 -m site --user-base)/bin" >> $GITHUB_PATH
+          python3 -m pip install --quiet --user --break-system-packages 'clang-format==17.0.3'
           export PATH="$(python3 -m site --user-base)/bin:${PATH}"
+          echo "Resolved clang-format: $(command -v clang-format)"
           clang-format --version
-          clang-format --version | grep -q 'version 17\.0\.3' || {
+          clang-format --version | grep -qE 'version 17\.0\.3([[:space:]]|$)' || {
             echo "::error::clang-format is not pinned to 17.0.3"; exit 1;
           }
           echo ::endgroup::

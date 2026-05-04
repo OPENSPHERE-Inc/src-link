@@ -33,6 +33,17 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <curl/curl.h>
 #include <curl/websockets.h>
 
+/// Curl-based WebSocket client. Designed for use from the Qt UI thread.
+///
+/// Invariants the caller must respect:
+/// - All public methods (other than signals) must be invoked from the thread that owns the
+///   QObject (typically the UI thread).
+/// - The destructor synchronously joins the connect worker via joinConnectThread();
+///   close() does NOT join — it only signals abort and returns. open() must therefore guard
+///   against an outstanding joinable connectThread before launching a new one.
+/// - setHeaders() may only be called while the client is fully idle (not connecting and
+///   not connected). Calling it during an active connection produces undefined behavior
+///   for the in-flight request.
 class WsClient : public QObject {
     Q_OBJECT
 
@@ -40,7 +51,7 @@ public:
     explicit WsClient(QObject *parent = nullptr);
     ~WsClient();
 
-    /// Set custom headers (call before open)
+    /// Set custom headers. Must be called while idle (not connecting, not connected).
     void setHeaders(const QMap<QByteArray, QByteArray> &headers);
 
     /// Open WebSocket connection
@@ -87,6 +98,9 @@ private:
     QByteArray fragmentBuffer;
     int fragmentType;     // CURLWS_TEXT or CURLWS_BINARY
     bool frameInProgress; // True when reading a frame that spans multiple recv calls
+    // Accumulates a PING payload that arrived split across multiple curl_ws_recv calls.
+    // RFC 6455 §5.5 caps control frames at 125 bytes, so this stays small.
+    QByteArray pingPayloadBuffer;
     // Only the most recent ping is timed. An unmatched older pong would skew
     // the measurement, but this is acceptable in practice since pings are
     // typically issued at intervals far longer than RTT.

@@ -42,6 +42,10 @@ class HttpRequestSequencer : public QObject {
     CurlHttpClient *httpClient;
     OAuth2Client *oauth2Client;
     QList<HttpRequestInvoker *> requestQueue;
+    // Invariant: `mutex` must be declared after `requestQueue` and outlive the QObject base's
+    // child-deletion phase. ~HttpRequestSequencer drains the queue under this mutex, and each
+    // ~HttpRequestInvoker child also takes it; reordering members to destroy `mutex` first
+    // would race the child teardown.
     QMutex mutex;
 
 public:
