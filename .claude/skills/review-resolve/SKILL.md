@@ -88,7 +88,7 @@ Use the **Write tool** for the file. Bash cat heredoc is unusable because apostr
 
 ## Step 1 — Parse (Delegated to Parsing Sub-Agent)
 
-Example prompt:
+When launching via the Agent tool, specify `model="sonnet"`. Example prompt:
 
 ```
 Read review document {document_path} and extract id / stage / verification assignee for each finding (no file output).
