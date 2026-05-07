@@ -6,6 +6,8 @@ template_id: 1e9c4f7a-5b82-4d63-a1c8-3f7d2e9b4a15
 
 As the initial-triage owner of the review document, Read `{{document_path}}`, perform stage classification and the triage decision for each finding, and Write the result to `{{tmp_dir}}/triage.json`. Read `.claude/rules/sub-agent.md` and observe the common prohibitions.
 
+If `{{previous_round_doc_paths}}` is provided (empty in the standard flow that runs in Round 1), Read each file to extract past-round decision information (id / location / description / METADATA's triage / estimate / status / verification) and reference it during triage. No reference is needed when the value is empty or `(none)`.
+
 Extraction targets: Critical / Major / Minor sections (skip Info). For each finding, obtain id (C-1, M-1, mi-1, etc.) / severity / location / description (the body up to the marker) / current_meta (the current values of triage / estimate / status / verification; when the same field appears multiple times, use the last value).
 
 Stage classification (based on current_meta):
@@ -34,6 +36,10 @@ Won't Fix guideline (when any of the following applies):
 4. Inferable as acceptable from the project's purpose, use case, or assumed users.
 5. Preference-based refactoring (no rationale grounded in correctness, safety, performance, or maintainability).
 6. Reproducibility unclear; e2e verification needed.
+7. A finding at the same location with the same content was already processed in a past round (only judgable when `{{previous_round_doc_paths}}` is provided). Identity is determined by matching `file:line` and finding gist. Applicable patterns:
+   - Already `status: 🟢 Fixed` in a past round (an edge case that does not happen in the normal flow; since it has been rediscovered, explicitly state in the reason field "Already Fixed in a previous round").
+   - `triage: 🚫 Won't Fix` in a past round (state in the reason field "Same finding as previous-round Won't Fix" and concisely transcribe the past decision's reason as well).
+   - `estimate: 🔻 Downgrade` in a past round (state in the reason field "Same finding as previous-round Downgrade" and concisely transcribe the past decision's reason as well).
 
 High-severity exception: For Critical / Major Won't Fix, explicitly state "recommend separate PR" in the reason field (e.g. "Won't Fix — Existing-code bug. Recommend fixing in a separate PR.").
 
