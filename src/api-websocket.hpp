@@ -19,7 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <QObject>
-#include <QWebSocket>
+#include "net/ws-client.hpp"
 #include <QJsonObject>
 #include <QTimer>
 
@@ -34,16 +34,20 @@ class SRCLinkWebSocketClient : public QObject {
     Q_OBJECT
 
     QUrl url;
-    QWebSocket *client;
+    WsClient *client;
     SRCLinkApiClient *apiClient;
     bool started;
     int reconnectCount;
+    bool reconnectPending;
     QTimer *intervalTimer;
+    QTimer *reconnectTimer = nullptr;
 
     void open();
+    int reconnectDelayMs() const;
+    void scheduleReconnect();
 
 signals:
-    void ready(bool reconect);
+    void ready(bool reconnect);
     void aborted(const QString &reason);
     void connected();
     void disconnected();
@@ -62,7 +66,6 @@ signals:
 private slots:
     void onConnected();
     void onDisconnected();
-    void onPong(quint64 elapsedTime, const QByteArray &payload);
     void onTextMessageReceived(QString message);
 
 public:

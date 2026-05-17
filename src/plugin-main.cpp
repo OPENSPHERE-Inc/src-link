@@ -27,11 +27,15 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDir>
 #include <QAction>
 
+#include <curl/curl.h>
+
+#include "net/http-error.hpp"
 #include "plugin-support.h"
 #include "UI/settings-dialog.hpp"
 #include "UI/output-dialog.hpp"
 #include "UI/egress-link-dock.hpp"
 #include "UI/ws-portal-dock.hpp"
+#include "utils.hpp"
 #include "ws-portal/event-handler.hpp"
 
 OBS_DECLARE_MODULE()
@@ -111,6 +115,38 @@ bool obs_module_load(void)
     QCoreApplication::addLibraryPath(libraryPath);
 #endif
 
+    // Initialize the plugin's own statically-linked curl instance, separate from OBS's
+    // dynamically-linked libcurl. libcurl 7.84+ makes curl_global_init refcounted and
+    // safe to call multiple times, paired 1:1 with curl_global_cleanup.
+    // FIXME: LocalHttpServer's raw winsock usage relies on the WSAStartup performed by
+    //        CURL_GLOBAL_WIN32 here. Give LocalHttpServer its own WSAStartup/WSACleanup
+    //        so this implicit ordering dependency is removed (separate PR recommended).
+    CURLcode curlInitRc = curl_global_init(CURL_GLOBAL_ALL);
+    if (curlInitRc != CURLE_OK) {
+        obs_log(LOG_ERROR, "curl_global_init failed: %s", curl_easy_strerror(curlInitRc));
+        return false;
+    }
+
+    {
+        auto *info = curl_version_info(CURLVERSION_NOW);
+        bool hasWs = false;
+        if (info->protocols) {
+            for (int i = 0; info->protocols[i]; i++) {
+                if (strcmp(info->protocols[i], "wss") == 0) {
+                    hasWs = true;
+                    break;
+                }
+            }
+        }
+        obs_log(
+            LOG_INFO, "plugin curl: %s (ssl: %s, websocket: %s)", info->version,
+            info->ssl_version ? info->ssl_version : "none", hasWs ? "yes" : "no"
+        );
+    }
+
+    qRegisterMetaType<HttpError>("HttpError");
+    qRegisterMetaType<obs_data_t *>();
+
     // Initialize the cpu stats
     cpuUsageInfo = os_cpu_usage_info_start();
 
@@ -129,7 +165,11 @@ bool obs_module_load(void)
         settingsDialog = new SettingsDialog(apiClient, mainWindow);
         QAction *settingsMenuAction =
             (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("SourceLinkSettings"));
-        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] { settingsDialog->show(); });
+        settingsMenuAction->connect(settingsMenuAction, &QAction::triggered, [] {
+            if (settingsDialog) {
+                settingsDialog->show();
+            }
+        });
 
         // Dock
         registerEgressLinkDock();
@@ -155,20 +195,28 @@ bool obs_module_load(void)
     return true;
 }
 
-void obs_module_post_load()
-{
-    qRegisterMetaType<obs_data_t *>();
-}
-
 void obs_module_unload(void)
 {
-    delete apiClient;
-    apiClient = nullptr;
+    obs_frontend_remove_event_callback(frontendEventCallback, nullptr);
+
+    // Tear down docks synchronously while apiClient is still alive — obs_frontend_remove_dock
+    // is synchronous, so dock-owned WsPortalClient instances finish their teardown here.
+    unregisterEgressLinkDock();
+    unregisterWsPortalDock();
+
+    delete settingsDialog;
+    settingsDialog = nullptr;
 
     WsPortalEventHandler::destroyInstance();
 
+    delete apiClient;
+    apiClient = nullptr;
+
     // Destroy the cpu stats
     os_cpu_usage_info_destroy(cpuUsageInfo);
+
+    // Clean up the plugin's own statically-linked curl instance.
+    curl_global_cleanup();
 
     obs_log(LOG_INFO, "plugin unloaded");
 }
