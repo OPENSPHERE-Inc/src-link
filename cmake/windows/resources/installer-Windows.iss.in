@@ -26,27 +26,69 @@ SignTool=default
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\release\Package\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\release\Package\*"; Excludes: "\qt6.8.3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; Flags: dontcopy
+Source: "..\release\Package\qt6.8.3\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: BundleQt6_8_3
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+
+[Tasks]
+Name: BundleQt6_8_3; Description: Install Qt6.8.3 supportive files (Required for OBS 31.1.0 or above); Flags: unchecked
 
 [Icons]
 Name: "{group}\{cm:ProgramOnTheWeb,{#MyAppName}}"; Filename: "{#MyAppURL}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 [Code]
+function GetOBSStudioVersion(): Int64;
+var
+  value: string;
+  version: Int64;
+begin
+  Result := 0;
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\OBS Studio', 'DisplayVersion', value) then
+  begin
+    if StrToVersion(value, version) then
+    begin
+      Result := version;
+    end;
+  end;
+end;
+
 procedure InitializeWizard();
 var
   GPLText: AnsiString;
-  Page: TOutputMsgMemoWizardPage;
+  LicensePage: TOutputMsgMemoWizardPage;
 begin
   ExtractTemporaryFile('LICENSE');
   LoadStringFromFile(ExpandConstant('{tmp}\LICENSE'), GPLText);
-  Page := CreateOutputMsgMemoPage(wpWelcome,
+  LicensePage := CreateOutputMsgMemoPage(wpWelcome,
     'License Information', 'Please review the license terms before installing {#MyAppName}',
     'Press Page Down to see the rest of the agreement. Once you are aware of your rights, click Next to continue.',
     String(GPLText)
   );
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  OBSVersion: Int64;
+begin
+  case CurPageID of
+    wpSelectTasks: begin
+      if WizardForm.TasksList.Items.Count > 0 then
+      begin        
+        OBSVersion := GetOBSStudioVersion();
+        Log(IntToStr(OBSVersion));
+        if OBSVersion >= PackVersionComponents(31, 1, 0, 0) then
+        begin
+          WizardForm.TasksList.Checked[0] := True;
+        end else 
+        begin
+          WizardForm.TasksList.Checked[0] := False;      
+          WizardForm.TasksList.ItemEnabled[0] := False;    
+        end;
+      end;
+    end;
+  end;
 end;
 
 // credit where it's due :
@@ -62,4 +104,3 @@ begin
   if RegQueryStringValue(HKLM32, 'SOFTWARE\OBS Studio', '', InstallPath) then
     Result := InstallPath
 end;
-
